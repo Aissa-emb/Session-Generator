@@ -6,7 +6,7 @@ Generates realistic Android app sessions (or web sessions with `--platform web`)
 - The backend trace for that call uses the same trace ID, and its root span's parent is the app's network span.
 - Embrace's network span forwarding sends the app's network span to Chronosphere, where it becomes the root of the trace. The session timeline in Embrace then shows **Forwarded** and **View trace in Cortex XCOR** for each call.
 
-Every request enters through the shared platform: `api-gateway` (token validation, Redis rate limiting) and the line of business's experience API, with `customer-identity-service` and `customer-profile-service` behind it. Retail checkout and travel booking both authorize through `payment-authorization-service` (with `fraud-risk-scoring-service`), and order and booking events reach `customer-notification-service` over Kafka. Key traces are large: a checkout is about 60 spans across 14 services, a booking about 50.
+Every request enters through the shared platform: `api-gateway` (token validation, Redis rate limiting) and the line of business's experience API, with `customer-identity-service` and `customer-profile-service` behind it. Retail checkout and travel booking both authorize through `payment-authorization-service` (with `fraud-risk-scoring-service`), and order and booking events reach `customer-notification-service` over Kafka. Trace size follows the work performed; a simple login can legitimately have only 15 spans.
 
 Three lines of business are included:
 
@@ -119,7 +119,13 @@ Each session prints one line with the journey, device, number of pages, API call
 | travel | `gds-pnr-timeouts` | PNR creation times out; bookings fail with 504 |
 | travel | `hotel-supplier-outage` | Hotel supplier returns 503; results fall back to cached rates |
 
-Without `--incident`, errors are sprinkled in at realistic rates: about 3% of checkouts and 6% of bookings hit the payments connection pool, plus card declines, processor and PNR timeouts, inventory deadlocks that are retried, product-cache timeouts that fall back to the database, rate-limiter timeouts that fail open, and core-banking calls that succeed on retry. Most traces are healthy.
+Without `--incident`, a seeded session policy chooses one primary scenario and generates related consequences. This is an intentionally enriched **synthetic demonstration distribution**, not a claim about production reliability. Defaults target 70% issue-bearing sessions, 1.4% fatal crashes, 1.6% captured thread blockage, approximately 4% failed physical requests, and 80% backend-issue coverage among exposed canary sessions. `tools/calibrate.py` measures actual emitted evidence and overlapping categories per profile; labels are not counted as proof.
+
+The `generation` section of `config.example.json` controls primary weights, cohort seed/share, priority journey probabilities and transport-failure share. Stable identity assignment is persisted in the persona pool. Session exposure starts false on each visit and changes only when a feature request runs. Feature context is explicitly propagated to backend spans and logs, including Redis clients; it is never stored in service resources.
+
+Additional controls: `--scenario clean|mobile|backend|slow|handled|blockage|crash`, `--crash-family 0..4`, `--incident-phase onset|incident|recovery`, and `--rollout-phase active|rollback`. These select bounded verification cases; do not use such a selected corpus to claim population rates. `--manifest /absolute/path.jsonl` records live session/request identities and separate export receipts. `--verification-plan cases.json` runs a finite JSON case list at the existing rate, then resumes the normal distribution.
+
+The smallest explicit new incident is `banking --incident account-read-fallback`: an actual core-read deadline, a separate retained snapshot, HTTP 200 with read-only/as-of semantics, and no claim that the snapshot confirms a transfer. Pending payment/PNR outcomes use a status endpoint and the same idempotency identifier. A timeout never becomes an invented confirmation.
 
 ### Other options
 
@@ -141,7 +147,7 @@ Remote endpoints require HTTPS with normal certificate validation. Credential-fr
 - **Envelopes match the Android SDK.** Sessions are posted the way SDK 9.3.x posts them: gzipped Embrace envelopes (`resource`, `metadata`, `version` 0.1.0, `type` spans or logs) to `a-<appId>.data.emb-api.com/v2/spans` and `/v2/logs`, with `User-Agent: Embrace/a/<sdk version>`, `X-EM-AID`, `X-EM-DID` and `X-EM-PAYLOAD-TYPES`. Span, event and log shapes, names and attribute keys follow the SDK source and its integration-test golden files (copies in `reference/android-sdk-golden/`); every attribute value is a string, as the SDK sends it.
 - **Real devices.** Galaxy S25, S25 Ultra, S24, S23, A16, A15, A35 and Z Fold7, Pixel 10, 9, 9 Pro, 9a, 8 and 8a, moto g, and OnePlus 12, reported with their `Build.MODEL` codes (for example `SM-S931U`) so Embrace shows market names, on Android 14 to 16 with matching API levels, screens, SoCs and storage.
 - **App lifecycle.** Cold and warm starts with the SDK's startup span tree (`emb-app-startup-cold` with process init, Embrace init, activity init and render), an activity view plus a view per screen (`Embrace.startView`), navigation state on logs, OkHttp network spans named `emb-<METHOD> <path>` with `Error` status for 4xx/5xx, taps (Compose labels for Northline and Vantra, View resource IDs such as `com.corviabank.mobile:id/sign_in_button` for Corvia), breadcrumbs, custom spans, logs, and session properties. Some sessions are interrupted by switching apps, which gives multi-part user sessions; sign-out in banking ends the session as `Embrace.endSession()` does.
-- **Crashes.** When a checkout or booking failure leads to an unhandled error, the app crashes with a Kotlin `NullPointerException` in the screen's ViewModel: a `sys.android.crash` log with thread dumps, and a session that ends with `emb.crash_id`.
+- **Crashes and freezes.** Five stable crash families per profile use the verified `sys.android.crash` schema, terminate the process, and upload at a modeled relaunch with a new process ID. Main-thread migration, worker-lock and layout freezes use the SDK's `perf.thread_blockage` interval and sample schema. These are generated ingestion records; OS-confirmed ANRs require a real instrumented device and are not claimed here.
 
 ### Web (`--platform web`)
 
@@ -164,6 +170,15 @@ Remote endpoints require HTTPS with normal certificate validation. Credential-fr
 - iOS sessions are not generated.
 
 ## Check output without sending
+
+For population calibration (no export, no state saved):
+
+```bash
+python3 tools/calibrate.py --sessions 5000 --seed 7331 --output out/calibration.json
+python3 -m unittest discover -s tests -v
+```
+
+`docs/upgrade-audit.json` records the original gaps and capture capabilities. `xcorgen/milestones.py` is the central breadcrumb and twelve profile-flow catalog. User Flows are configured in the dashboard; custom task spans alone do not create those definitions. The current dashboard form expects **milliseconds** (maximum 300,000), and exposes “Ignore restarts while in progress” when the feature is enabled. Fresh sessions must be generated after definitions are saved. The shared app has one payment anchor pair for Shop and Travel, so scope its views by `business_unit` instead of claiming the name alone scopes a definition.
 
 ```bash
 python3 generate.py --profile all --sessions 20 --dry-run out/

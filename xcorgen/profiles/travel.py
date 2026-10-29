@@ -4,6 +4,7 @@ import random
 
 from .. import backend as b
 from ..util import uuid4
+from ..scenarios import current, cache_read
 from . import Endpoint, Page, Profile, platform, services
 
 S = services("vantra-travel", "prod-use1-travel", [
@@ -51,9 +52,11 @@ def locations(ctx):
 
 def flight_search(ctx):
     o, slow_supplier = ctx.outcome, ctx.incident == "supplier-timeouts" or ctx.outcome == "supplier_timeout"
-    cache_hit = random.random() < 0.3
     fs = S["air-shopping-service"]
+    cache_hit = cache_read(fs, "fares", (ctx.params["origin"], ctx.params["dest"]), initial_hit=.3,
+                          force_miss=slow_supplier or ctx.incident == "search-complexity")
     children = [b.redis(fs, "GET", f"fares:{ctx.params['origin']}-{ctx.params['dest']}:2026-11-21", REDIS.format("fare-cache"))]
+    children[0].attrs["cache.hit"] = cache_hit
     if not cache_hit:
         suppliers = [b.http(fs, S["gds-connector-service"], "POST", "/v2/availability", "/v2/availability", 200, (6, 18), [
             b.external(S["gds-connector-service"], "POST", "https://ws.globaldistribution.net/flight/v4/offers/search", "gds",
@@ -85,6 +88,11 @@ def flight_search(ctx):
             b.redis(S["fare-pricing-service"], "HMGET", "fx:rates", REDIS.format("pricing-cache"))]))
         children.append(b.redis(fs, "SETEX", f"fares:{ctx.params['origin']}-{ctx.params['dest']}:2026-11-21", REDIS.format("fare-cache")))
     srv = b.grpc(S["travel-experience-api"], fs, "vantra.travel.flights.v1.FlightSearch", "Search", ms=(2, 6), children=children)
+    if ctx.incident == "search-complexity":
+        srv.children[0].children.append(b.internal(fs, "fare_combinations.rank", ms=(4000, 4000),
+            attrs={"offers.count": 960, "search.connection_options": 48}))
+    srv.children[0].attrs.update({"search.partial": slow_supplier and not cache_hit,
+                                  "search.suppliers_failed": 1 if slow_supplier and not cache_hit else 0})
     root = bff(ctx, "POST", "/api/v3/flights/search", "/api/v3/flights/search", [srv])
     return root, 200, {"partial": slow_supplier and not cache_hit}
 
@@ -112,8 +120,17 @@ def hotel_search(ctx):
         b.http(hs, S["lodging-content-service"], "GET", "/v1/properties", "/v1/properties?ids=...", 200, (3, 9), [
             b.nosql(S["lodging-content-service"], "mongodb", "find", "properties", ms=(4, 14), host="hotels-content.travel.vantra.internal")])])
     if supplier_down:
+        cached = b.redis(hs, "GET", "hotel_rates:indicative", REDIS.format("hotel-rate-cache"))
+        cached.attrs.update({"cache.hit": True, "cache.age_ms": 240000, "rates.indicative": True,
+                             "rates.revalidation_required": True})
+        # Read only after the failed supplier call has completed.
+        srv.children[0].children = [b.internal(hs, "availability.fanout", ms=(.2, .4),
+            children=srv.children[0].children, parallel=True), cached]
+        srv.children[0].parallel = False
         srv.children[0].log("WARN", "hotel supplier returned 503; serving cached rates only", supplier="staysupply")
-    return bff(ctx, "POST", "/api/v3/hotels/search", "/api/v3/hotels/search", [srv]), 200, {}
+    return bff(ctx, "POST", "/api/v3/hotels/search", "/api/v3/hotels/search", [srv]), 200, {
+        "cached": supplier_down, "age_ms": 240000 if supplier_down else 0, "indicative": supplier_down,
+        "revalidation_required": supplier_down}
 
 
 def create_booking(ctx):
@@ -157,11 +174,8 @@ def create_booking(ctx):
         steps.append(pnr_call)
         if pnr_timeout:
             status = 504
-            pnr_call.children[0].log("ERROR", f"PNR creation timed out for booking {ref}; voiding payment", booking_ref=ref)
-            steps.append(b.http(rs, S["payment-authorization-service"], "POST", "/v1/authorizations/{id}/void",
-                                "/v1/authorizations/<id>/void", 200, (3, 8), [
-                                    b.external(S["payment-authorization-service"], "POST", platform.PSP + "/<id>/void",
-                                               "card-acquirer", status=200, ms=(150, 420))]))
+            pnr_call.children[0].log("ERROR", "PNR completion unknown; reconciliation required before another booking",
+                                       booking_ref=ref)
         else:
             steps += [
                 b.grpc(rs, S["loyalty-accrual-service"], "vantra.travel.loyalty.v1.Loyalty", "AccruePending", ms=(2, 6),
@@ -181,8 +195,9 @@ def create_booking(ctx):
                 platform.notify(rs, "booking-events", ref, "email"),
                 platform.notify(rs, "booking-events", ref, "push")]
     if status != 201:
-        steps.append(b.sql(rs, "UPDATE", "bookings", "UPDATE bookings SET status = 'FAILED', failure_reason = ? WHERE ref = ?",
+        steps.append(b.sql(rs, "UPDATE", "bookings", "UPDATE bookings SET status = ?, failure_reason = ? WHERE ref = ?",
                            "reservations", RDS.format("reservations-prod"), ms=(1.2, 4)))
+        steps[-1].attrs["booking.state"] = "PENDING_RECONCILIATION" if status == 504 else "FAILED"
     if status == 502:
         error = b.err("payment-authorization-service returned 503", "com.vantra.travel.reservation.PaymentUnavailableException",
                       "payment authorization unavailable",

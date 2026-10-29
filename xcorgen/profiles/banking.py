@@ -4,6 +4,7 @@ import random
 
 from .. import backend as b
 from ..util import uuid4
+from ..scenarios import current, cache_read
 from . import Endpoint, Page, Profile, platform, services
 
 S = services("vantra-money", "prod-use1-money", [
@@ -75,26 +76,40 @@ def mfa_verify(ctx):
 
 
 def accounts(ctx):
-    cached = random.random() < 0.55
     slow_core = ctx.incident == "core-banking-latency"
+    fallback = ctx.outcome == "snapshot_fallback"
+    cached = cache_read(S["account-summary-service"], "balances", ctx.user_id, initial_hit=.55,
+                        force_miss=slow_core or fallback, fill=not fallback)
     inner = [b.redis(S["account-summary-service"], "GET", f"balances:{ctx.user_id}", REDIS.format("accounts-cache"))]
-    if not cached and random.random() < 0.02:
+    inner[0].attrs["cache.hit"] = cached
+    if current() is None and not cached and random.random() < 0.02:
         # First call to the core banking gateway is refused while a pod restarts; the client retries.
         inner.append(b.http(S["account-summary-service"], S["core-banking-gateway"], "GET", "/v3/customers/{id}/positions",
                             "/v3/customers/<id>/positions", 503, (0.5, 2)))
         inner[-1].log("WARN", "core-banking-gateway unavailable, retrying", **{"retry.attempt": 1})
     if not cached:
         inner.append(b.http(S["account-summary-service"], S["core-banking-gateway"], "GET", "/v3/customers/{id}/positions",
-                            "/v3/customers/<id>/positions", 200, (4, 12), [
+                            "/v3/customers/<id>/positions", 504 if fallback else 200, (4, 12), [
                                 core_call(S["core-banking-gateway"], "InquirePositions",
-                                          ms=(1400, 3800) if slow_core else (160, 480))]))
-        inner.append(b.redis(S["account-summary-service"], "SETEX", f"balances:{ctx.user_id}", REDIS.format("accounts-cache")))
+                                          ms=(1600, 1600) if fallback else ((lambda d: (d, d))(random.uniform(1400, 3800))) if slow_core else (160, 480),
+                                          status=0 if fallback else 200, timeout_ms=1200 if fallback else None,
+                                          error=b.err("core read deadline exceeded", "java.net.http.HttpTimeoutException",
+                                                      error_type="timeout") if fallback else None)]))
+        if fallback:
+            snapshot = b.redis(S["account-summary-service"], "GET", "account_snapshot:previous", REDIS.format("snapshot-store"))
+            snapshot.attrs.update({"cache.hit": True, "snapshot.age_ms": 180000, "snapshot.read_only": True})
+            inner.append(snapshot)
+        else:
+            inner.append(b.redis(S["account-summary-service"], "SETEX", f"balances:{ctx.user_id}", REDIS.format("accounts-cache")))
     inner.append(b.sql(S["account-summary-service"], "SELECT", "accounts",
                        "SELECT account_id, product_code, nickname, status FROM accounts WHERE customer_id = ?",
                        "accounts", RDS.format("accounts-prod"), ms=(1.2, 4), rows=random.randint(2, 5)))
     srv = b.http(S["banking-experience-api"], S["account-summary-service"], "GET", "/v2/customers/{id}/accounts",
                  "/v2/customers/<id>/accounts", 200, (2, 6), inner)
-    return bff(ctx, "GET", "/api/v1/accounts", "/api/v1/accounts", [srv]), 200, {}
+    srv.children[0].attrs.update({"snapshot.read_only": fallback, "fallback.used": fallback})
+    now = current()["now"] if current() else 0
+    return bff(ctx, "GET", "/api/v1/accounts", "/api/v1/accounts", [srv]), 200, {
+        "snapshot": fallback, "as_of_ms": int(now - 180000) if fallback else int(now), "read_only": fallback}
 
 
 def transactions(ctx):
@@ -117,21 +132,22 @@ def payees(ctx):
     return bff(ctx, "GET", "/api/v1/payees", "/api/v1/payees", [srv]), 200, {}
 
 
-def fraud_score(caller, slow):
-    timed_out = slow and random.random() < 0.35
+def fraud_score(caller, slow, timed_out=None):
+    timed_out = slow and random.random() < 0.35 if timed_out is None else timed_out
+    duration = random.uniform(4200, 6000) if timed_out else random.uniform(2000, 3800) if slow else random.uniform(14, 45)
     return b.grpc(caller, S["fraud-risk-scoring-service"], "vantra.money.risk.v1.RiskScoring", "ScoreTransfer",
                   ms=(3, 9), children=[
                       b.redis(S["fraud-risk-scoring-service"], "HGETALL", "features:customer:<id>", REDIS.format("risk-features")),
                       b.redis(S["fraud-risk-scoring-service"], "ZRANGEBYSCORE", "velocity:<id>", REDIS.format("risk-features")),
                       b.internal(S["fraud-risk-scoring-service"], "model.predict",
-                                 ms=(4300, 6800) if timed_out else (1800, 3400) if slow else (14, 45),
+                                 ms=(duration, duration),
                                  attrs={"model.name": "transfer-risk-lgbm", "model.version": "2026-10-01"})],
                   code=4 if timed_out else 0, timeout_ms=4000 if timed_out else None)
 
 
 def create_transfer(ctx):
     o = ctx.outcome
-    slow = ctx.incident == "fraud-latency" or o == "fraud_slow"
+    slow = ctx.incident == "fraud-latency" or o in ("fraud_slow", "fraud_timeout")
     tid = f"TRF{random.randint(10**9, 10**10 - 1)}"
     limits = b.grpc(S["funds-transfer-service"], S["transaction-limits-service"], "vantra.money.limits.v1.LimitsService", "CheckLimit",
                     code=9 if o == "limit_exceeded" else 0, ms=(1, 3), children=[
@@ -144,7 +160,7 @@ def create_transfer(ctx):
     if o == "limit_exceeded":
         status = 422
     else:
-        score = fraud_score(S["funds-transfer-service"], slow)
+        score = fraud_score(S["funds-transfer-service"], slow, o == "fraud_timeout" if current() else None)
         steps.append(score)
         timed_out = score.attrs.get("rpc.grpc.status_code") == 4
         if timed_out:
@@ -206,7 +222,7 @@ def statement(ctx):
                  "/v1/statements/2026-09/pdf", 200, (4, 12), [
                      b.external(S["statement-rendering-service"], "GET", "https://vantra-money-statements-prod.s3.us-east-1.amazonaws.com/2026/09/<id>.json",
                                 "aws.s3", ms=(30, 90)),
-                     b.internal(S["statement-rendering-service"], "pdf.render", ms=(2800, 6500) if slow else (600, 1700),
+                     b.internal(S["statement-rendering-service"], "pdf.render", ms=((lambda d: (d, d))(random.uniform(3000, 6000))) if slow else (600, 1700),
                                 attrs={"pdf.pages": random.randint(2, 6), "pdf.engine": "weasyprint"})])
     return bff(ctx, "GET", "/api/v1/statements/:statementId/pdf", "/api/v1/statements/2026-09/pdf", [srv]), 200, {}
 
@@ -428,6 +444,7 @@ PROFILE = Profile(
         "rails-outage": {"create_transfer": {"rail_unavailable": 45}},
         "core-banking-latency": {},
         "statements-slow": {},
+        "account-read-fallback": {"accounts": {"snapshot_fallback": 100}},
     },
 )
 

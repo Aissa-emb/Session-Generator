@@ -12,6 +12,7 @@ import zlib
 
 from . import otlp
 from .util import hex_id, lat, ns, uuid4
+from .scenarios import current
 
 LANG = {
     "java": dict(sdk="1.56.0", runtime=("OpenJDK Runtime Environment", "21.0.8+9-LTS"),
@@ -151,9 +152,14 @@ def layout(node, start, rng):
             t = layout(c, t + rng.uniform(0.03, 0.25), rng)
     end = t + (self_ms - pre)
     if node.min_ms and end - start < node.min_ms:
-        end = start + node.min_ms * rng.uniform(1.0, 1.08)
+        end = start + node.min_ms
     if node.timeout_ms and end - start > node.timeout_ms:
-        end = start + node.timeout_ms + rng.uniform(0.1, 2.0)
+        end = start + node.timeout_ms
+        node.attrs["rpc.deadline_ms" if node.role == "grpc" else "request.deadline_ms"] = node.timeout_ms
+        for child in sync:
+            if child.end > end:
+                child.attrs["cancellation.observed"] = False
+                child.attrs["execution.residual_after_deadline"] = True
     node.start, node.end = start, end
     for c in node.children:
         if c.async_lag is not None:
@@ -171,24 +177,33 @@ def _exception_event(node):
 
 
 class TraceBuild:
-    def __init__(self, trace_id, rng):
+    def __init__(self, trace_id, rng, context=None):
         self.trace_id, self.rng = trace_id, rng
         self.spans = []  # (service, pod, scope, span)
         self.logs = []   # (service, pod, record)
         self._pods = {}
+        self.context = dict(context or {})
 
     def pod(self, svc):
         if svc.name not in self._pods:
-            self._pods[svc.name] = self.rng.choice(svc.pods)
+            if svc.name == "payment-authorization-service" and self.context.get("incident.occurrence_id"):
+                self._pods[svc.name] = svc.pods[0]
+            elif self.context.get("routing.target"):
+                # A stable canary pod belongs to the existing service identity.
+                self._pods[svc.name] = svc.pods[-1] if self.context["routing.target"] == "canary" else svc.pods[0]
+            else:
+                self._pods[svc.name] = self.rng.choice(svc.pods)
         return self._pods[svc.name]
 
     def emit(self, node, parent_span_id):
         span_id = hex_id(8, self.rng)
+        if node.error:
+            node.attrs.setdefault("error.type", node.error.get("error_type") or node.error.get("type") or "operation_failed")
         span = {
             "traceId": self.trace_id, "spanId": span_id, "parentSpanId": parent_span_id,
             "name": node.name, "kind": otlp.SPAN_KIND[node.kind],
             "startTimeUnixNano": str(ns(node.start)), "endTimeUnixNano": str(ns(node.end)),
-            "attributes": otlp.attrs(node.attrs), "flags": 257,
+            "attributes": otlp.attrs(dict(node.attrs, **self.context)), "flags": 257,
             "status": {"code": otlp.STATUS_UNSET},
         }
         if node.error:
@@ -198,8 +213,11 @@ class TraceBuild:
         pod = self.pod(node.svc)
         self.spans.append((node.svc, pod, node.svc.scope(node.role), span))
         for sev, body, extra in node.logs:
-            self.logs.append((node.svc, pod, _log_record(self.trace_id, span_id, node, sev, body, extra)))
+            self.logs.append((node.svc, pod, _log_record(self.trace_id, span_id, node, sev, body,
+                                                       dict(extra, **self.context))))
         for c in node.children:
+            if c.kind == "server" and node.kind == "client":
+                c.attrs["client.address"] = pod["ip"]
             self.emit(c, span_id)
         return span_id
 
@@ -232,10 +250,10 @@ def _group(items, scope_key, list_key):
     return [{"resource": r["resource"], scope_key: list(r[scope_key].values())} for r in by_res.values()]
 
 
-def build_trace(root, trace_id, parent_span_id, start_ms, rng):
+def build_trace(root, trace_id, parent_span_id, start_ms, rng, context=None):
     """Lay out root at start_ms and emit spans that continue the given traceparent."""
     layout(root, start_ms, rng)
-    tb = TraceBuild(trace_id, rng)
+    tb = TraceBuild(trace_id, rng, context)
     tb.emit(root, parent_span_id)
     return tb
 
@@ -300,8 +318,10 @@ def sql(svc, op, table, statement, db="app", host=None, ms=(0.8, 4), error=None,
 
 
 def redis(svc, op, key, host, ms=(0.3, 1.4), error=None):
-    a = {"db.system.name": "redis", "db.operation.name": op, "db.query.text": f"{op} {key}", "db.namespace": "0",
-         "server.address": host, "server.port": 6379}
+    purpose = key.split(":", 1)[0].split(" ", 1)[0]
+    a = {"db.system.name": "redis", "db.system": "redis", "db.operation.name": op,
+         "db.query.text": f"{op} {purpose}:?", "db.namespace": "0", "db.redis.database_index": 0,
+         "cache.purpose": purpose, "server.address": host, "server.port": 6379}
     return Node(svc, op, "client", "redis", a, ms, error=error)
 
 

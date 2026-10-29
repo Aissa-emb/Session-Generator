@@ -7,6 +7,7 @@ shows up in both lines of business at once.
 import random
 
 from .. import backend as b
+from ..scenarios import current, cache_read
 from . import services
 
 P = services("vantra-platform", "prod-use1-platform", [
@@ -43,11 +44,11 @@ def gateway(ctx, experience, method, route, path, children, status=200, parallel
         auth.children.append(b.grpc(gw, ids, "vantra.identity.v2.TokenService", "Introspect", ms=(1.2, 4), children=[
             b.redis(ids, "GET", "token:<sha256>", REDIS.format("identity-tokens"))]))
     limit = b.redis(gw, "EVALSHA", "ratelimit:<client>:<route>", REDIS.format("edge-ratelimit"), ms=(0.3, 1.2))
-    if random.random() < 0.006:
+    if current() is None and random.random() < 0.006:
         # Rate limiter times out; the gateway fails open and the request still succeeds.
         limit.ms, limit.min_ms = (250, 260), 250
         limit.error = b.err("redis: command timeout", "redis.TimeoutError", "i/o timeout after 250ms", error_type="timeout")
-        auth.log("WARN", "rate limiter unavailable, failing open", route=route)
+        limit.log("WARN", "rate limiter unavailable, failing open", route=route)
     steps = list(children)
     if with_profile and ctx.user_id:
         steps.insert(0, profile_lookup(experience, ctx))
@@ -58,7 +59,9 @@ def gateway(ctx, experience, method, route, path, children, status=200, parallel
 def profile_lookup(caller, ctx):
     cps = P["customer-profile-service"]
     kids = [b.redis(cps, "GET", f"profile:{ctx.user_id[:8]}", REDIS.format("customer-profile"))]
-    if random.random() < 0.15:
+    hit = cache_read(cps, "profile", ctx.user_id, initial_hit=.85)
+    kids[0].attrs["cache.hit"] = hit
+    if not hit:
         kids += [b.sql(cps, "SELECT", "customers",
                        "SELECT id, display_name, membership_tier, locale, marketing_opt_in FROM customers WHERE id = ?",
                        "customer", RDS.format("customer-prod"), ms=(1.2, 4), rows=1),
@@ -84,23 +87,28 @@ def authorize_payment(caller, mode, db_pressure=False):
     query slow on requests that still get a connection, which is what drains the pool.
     """
     pas = P["payment-authorization-service"]
-    steps = [b.internal(pas, "PaymentRequestValidator.validate", ms=(0.3, 1.2)),
+    req = current()
+    operation_id = req["plan"].operation_id if req else "redacted"
+    idem = b.redis(pas, "GET", "idempotency:authorization", REDIS.format("payment-idempotency"))
+    idem.attrs.update({"cache.hit": False, "idempotency.operation_id": operation_id})
+    steps = [idem, b.internal(pas, "PaymentRequestValidator.validate", ms=(0.3, 1.2)),
              risk_score(pas, "payment")]
     log = None
     if mode == "db_pool":
         steps.append(b.Node(pas, "HikariPool.getConnection", "internal", "internal",
                             {"db.client.connection.pool.name": "HikariPool-1", "db.client.connection.pool.max": 50,
-                             "db.client.connection.pool.pending_requests": random.randint(28, 46)},
+                             "db.client.connection.pool.pending_requests": 32,
+                             "pool.active": 50, "pool.idle": 0, "pool.waiting": 32,
+                             "db.connection.acquired": False, "db.lock.resource": "payments.payment_tokens",
+                             "db.lock.cause": "token_rotation_access_exclusive"},
                             ms=(3000, 3000), min_ms=3000,
                             error=b.err("HikariPool-1 - Connection is not available, request timed out after 3000ms.",
                                         "java.sql.SQLTransientConnectionException", stack=HIKARI_STACK)))
         status = 503
-        error = b.err("Failed to obtain JDBC Connection", "org.springframework.jdbc.CannotGetJdbcConnectionException",
-                      "Failed to obtain JDBC Connection; nested exception is java.sql.SQLTransientConnectionException: "
-                      "HikariPool-1 - Connection is not available, request timed out after 3000ms.", HIKARI_STACK)
-        log = ("ERROR", "payment authorization failed: database connection pool exhausted",
+        error = b.err("Failed to obtain JDBC Connection")
+        steps[-1].log("ERROR", "payment authorization failed: database connection pool exhausted", **
                {"db.client.connection.pool.name": "HikariPool-1", "pool.active": 50, "pool.idle": 0,
-                "pool.waiting": random.randint(28, 46)})
+                "pool.waiting": 32})
     else:
         lock_ms = (1500, 2800) if db_pressure else (1.5, 6)
         steps.append(b.sql(pas, "SELECT", "payment_tokens",
@@ -127,6 +135,8 @@ def authorize_payment(caller, mode, db_pressure=False):
         else:
             steps.append(b.external(pas, "POST", PSP, "card-acquirer", status=201, ms=(220, 640)))
             status = 201
+        if status == 201:
+            steps.append(b.redis(pas, "SETEX", "idempotency:authorization", REDIS.format("payment-idempotency")))
         steps.append(b.sql(pas, "UPDATE", "payment_attempts",
                            "UPDATE payment_attempts SET status = ?, acquirer_ref = ? WHERE id = ?", "payments",
                            RDS.format("payments-prod"), ms=(1, 3.5)))

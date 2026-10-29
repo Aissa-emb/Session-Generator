@@ -4,6 +4,7 @@ import random
 
 from .. import backend as b
 from ..util import lat, uuid4
+from ..scenarios import current, cache_read
 from . import Endpoint, Page, Profile, platform, services
 
 S = services("vantra-shop", "prod-use1-shop", [
@@ -55,9 +56,10 @@ def bff(ctx, method, route, path, children, status=200, parallel=False, error=No
 
 
 def catalog_lookup(caller, sku):
-    hit = random.random() < 0.82
+    hit = cache_read(S["product-catalog-service"], "product", sku, initial_hit=.82)
     cache = b.redis(S["product-catalog-service"], "GET", f"product:{sku}", REDIS.format("catalog-cache"))
-    if random.random() < 0.012:
+    cache.attrs["cache.hit"] = hit
+    if current() is None and random.random() < 0.012:
         # Cache read times out; the service falls back to the database and the request still succeeds.
         hit = False
         cache.ms, cache.min_ms = (1000, 1010), 1000
@@ -84,17 +86,20 @@ def price_lookup(caller, skus):
 
 def get_product(ctx):
     sku = ctx.params["sku"]
-    n_plus_one = ctx.incident == "reviews-n-plus-one" or random.random() < 0.15
+    n_plus_one = ctx.incident == "reviews-n-plus-one" or (current() is None and random.random() < 0.15)
+    review_count = random.randint(14, 20)
     review_queries = [b.sql(S["product-reviews-service"], "SELECT", "review_media",
                             "SELECT url, kind FROM review_media WHERE review_id = %s", "reviews",
-                            RDS.format("reviews-prod"), ms=(1.4, 6) if n_plus_one else (0.8, 2.5), rows=random.randint(0, 3))
-                      for _ in range(random.randint(14, 32) if n_plus_one else 0)]
+                            RDS.format("reviews-prod"), ms=(110, 180) if n_plus_one else (0.8, 2.5), rows=random.randint(0, 3))
+                      for _ in range(review_count if n_plus_one else 0)]
     reviews = b.http(S["shop-experience-api"], S["product-reviews-service"], "GET", "/v1/products/{sku}/reviews/summary",
                      f"/v1/products/{sku}/reviews/summary", 200, (4, 14), [
                          b.sql(S["product-reviews-service"], "SELECT", "reviews",
                                "SELECT id, rating, title, body, created_at FROM reviews WHERE sku = %s "
                                "ORDER BY helpful_votes DESC LIMIT 20", "reviews", RDS.format("reviews-prod"),
-                               ms=(3, 11), rows=20)] + review_queries)
+                               ms=(3, 11), rows=review_count)] + review_queries)
+    reviews.children[0].attrs["reviews.loaded"] = review_count
+    reviews.children[0].attrs["reviews.media_query_count"] = len(review_queries)
     inventory = b.grpc(S["shop-experience-api"], S["inventory-availability-service"], "vantra.shop.inventory.v1.InventoryService",
                        "GetAvailability", ms=(1, 4), children=[
                            b.sql(S["inventory-availability-service"], "SELECT", "stock_levels",
@@ -108,21 +113,32 @@ def get_product(ctx):
 
 def get_recommendations(ctx):
     sku = ctx.params.get("sku", "home")
-    slow = ctx.outcome == "slow_model" or ctx.incident == "recs-latency"
-    model = b.internal(S["personalization-service"], "ranker.predict", ms=(900, 2600) if slow else (18, 60),
+    fallback = ctx.outcome == "fallback"
+    slow = ctx.outcome == "slow_model" or fallback or ctx.incident == "recs-latency"
+    duration = random.uniform(1000, 3000) if slow else random.uniform(18, 60)
+    model = b.internal(S["personalization-service"], "ranker.predict", ms=(duration, duration),
                        attrs={"model.name": "two-tower-ranker", "model.version": "2026.10.14", "candidates": 400})
     features = b.redis(S["personalization-service"], "HMGET", f"user_features:{ctx.user_id or 'anon'}",
                        REDIS.format("feature-store"), ms=(0.4, 1.8))
     recs = b.http(S["shop-experience-api"], S["personalization-service"], "GET", "/v1/recommendations",
-                  f"/v1/recommendations?context={sku}&limit=12", 200, (3, 9), [features, model])
+                  f"/v1/recommendations?context={sku}&limit=12", 504 if fallback else 200, (3, 9), [features, model],
+                  timeout_ms=800 if fallback else None,
+                  client_error=b.err("recommendation deadline exceeded", "TimeoutError", error_type="timeout") if fallback else None)
     if slow:
         recs.children[0].log("WARN", "ranker inference exceeded latency budget", **{
             "model.name": "two-tower-ranker", "latency_budget_ms": 250, "gpu.pool": "inference-g5"})
     batch = b.grpc(S["shop-experience-api"], S["product-catalog-service"], "vantra.shop.catalog.v1.CatalogService",
                    "BatchGetProducts", ms=(2, 7), children=[
                        b.redis(S["product-catalog-service"], "MGET", "product:1048213 product:1051027 ...", REDIS.format("catalog-cache"))])
-    root = bff(ctx, "GET", "/api/v2/recommendations", f"/api/v2/recommendations?sku={sku}", [recs, batch])
-    return root, 200, {}
+    steps = [recs]
+    if fallback:
+        cached = b.redis(S["shop-experience-api"], "GET", "recommendations:popular:US", REDIS.format("catalog-cache"))
+        cached.attrs.update({"cache.hit": True, "cache.age_ms": 120000, "fallback.source": "popular_products"})
+        steps.append(cached)
+    steps.append(batch)
+    root = bff(ctx, "GET", "/api/v2/recommendations", f"/api/v2/recommendations?sku={sku}", steps)
+    root.attrs.update({"recommendations.personalized": not fallback, "fallback.used": fallback})
+    return root, 200, {"fallback": fallback, "source": "popular_products" if fallback else "personalized"}
 
 
 def list_products(ctx):
@@ -220,7 +236,7 @@ def place_order(ctx):
     shipping = b.grpc(co, S["shipping-rates-service"], "vantra.shop.shipping.v1.ShippingService", "ConfirmRate", ms=(1, 4),
                       children=[b.redis(S["shipping-rates-service"], "GET", "rate_quote:<id>", REDIS.format("pricing-cache"))])
     conflict = o == "inventory_conflict"
-    deadlock = conflict or random.random() < 0.02
+    deadlock = conflict or (current() is None and random.random() < 0.02)
     reserve_sql = ("UPDATE stock_levels SET reserved = reserved + ? WHERE sku = ? AND location_id = ? "
                    "AND on_hand - reserved >= ? RETURNING location_id")
     attempts = []

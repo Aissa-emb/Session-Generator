@@ -10,6 +10,7 @@ import re
 import sys
 import threading
 import time
+import stat
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -22,8 +23,26 @@ from .security import (SecurityError, TransportError, post, read_token_file,
                        require_private_file, tenant_url, validate_endpoint, validate_headers)
 from .android_session import AndroidSession, SessionEnded, shift_envelope
 from .web_session import WebSession, shift
+from .scenarios import Plan, Runtime
+from .journeys import JOURNEYS
+from .operations import install
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def append_manifest(path, record):
+    """Append bounded verification metadata to an owner-only regular file."""
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise SecurityError("Manifest must be an owner-only regular file.")
+        with os.fdopen(fd, "a") as f:
+            fd = None
+            f.write(json.dumps(record, separators=(",", ":")) + "\n")
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 def load_config(path):
@@ -129,6 +148,12 @@ class Sender:
                 self._post_otlp(d)
             with self.lock:
                 self.stats[key] += 1
+                if not self.dry and self.cfg.get("generation", {}).get("manifest_path"):
+                    ids = [span["traceId"] for rs in d["payload"].get("resourceSpans", [])
+                           for scope in rs["scopeSpans"] for span in scope["spans"]]
+                    append_manifest(self.cfg["generation"]["manifest_path"] + ".receipts", {
+                        "stage": "accepted", "target": d["target"], "kind": d["kind"], "time_ms": time.time() * 1000,
+                        "device_id": d["device_id"], "trace_ids": sorted(set(ids))})
         except Exception as e:  # keep generating; report at the end
             with self.lock:
                 self.stats["errors"] += 1
@@ -178,6 +203,11 @@ class Generator:
         self.cfg, self.incident, self.emit_client_spans = cfg, incident, emit_client_spans
         self.backend_logs, self.persist, self.platform = backend_logs, persist, platform
         self.session_cls = AndroidSession if platform == "android" else WebSession
+        self.runtime = Runtime()
+        self.settings = cfg.get("generation", {})
+        self.verification_queue = list(self.settings.get("verification_plan", []))
+        for profile in self.profiles:
+            install(profile)
         state = os.path.join(ROOT, ".state")
         # Profiles that share one Android app ID are lines of business in one super app, with one user base.
         by_app = {}
@@ -203,22 +233,57 @@ class Generator:
                 raise SystemExit(f"Unknown incident '{incident}' for {p.key}. Options: {', '.join(p.incidents)}")
 
     def session(self, start_ms):
-        profile = random.choice(self.profiles)
+        selection = self.verification_queue.pop(0) if self.verification_queue else {}
+        profile = next((p for p in self.profiles if p.key == selection.get("profile")), None) or random.choice(self.profiles)
         pool = self.pools[profile.key]
         persona = pool.pick(self._shared_make_user if profile.key in self.shared else profile.make_user)
-        journey = weighted(profile.journeys)
-        incident = self.incident if self.incident in profile.incidents else None
+        journey = JOURNEYS[profile.key]
+        incident = selection.get("incident") or (self.incident if self.incident in profile.incidents else None)
         kwargs = {"shared": True} if profile.key in self.shared else {}
         s = self.session_cls(profile, persona, app_id_for(self.cfg, profile.key), start_ms, incident,
                              self.emit_client_spans, **kwargs)
+        settings = dict(self.settings, **selection.get("settings", {}))
+        s.plan = Plan(s, self.runtime, settings, incident)
+        s.verification_case = selection.get("name")
+        if s.plan.primary == "mobile" and s.plan.ring == "stable" and random.random() < self.settings.get("transport_share", .4) and not incident:
+            s.plan.transport = random.choice(("dns", "offline", "reset", "timeout", "cancelled"))
+            s.plan.incident = None
         try:
             journey(s)
         except SessionEnded:  # the app crashed; the process is gone
-            pass
+            if self.platform == "android" and s.persona.pop("pending_crash_upload", False):
+                due = s.crash_upload_due
+                for delivery in s.deliveries:
+                    if delivery["target"] == "embrace":
+                        delivery["due"] = max(delivery["due"], due)
+                s.ended = False
+                s.t = due
+                from .util import hex_id
+                s.process_id = hex_id(8)
+                s._start_part("state")
+                page = "dashboard" if profile.key == "banking" else "home"
+                s._screen(page, profile.pages[page].label({}))
+                s.breadcrumb("session_resumed")
+                s.wait(2, 5)
+                s.leave()
         deliveries = s.finish()
         if not self.backend_logs:
             deliveries = [d for d in deliveries if not (d["target"] == "otlp" and d["kind"] == "logs")]
         return s, journey.__name__, deliveries
+
+    def record(self, session):
+        path = self.settings.get("manifest_path")
+        if not path:
+            return
+        s = session
+        record = {"provenance": "synthetic", "stage": "generated", "profile": s.profile.key,
+                  "verification_case": s.verification_case, "app_id": s.app_id,
+                  "session_id": s.user_session_id, "device_id": s.persona["device_id"],
+                  "start_ms": s.start_ms, "end_ms": s.end_ms, "properties": s.properties,
+                  "primary_scenario": s.plan.primary, "requests": s.plan.evidence,
+                  "milestones": getattr(s, "milestones", []), "blockage": getattr(s, "blockage_evidence", None),
+                  "crash_family": s.plan.crash_family if s.plan.primary == "crash" else None}
+        append_manifest(path, record)
 
     def _shared_make_user(self, p):
         """One account system across the app: traits for every line of business, mostly signed in."""
@@ -254,17 +319,20 @@ def run_burst(gen, sender, count, spread_min, quiet=False):
     """Generate `count` sessions that ended within the last `spread_min` minutes, then send everything."""
     now = time.time() * 1000
     all_deliveries = []
+    sessions = []
     tenant = gen.cfg["chronosphere"].get("tenant")
     for _ in range(count):
-        s, journey, deliveries = gen.session(now)
-        end_at = now - random.uniform(0.0, spread_min * 60_000) - 15_000
-        delta_ms = end_at - s.end_ms
-        for d in deliveries:
-            (shift_envelope if d.get("fmt") == "envelope" else shift)(d["payload"], int(delta_ms * 1_000_000))
-            d["due"] += delta_ms
+        s, journey, deliveries = gen.session(now - random.uniform(0, spread_min * 60_000))
+        sessions.append((s, journey))
+        all_deliveries.extend(deliveries)
+    # One shift for the complete batch preserves shared pool-occupant links.
+    delta_ms = min(0, now - 15000 - max(d["due"] for d in all_deliveries))
+    for d in all_deliveries:
+        (shift_envelope if d.get("fmt") == "envelope" else shift)(d["payload"], int(delta_ms * 1_000_000))
+        d["due"] += delta_ms
+    for s, journey in sessions:
         s.start_ms += delta_ms
         s.end_ms += delta_ms
-        all_deliveries.extend(deliveries)
         if not quiet:
             print(describe(s, journey, tenant))
     gen.save()
@@ -305,6 +373,7 @@ def run_live(gen, sender, rate_per_min, duration_min, quiet=False, diurnal=False
             now = time.time()
             if (stop_at is None or now < stop_at) and now >= next_start:
                 s, journey, deliveries = gen.session(now * 1000)
+                gen.record(s)
                 started += 1
                 for d in deliveries:
                     heapq.heappush(heap, (d["due"], next(seq), d))

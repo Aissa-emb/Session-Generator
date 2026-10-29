@@ -10,6 +10,7 @@ import random
 
 from . import backend
 from .util import hex_id, lat, weighted
+from .scenarios import REQUEST
 
 
 class Result:
@@ -19,7 +20,7 @@ class Result:
 
     @property
     def ok(self):
-        return 200 <= self.status < 400
+        return self.status is not None and 200 <= self.status < 400
 
 
 class Ctx:
@@ -29,7 +30,8 @@ class Ctx:
         self.session, self.params, self.outcome = session, params, outcome
         self.svc = session.profile.services
         self.persona = session.persona
-        self.incident = session.incident
+        req = REQUEST.get()
+        self.incident = req["incident"] if req else session.incident
         self.user_id = session.user_id
 
     def edge(self, method, route, path, status, children, ms=(0.6, 2.5), parallel=False):
@@ -61,8 +63,20 @@ def simulate(session, key, params, start, rng=random):
     weights = dict(ep.outcomes)
     for name, w in (profile.incidents.get(session.incident, {}).get(key, {}) or {}).items():
         weights[name] = w
-    outcome = weighted(list(weights.items()), rng)
-    root, status, data = ep.build(Ctx(session, params, outcome))
+    req = session.plan.request(key, params) if hasattr(session, "plan") else None
+    outcome = req["outcome"] if req else weighted(list(weights.items()), rng)
+    token = REQUEST.set(req)
+    replayed = False
+    try:
+        prior = req["plan"].runtime.operations.get(req["plan"].operation_id) if req else None
+        if not params.get("_transport") and key in ("place_order", "create_booking", "create_transfer") and prior and prior["state"] in ("confirmed", "pending"):
+            from .operations import replay
+            root, status, data = replay(Ctx(session, params, outcome), prior, ep)
+            replayed = True
+        else:
+            root, status, data = ep.build(Ctx(session, params, outcome)) if not params.get("_transport") else (None, None, {})
+    finally:
+        REQUEST.reset(token)
 
     trace_id, span_id = hex_id(16, rng), hex_id(8, rng)
     host = session.api_host
@@ -73,9 +87,10 @@ def simulate(session, key, params, start, rng=random):
     tcp = rtt * rng.uniform(0.9, 1.1) if first else 0.0
     tls = rtt * rng.uniform(1.0, 1.4) if first else 0.0
     req_start = start + rng.uniform(0.3, 4) + dns + tcp + tls
-    tb = backend.build_trace(root, trace_id, span_id, req_start + rtt / 2, rng)
-    size = rng.randint(*ep.size) if status < 400 else rng.randint(90, 420)
-    resp_start = root.end + rtt / 2
+    context = req["attributes"] if req else {}
+    tb = backend.build_trace(root, trace_id, span_id, req_start + rtt / 2, rng, context) if root else None
+    size = (rng.randint(*ep.size) if status < 400 else rng.randint(90, 420)) if root else 0
+    resp_start = root.end + rtt / 2 if root else start + (1200 if params.get("_transport") == "dns" else 450)
     resp_end = resp_start + size * 8 / (p["mbps"] * 1000) + rng.uniform(0.2, 2.5)
     end = resp_end + rng.uniform(0.4, 3)
     marks = {"dns": dns, "tcp": tcp, "tls": tls, "req_start": req_start, "resp_start": resp_start,
@@ -83,14 +98,26 @@ def simulate(session, key, params, start, rng=random):
     call = Call(ep, f"https://{host}{ep.path(params)}", status, outcome, data, trace_id, span_id, marks, start, end, tb)
     call.response_bytes = size
     call.request_bytes = rng.randint(180, 1400) if ep.method in ("POST", "PUT", "PATCH") else 0
+    call.transport = params.get("_transport")
+    call.context = context
+    if req and not replayed and key in ("place_order", "create_booking", "create_transfer") and status is not None:
+        state = "confirmed" if status < 400 else "pending" if status == 504 and key != "create_transfer" else "not_submitted"
+        req["plan"].runtime.operations[req["plan"].operation_id] = dict(data, state=state)
+        if len(req["plan"].runtime.operations) > 20000:
+            req["plan"].runtime.operations.pop(next(iter(req["plan"].runtime.operations)))
+    if hasattr(session, "plan"):
+        session.plan.evidence.append({"key": key, "status": status, "trace_id": trace_id, "client_span_id": span_id,
+            "traceparent": call.traceparent, "start": start, "end": end, "part_id": session.part.id,
+            "incident": req["incident"], "context": context, "transport": call.transport, "data": data,
+            "backend_errors": sum(bool(n[3].get("status", {}).get("code") == 2) for n in tb.spans) if tb else 0,
+            "first_backend_span_id": tb.spans[0][3]["spanId"] if tb else None})
+    from .pool_evidence import companions
+    call.companions = companions(call, req)
     return call
 
 
-# Embrace forwards the client network span only after the session part ends and is processed. Chronosphere
-# keeps that span only if the backend spans of its trace arrived first and recently: a forwarded span that
-# arrives before its backend spans, or minutes after them, is dropped (observed on demo-sandbox, 2026-10-29).
-# So backend traces are held until their session part ends and sent a few seconds after it, just ahead of
-# Embrace's forwarding.
+# Preserve the measured delivery schedule; earlier ordering experiments were
+# confounded by tail sampling. Retention must be verified using known IDs.
 FORWARD_DELAY_MS = (3_000, 15_000)
 
 
@@ -104,6 +131,8 @@ def release_backend(session, part_end, rng=random):
 def deliver_backend(session, call, rng=random):
     """Queue the backend trace (and logs); held until the session part ends (see release_backend)."""
     tb = call.trace_build
+    if tb is None:
+        return
     done = max(int(s["endTimeUnixNano"]) for _, _, _, s in tb.spans) / 1e6
     traces = tb.traces_request()
     extra = session.client_resource_spans(call) if session.emit_client_spans else None
@@ -114,4 +143,8 @@ def deliver_backend(session, call, rng=random):
     logs = tb.logs_request()
     if logs:
         session._deliver(done + rng.uniform(1000, 5000), "otlp", "logs", logs)
+        session.deliveries[-1]["hold"] = True
+    for companion in call.companions:
+        done = max(int(s["endTimeUnixNano"]) for _, _, _, s in companion.spans) / 1e6
+        session._deliver(done + 1000, "otlp", "traces", companion.traces_request())
         session.deliveries[-1]["hold"] = True

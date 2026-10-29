@@ -483,14 +483,15 @@ class WebSession:
         host = self.profile.api_host
         a = {"http.request.method": ep.method, "url.full": c.url, "emb.w3c_traceparent": c.traceparent,
              "http.response.status_code": c.status, "server.address": host, "server.port": 443}
-        if c.status >= 400:
-            a["error.type"] = str(c.status)
+        failed = c.status is None or c.status >= 400
+        if failed:
+            a["error.type"] = c.transport or str(c.status)
         a.update({"browser.url.full": self.page["url"], "emb.type": "perf.network_request"})
         a.update({k: v for k, v in self._page_attrs().items() if k != "browser.url.full"})
         events = self._timing_events(start, m["dns"], m["tcp"], m["tls"], m["req_start"], m["resp_start"],
                                      m["resp_end"], m["first"])
         self._span("fetch", ep.method, start, c.end, a, kind=3, trace_id=c.trace_id, span_id=c.span_id,
-                   events=events, status=2 if c.status >= 400 else 0)
+                   events=events, status=2 if failed else 0)
         deliver_backend(self, c, self.rng)
         self.calls.append((key, c.status, c.trace_id))
         return Result(c.status, c.outcome, c.data, c.trace_id, start, c.end)
@@ -507,7 +508,7 @@ class WebSession:
                           "user_agent.original": self.persona["ua"]})
         span = {"traceId": c.trace_id, "spanId": c.span_id, "name": f"{c.ep.method} {c.ep.route}", "kind": 3,
                 "startTimeUnixNano": str(ns(c.start)), "endTimeUnixNano": str(ns(c.end)), "flags": 257,
-                "status": {"code": 2 if c.status >= 400 else 0},
+                "status": {"code": 2 if c.status is None or c.status >= 400 else 0},
                 "attributes": otlp.attrs({"http.request.method": c.ep.method, "url.full": c.url, "http.route": c.ep.route,
                                           "http.response.status_code": c.status, "server.address": self.profile.api_host,
                                           "emb.device_id": self.persona["device_id"], "emb.session_id": self.part.id,

@@ -107,8 +107,10 @@ class AndroidSession:
             self.app = profile.android
             self.api_host = profile.api_host
         self.t = self.start_ms = start_ms
-        self.app_version, self.version_code, self.sdk_version = weighted(
-            [((v, c, s), w) for v, c, s, w in self.app["versions"]], rng)
+        versions = self.app["versions"]
+        installed = next((x for x in versions if x[0] == persona.get("installed_version")), None)
+        self.app_version, self.version_code, self.sdk_version = (installed[:3] if installed else weighted(
+            [((v, c, s), w) for v, c, s, w in versions], rng))
         if persona.get("installed_version") != self.app_version:
             persona["installed_version"] = self.app_version
             persona["version_starts"] = 0
@@ -365,7 +367,7 @@ class AndroidSession:
     def page_view(self, key, **params):
         if self.part is None:
             self._start_part("state")
-        elif self.rng.random() < 0.07:
+        elif not hasattr(self, "plan") and self.rng.random() < 0.07:
             self._end_screen()
             self.screen_def_key, self.screen_label = key, self.profile.pages[key].label(params)
             self._end_part("state")
@@ -418,6 +420,11 @@ class AndroidSession:
         self._think()
 
     def breadcrumb(self, message):
+        if self.ended:
+            raise SessionEnded()
+        count = sum(e["name"] == "emb-breadcrumb" for e in self.part.events)
+        if count >= 75:
+            raise ValueError("Breadcrumb budget exceeded; split the journey at a meaningful lifecycle boundary")
         self._use("add_breadcrumb")
         self.part.events.append({"name": "emb-breadcrumb", "time_unix_nano": nanos(self.t), "attributes": kv({
             "message": message[:253] + "..." if len(message) >= 256 else message, "emb.type": "sys.breadcrumb"})})
@@ -529,9 +536,18 @@ class AndroidSession:
              "emb.w3c_traceparent": c.traceparent, "emb.forward_telemetry": True,
              "http.response.status_code": c.status, "http.request.body.size": c.request_bytes,
              "http.response.body.size": c.response_bytes, "user_agent.name": "okhttp", "user_agent.version": "4.12.0"}
-        if c.status >= 400:
+        failed = c.status is None or c.status >= 400
+        if c.transport:
+            errors = {"dns": ("java.net.UnknownHostException", "Unable to resolve host"),
+                      "offline": ("java.net.ConnectException", "Network is unreachable"),
+                      "reset": ("java.net.SocketException", "Connection reset before request headers"),
+                      "timeout": ("java.net.SocketTimeoutException", "Connect timed out"),
+                      "cancelled": ("java.io.IOException", "Canceled")}
+            a["error.type"], a["exception.message"] = errors[c.transport]
+            a["emb.forward_telemetry"] = False
+        if failed:
             a["emb.error_code"] = "failure"
-        self._span(f"emb-{c.ep.method} {path}", start, c.end, a, status="Error" if c.status >= 400 else "Unset",
+        self._span(f"emb-{c.ep.method} {path}", start, c.end, a, status="Error" if failed else "Unset",
                    trace_id=c.trace_id, span_id=c.span_id)
         deliver_backend(self, c, self.rng)
         self.calls.append((key, c.status, c.trace_id))
@@ -545,7 +561,7 @@ class AndroidSession:
                           "device.model.identifier": self.persona["model"], "device.manufacturer": self.persona["manufacturer"]})
         span = {"traceId": c.trace_id, "spanId": c.span_id, "name": c.ep.method, "kind": 3,
                 "startTimeUnixNano": str(nanos(c.start)), "endTimeUnixNano": str(nanos(c.end)), "flags": 257,
-                "status": {"code": 2 if c.status >= 400 else 0},
+                "status": {"code": 2 if c.status is None or c.status >= 400 else 0},
                 "attributes": otlp.attrs({"http.request.method": c.ep.method, "url.full": c.url,
                                           "http.response.status_code": c.status, "server.address": self.api_host,
                                           "emb.device_id": self.persona["device_id"], "emb.session_id": self.part.id})}
@@ -574,6 +590,10 @@ def shift_envelope(obj, delta_ns):
             if k in ENVELOPE_TIME_KEYS and isinstance(v, int):
                 obj[k] = v + delta_ns
             elif k == "key" and v == "emb.user_session_start_ts":
+                obj["value"] = str(int(obj["value"]) + delta_ns // 1_000_000)
+            elif k == "key" and v == "last_known_time_unix_nano":
+                obj["value"] = str(int(obj["value"]) + delta_ns)
+            elif k == "key" and v == "account.snapshot_as_of_ms":
                 obj["value"] = str(int(obj["value"]) + delta_ns // 1_000_000)
             else:
                 shift_envelope(v, delta_ns)
