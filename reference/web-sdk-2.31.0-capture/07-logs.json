@@ -1,0 +1,884 @@
+{
+ "path": "/v2/logs",
+ "headers": {
+  "Host": "localhost:3999",
+  "Connection": "keep-alive",
+  "Content-Length": "1959",
+  "x-em-did": "B78269E7F5F13397695E3CF0901F82F3",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "content-encoding": "gzip",
+  "sec-ch-ua": "\"Not?A_Brand\";v=\"24\", \"Chromium\";v=\"152\"",
+  "sec-ch-ua-mobile": "?0",
+  "traceparent": "00-4307117022789772626738ff01d05464-8652617fafb72deb-01",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36",
+  "content-type": "application/json",
+  "x-em-aid": "abcde",
+  "Accept": "*/*",
+  "Origin": "http://localhost:3999",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "Referer": "http://localhost:3999/checkout",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "en-US"
+ },
+ "body": {
+  "resourceLogs": [
+   {
+    "resource": {
+     "attributes": [
+      {
+       "key": "telemetry.sdk.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      },
+      {
+       "key": "app_version",
+       "value": {
+        "stringValue": "4.12.0"
+       }
+      },
+      {
+       "key": "app_framework",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "telemetry.sdk.version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "sdk_simple_version",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_platform",
+       "value": {
+        "stringValue": "web"
+       }
+      },
+      {
+       "key": "telemetry.sdk.language",
+       "value": {
+        "stringValue": "webjs"
+       }
+      },
+      {
+       "key": "emb.app_instance_id",
+       "value": {
+        "stringValue": "4A263A0A303D21EEF41DF59E843B93CC"
+       }
+      },
+      {
+       "key": "user_agent.original",
+       "value": {
+        "stringValue": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36"
+       }
+      },
+      {
+       "key": "screen_resolution",
+       "value": {
+        "stringValue": "1512x982"
+       }
+      },
+      {
+       "key": "viewport_resolution",
+       "value": {
+        "stringValue": "0x0"
+       }
+      },
+      {
+       "key": "network_effective_type",
+       "value": {
+        "stringValue": "3g"
+       }
+      },
+      {
+       "key": "device_memory",
+       "value": {
+        "intValue": 16
+       }
+      },
+      {
+       "key": "webdriver",
+       "value": {
+        "boolValue": false
+       }
+      },
+      {
+       "key": "service.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      }
+     ],
+     "droppedAttributesCount": 0
+    },
+    "scopeLogs": [
+     {
+      "scope": {
+       "name": "MaxScrollDepthInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281997692000000",
+        "observedTimeUnixNano": "1793281997692000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "max-scroll-depth",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "emb.otel_log"
+          }
+         },
+         {
+          "key": "max_scroll_depth.pixels",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "max_scroll_depth.did_scroll",
+          "value": {
+           "boolValue": false
+          }
+         },
+         {
+          "key": "max_scroll_depth.percent",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "max_scroll_depth.document_height",
+          "value": {
+           "intValue": 768
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "FBBC128CA3B5FD97CD09CBAC173E73A6"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "LoafInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281997692000000",
+        "observedTimeUnixNano": "1793281997692000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "emb-loaf-report",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.web_vital"
+          }
+         },
+         {
+          "key": "browser.web_vital.id",
+          "value": {
+           "stringValue": "embracev2-1793281997692-9885489417882"
+          }
+         },
+         {
+          "key": "browser.web_vital.name",
+          "value": {
+           "stringValue": "tbd"
+          }
+         },
+         {
+          "key": "browser.web_vital.value",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "browser.web_vital.rating",
+          "value": {
+           "stringValue": "good"
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_total_duration",
+          "value": {
+           "intValue": 877
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_work_duration",
+          "value": {
+           "intValue": 877
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_style_and_layout_duration",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_count",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_longest_duration",
+          "value": {
+           "intValue": 877
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_longest_duration_excluding_first",
+          "value": {
+           "intValue": 877
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "1497BE8E3F020B3160B2EB443334641F"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       },
+       {
+        "timeUnixNano": "1793281997692000000",
+        "observedTimeUnixNano": "1793281997692000000",
+        "severityNumber": 9,
+        "body": {
+         "stringValue": "{\"(inline)\":{\"total_duration\":6,\"style_and_layout_duration\":0,\"count\":1}}"
+        },
+        "eventName": "emb-loaf-scripts",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.loaf_scripts"
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "F9D184F2359E96D3E4ED9CD250094D26"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "DOMStateInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281997692000000",
+        "observedTimeUnixNano": "1793281997692000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "dom-state",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "emb.otel_log"
+          }
+         },
+         {
+          "key": "dom_state.element_count",
+          "value": {
+           "intValue": 13
+          }
+         },
+         {
+          "key": "dom_state.average_depth",
+          "value": {
+           "doubleValue": 2.6923076923076925
+          }
+         },
+         {
+          "key": "dom_state.document_height",
+          "value": {
+           "intValue": 768
+          }
+         },
+         {
+          "key": "dom_state.document_width",
+          "value": {
+           "intValue": 1024
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "85F154ECF83098367F6F90043E187C72"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "WebVitalsInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281993625699951",
+        "observedTimeUnixNano": "1793281997708000000",
+        "severityNumber": 9,
+        "body": {
+         "stringValue": "{\"interactionType\":\"pointer\",\"interactionTime\":8362.699999999255,\"nextPaintTime\":8378.699999999255,\"inputDelay\":0.6999999992549419,\"processingDuration\":0,\"presentationDelay\":15.300000000745058,\"loadState\":\"complete\"}"
+        },
+        "eventName": "browser.web_vital",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.web_vital"
+          }
+         },
+         {
+          "key": "browser.web_vital.name",
+          "value": {
+           "stringValue": "inp"
+          }
+         },
+         {
+          "key": "browser.web_vital.value",
+          "value": {
+           "intValue": 16
+          }
+         },
+         {
+          "key": "browser.web_vital.delta",
+          "value": {
+           "intValue": 16
+          }
+         },
+         {
+          "key": "browser.web_vital.rating",
+          "value": {
+           "stringValue": "good"
+          }
+         },
+         {
+          "key": "browser.web_vital.id",
+          "value": {
+           "stringValue": "v6-1793281985369-2448407853292"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_type",
+          "value": {
+           "stringValue": "navigate"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_id",
+          "value": {
+           "intValue": 5722
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "4E5309AAB96D8201FE40401063A28FBC"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/products/:productId"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "B7DF39F0AE3192CD15F5AADB455E5F4B"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Product Detail"
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "D66EB6CCC715F6F7437B351AA1D41EE7"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "45C9300580928D74E8415BB30B595691"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       },
+       {
+        "timeUnixNano": "1793281996711000000",
+        "observedTimeUnixNano": "1793281997708000000",
+        "severityNumber": 9,
+        "body": {
+         "stringValue": "{\"timeToFirstByte\":0,\"resourceLoadDelay\":0,\"resourceLoadDuration\":0,\"elementRenderDelay\":1050.800000000745,\"target\":\"#status\"}"
+        },
+        "eventName": "browser.web_vital",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.web_vital"
+          }
+         },
+         {
+          "key": "browser.web_vital.name",
+          "value": {
+           "stringValue": "lcp"
+          }
+         },
+         {
+          "key": "browser.web_vital.value",
+          "value": {
+           "doubleValue": 1050.800000000745
+          }
+         },
+         {
+          "key": "browser.web_vital.delta",
+          "value": {
+           "doubleValue": 1050.800000000745
+          }
+         },
+         {
+          "key": "browser.web_vital.rating",
+          "value": {
+           "stringValue": "good"
+          }
+         },
+         {
+          "key": "browser.web_vital.id",
+          "value": {
+           "stringValue": "v6-1793281996712-6231370414348"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_type",
+          "value": {
+           "stringValue": "soft-navigation"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_id",
+          "value": {
+           "intValue": 5729
+          }
+         },
+         {
+          "key": "browser.web_vital.interaction_id",
+          "value": {
+           "intValue": 3471
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "4E5309AAB96D8201FE40401063A28FBC"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {}
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.elementType",
+          "value": {
+           "stringValue": "p"
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.elementBoundingRect",
+          "value": {
+           "stringValue": "{\"x\":8,\"y\":117,\"width\":1008,\"height\":19}"
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "B00E9E1F7BBECD2B9CFC4B331A6B71FA"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "45C9300580928D74E8415BB30B595691"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

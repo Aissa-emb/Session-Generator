@@ -1,0 +1,882 @@
+{
+ "path": "/v2/spans",
+ "headers": {
+  "Host": "localhost:3999",
+  "Connection": "keep-alive",
+  "Content-Length": "2197",
+  "x-em-did": "B78269E7F5F13397695E3CF0901F82F3",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "content-encoding": "gzip",
+  "sec-ch-ua": "\"Not?A_Brand\";v=\"24\", \"Chromium\";v=\"152\"",
+  "sec-ch-ua-mobile": "?0",
+  "traceparent": "00-2b4b9d93c2d9fdc06b8ebcba410ae45c-d465c49a6b4a766c-01",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36",
+  "content-type": "application/json",
+  "x-em-aid": "abcde",
+  "Accept": "*/*",
+  "Origin": "http://localhost:3999",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "Referer": "http://localhost:3999/checkout",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "en-US"
+ },
+ "body": {
+  "resourceSpans": [
+   {
+    "resource": {
+     "attributes": [
+      {
+       "key": "telemetry.sdk.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      },
+      {
+       "key": "app_version",
+       "value": {
+        "stringValue": "4.12.0"
+       }
+      },
+      {
+       "key": "app_framework",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "telemetry.sdk.version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "sdk_simple_version",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_platform",
+       "value": {
+        "stringValue": "web"
+       }
+      },
+      {
+       "key": "telemetry.sdk.language",
+       "value": {
+        "stringValue": "webjs"
+       }
+      },
+      {
+       "key": "emb.app_instance_id",
+       "value": {
+        "stringValue": "4A263A0A303D21EEF41DF59E843B93CC"
+       }
+      },
+      {
+       "key": "user_agent.original",
+       "value": {
+        "stringValue": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36"
+       }
+      },
+      {
+       "key": "screen_resolution",
+       "value": {
+        "stringValue": "1512x982"
+       }
+      },
+      {
+       "key": "viewport_resolution",
+       "value": {
+        "stringValue": "0x0"
+       }
+      },
+      {
+       "key": "network_effective_type",
+       "value": {
+        "stringValue": "3g"
+       }
+      },
+      {
+       "key": "device_memory",
+       "value": {
+        "intValue": 16
+       }
+      },
+      {
+       "key": "webdriver",
+       "value": {
+        "boolValue": false
+       }
+      },
+      {
+       "key": "service.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      }
+     ],
+     "droppedAttributesCount": 0
+    },
+    "scopeSpans": [
+     {
+      "scope": {
+       "name": "embrace-web-sdk-session-parts"
+      },
+      "spans": [
+       {
+        "traceId": "d12cdf2baa22d8a1a5d2bb6252d76451",
+        "spanId": "d15fccc8dc8d0852",
+        "name": "emb-session-part",
+        "kind": 1,
+        "startTimeUnixNano": "1793281995815100098",
+        "endTimeUnixNano": "1793281997692300049",
+        "attributes": [
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.user_session_number",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "emb.user_session_part_index",
+          "value": {
+           "intValue": 2
+          }
+         },
+         {
+          "key": "emb.session_part_number",
+          "value": {
+           "intValue": 2
+          }
+         },
+         {
+          "key": "emb.user_session_start_ts",
+          "value": {
+           "doubleValue": 1793281985367.4
+          }
+         },
+         {
+          "key": "emb.user_session_max_duration_seconds",
+          "value": {
+           "intValue": 43200
+          }
+         },
+         {
+          "key": "emb.user_session_inactivity_timeout_seconds",
+          "value": {
+           "intValue": 1800
+          }
+         },
+         {
+          "key": "emb.user_session_foreground_inactivity_timeout_seconds",
+          "value": {
+           "intValue": 1800
+          }
+         },
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.session_part"
+          }
+         },
+         {
+          "key": "emb.state",
+          "value": {
+           "stringValue": "foreground"
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "emb.session_part_start_reason",
+          "value": {
+           "stringValue": "web_soft_navigation"
+          }
+         },
+         {
+          "key": "emb.cold_start",
+          "value": {
+           "boolValue": false
+          }
+         },
+         {
+          "key": "emb.properties.plan",
+          "value": {
+           "stringValue": "premium"
+          }
+         },
+         {
+          "key": "emb.session_part_end_reason",
+          "value": {
+           "stringValue": "user_session_ended"
+          }
+         },
+         {
+          "key": "emb.unhandled_exceptions_count",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "emb.sdk_startup_duration",
+          "value": {
+           "intValue": 20
+          }
+         },
+         {
+          "key": "emb.is_final_session_part",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "emb.user_session_termination_reason",
+          "value": {
+           "stringValue": "manual"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0,
+        "events": [
+         {
+          "attributes": [
+           {
+            "key": "emb.type",
+            "value": {
+             "stringValue": "ux.tap"
+            }
+           },
+           {
+            "key": "view.name",
+            "value": {
+             "stringValue": "<button>Throw</button>"
+            }
+           },
+           {
+            "key": "tap.coords",
+            "value": {
+             "stringValue": "366,91"
+            }
+           }
+          ],
+          "name": "click",
+          "timeUnixNano": "1793281996676000000",
+          "droppedAttributesCount": 0
+         }
+        ],
+        "droppedEventsCount": 0,
+        "status": {
+         "code": 0
+        },
+        "links": [],
+        "droppedLinksCount": 0,
+        "flags": 257
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "@opentelemetry/instrumentation-fetch",
+       "version": "0.223.0"
+      },
+      "spans": [
+       {
+        "traceId": "881c451bf9e5807b02d654b5f2f51709",
+        "spanId": "8bac7289a32fdc14",
+        "name": "POST",
+        "kind": 3,
+        "startTimeUnixNano": "1793281995818000000",
+        "endTimeUnixNano": "1793281995826000000",
+        "attributes": [
+         {
+          "key": "http.request.method",
+          "value": {
+           "stringValue": "POST"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/v2/spans"
+          }
+         },
+         {
+          "key": "emb.w3c_traceparent",
+          "value": {
+           "stringValue": "00-881c451bf9e5807b02d654b5f2f51709-8bac7289a32fdc14-01"
+          }
+         },
+         {
+          "key": "http.response.status_code",
+          "value": {
+           "intValue": 200
+          }
+         },
+         {
+          "key": "server.address",
+          "value": {
+           "stringValue": "localhost"
+          }
+         },
+         {
+          "key": "server.port",
+          "value": {
+           "intValue": 3999
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "perf.network_request"
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0,
+        "events": [
+         {
+          "attributes": [],
+          "name": "fetchStart",
+          "timeUnixNano": "1793281995818399951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "domainLookupStart",
+          "timeUnixNano": "1793281995819899951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "domainLookupEnd",
+          "timeUnixNano": "1793281995819899951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "connectStart",
+          "timeUnixNano": "1793281995819899951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "connectEnd",
+          "timeUnixNano": "1793281995820399951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "requestStart",
+          "timeUnixNano": "1793281995820499951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "responseStart",
+          "timeUnixNano": "1793281995824799951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "responseEnd",
+          "timeUnixNano": "1793281995825399951",
+          "droppedAttributesCount": 0
+         }
+        ],
+        "droppedEventsCount": 0,
+        "status": {
+         "code": 0
+        },
+        "links": [],
+        "droppedLinksCount": 0,
+        "flags": 257
+       },
+       {
+        "traceId": "98f2b870c30d297b52f5af32c6da5c69",
+        "spanId": "e828b20cada72952",
+        "name": "POST",
+        "kind": 3,
+        "startTimeUnixNano": "1793281995960000000",
+        "endTimeUnixNano": "1793281995968000000",
+        "attributes": [
+         {
+          "key": "http.request.method",
+          "value": {
+           "stringValue": "POST"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/v2/logs"
+          }
+         },
+         {
+          "key": "emb.w3c_traceparent",
+          "value": {
+           "stringValue": "00-98f2b870c30d297b52f5af32c6da5c69-e828b20cada72952-01"
+          }
+         },
+         {
+          "key": "http.response.status_code",
+          "value": {
+           "intValue": 200
+          }
+         },
+         {
+          "key": "server.address",
+          "value": {
+           "stringValue": "localhost"
+          }
+         },
+         {
+          "key": "server.port",
+          "value": {
+           "intValue": 3999
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "perf.network_request"
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0,
+        "events": [
+         {
+          "attributes": [],
+          "name": "fetchStart",
+          "timeUnixNano": "1793281995960399951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "domainLookupStart",
+          "timeUnixNano": "1793281995961899951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "domainLookupEnd",
+          "timeUnixNano": "1793281995961899951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "connectStart",
+          "timeUnixNano": "1793281995961899951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "connectEnd",
+          "timeUnixNano": "1793281995962299951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "requestStart",
+          "timeUnixNano": "1793281995962299951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "responseStart",
+          "timeUnixNano": "1793281995965899951",
+          "droppedAttributesCount": 0
+         },
+         {
+          "attributes": [],
+          "name": "responseEnd",
+          "timeUnixNano": "1793281995966399951",
+          "droppedAttributesCount": 0
+         }
+        ],
+        "droppedEventsCount": 0,
+        "status": {
+         "code": 0
+        },
+        "links": [],
+        "droppedLinksCount": 0,
+        "flags": 257
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "SoftNavigationPerformanceInstrumentation",
+       "version": "1.0.0"
+      },
+      "spans": [
+       {
+        "traceId": "9d1b89e498069066b9cdd233bd7fb0ff",
+        "spanId": "5ae6facc2fd3b494",
+        "name": "Soft Navigation",
+        "kind": 1,
+        "startTimeUnixNano": "1793281995660199951",
+        "endTimeUnixNano": "1793281996711000000",
+        "attributes": [
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.soft_navigation.source",
+          "value": {
+           "stringValue": "performance_observer"
+          }
+         },
+         {
+          "key": "emb.soft_navigation.navigation_id",
+          "value": {
+           "intValue": 5729
+          }
+         },
+         {
+          "key": "emb.soft_navigation.interaction_id",
+          "value": {
+           "intValue": 3471
+          }
+         },
+         {
+          "key": "emb.soft_navigation.start_time",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "emb.soft_navigation.duration",
+          "value": {
+           "doubleValue": 1050.800000000745
+          }
+         },
+         {
+          "key": "emb.soft_navigation.paint_time",
+          "value": {
+           "doubleValue": 874.9000976569951
+          }
+         },
+         {
+          "key": "emb.soft_navigation.presentation_time",
+          "value": {
+           "doubleValue": 896.10009765625
+          }
+         },
+         {
+          "key": "emb.soft_navigation.span_ids",
+          "value": {
+           "arrayValue": {
+            "values": [
+             {
+              "stringValue": "c8fab7f9c2411acf"
+             },
+             {
+              "stringValue": "bed5f282ac29b32b"
+             },
+             {
+              "stringValue": "8bac7289a32fdc14"
+             },
+             {
+              "stringValue": "e828b20cada72952"
+             }
+            ]
+           }
+          }
+         },
+         {
+          "key": "emb.soft_navigation.span_id_types",
+          "value": {
+           "arrayValue": {
+            "values": [
+             {
+              "stringValue": "ux.surface"
+             },
+             {
+              "stringValue": "ux.surface"
+             },
+             {
+              "stringValue": ""
+             },
+             {
+              "stringValue": ""
+             }
+            ]
+           }
+          }
+         },
+         {
+          "key": "emb.soft_navigation.log_ids",
+          "value": {
+           "arrayValue": {
+            "values": [
+             {
+              "stringValue": "8ED9876F92A5DF6FCD1CA41DDF8EEAE6"
+             },
+             {
+              "stringValue": "F6100D0CC3FCC31A9B70FF15CE7A9004"
+             },
+             {
+              "stringValue": "9A084E374BC4185FA7E91FB398925AF7"
+             },
+             {
+              "stringValue": "978233531889B3FF3EA570DB3CAFE50D"
+             },
+             {
+              "stringValue": "5981DB41A5C915AF62E4AF1BB9E1A8ED"
+             },
+             {
+              "stringValue": "04D4EEA3A5D0073A06CC614EE4446852"
+             }
+            ]
+           }
+          }
+         },
+         {
+          "key": "emb.soft_navigation.log_id_types",
+          "value": {
+           "arrayValue": {
+            "values": [
+             {
+              "stringValue": "sys.exception"
+             },
+             {
+              "stringValue": "emb.otel_log"
+             },
+             {
+              "stringValue": "ux.web_vital"
+             },
+             {
+              "stringValue": "emb.otel_log"
+             },
+             {
+              "stringValue": "emb.otel_log"
+             },
+             {
+              "stringValue": "sys.exception"
+             }
+            ]
+           }
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0,
+        "events": [],
+        "droppedEventsCount": 0,
+        "status": {
+         "code": 0
+        },
+        "links": [],
+        "droppedLinksCount": 0,
+        "flags": 257
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "NavigationInstrumentation",
+       "version": "1.0.0"
+      },
+      "spans": [
+       {
+        "traceId": "3dcb45447dd67b332df182ae1a6d9a65",
+        "spanId": "bed5f282ac29b32b",
+        "name": "/checkout",
+        "kind": 1,
+        "startTimeUnixNano": "1793281995817800049",
+        "endTimeUnixNano": "1793281997692699951",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.surface"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0,
+        "events": [],
+        "droppedEventsCount": 0,
+        "status": {
+         "code": 0
+        },
+        "links": [],
+        "droppedLinksCount": 0,
+        "flags": 257
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

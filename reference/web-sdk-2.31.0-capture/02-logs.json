@@ -1,0 +1,266 @@
+{
+ "path": "/v2/logs",
+ "headers": {
+  "Host": "localhost:3999",
+  "Connection": "keep-alive",
+  "Content-Length": "964",
+  "x-em-did": "B78269E7F5F13397695E3CF0901F82F3",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "content-encoding": "gzip",
+  "sec-ch-ua": "\"Not?A_Brand\";v=\"24\", \"Chromium\";v=\"152\"",
+  "sec-ch-ua-mobile": "?0",
+  "traceparent": "00-10c1a6c4865f366bd5becc1e85807fa1-cdf1527f5167dab3-01",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36",
+  "content-type": "application/json",
+  "x-em-aid": "abcde",
+  "Accept": "*/*",
+  "Origin": "http://localhost:3999",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "Referer": "http://localhost:3999/",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "en-US"
+ },
+ "body": {
+  "resourceLogs": [
+   {
+    "resource": {
+     "attributes": [
+      {
+       "key": "telemetry.sdk.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      },
+      {
+       "key": "app_version",
+       "value": {
+        "stringValue": "4.12.0"
+       }
+      },
+      {
+       "key": "app_framework",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "telemetry.sdk.version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "sdk_simple_version",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_platform",
+       "value": {
+        "stringValue": "web"
+       }
+      },
+      {
+       "key": "telemetry.sdk.language",
+       "value": {
+        "stringValue": "webjs"
+       }
+      },
+      {
+       "key": "emb.app_instance_id",
+       "value": {
+        "stringValue": "4A263A0A303D21EEF41DF59E843B93CC"
+       }
+      },
+      {
+       "key": "user_agent.original",
+       "value": {
+        "stringValue": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36"
+       }
+      },
+      {
+       "key": "screen_resolution",
+       "value": {
+        "stringValue": "1512x982"
+       }
+      },
+      {
+       "key": "viewport_resolution",
+       "value": {
+        "stringValue": "0x0"
+       }
+      },
+      {
+       "key": "network_effective_type",
+       "value": {
+        "stringValue": "3g"
+       }
+      },
+      {
+       "key": "device_memory",
+       "value": {
+        "intValue": 16
+       }
+      },
+      {
+       "key": "webdriver",
+       "value": {
+        "boolValue": false
+       }
+      },
+      {
+       "key": "service.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      }
+     ],
+     "droppedAttributesCount": 0
+    },
+    "scopeLogs": [
+     {
+      "scope": {
+       "name": "FirstInteractionInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281993627000000",
+        "observedTimeUnixNano": "1793281993627000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "first-interaction",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "emb.otel_log"
+          }
+         },
+         {
+          "key": "first_interaction.interaction_type",
+          "value": {
+           "stringValue": "click"
+          }
+         },
+         {
+          "key": "first_interaction.element_type",
+          "value": {
+           "stringValue": "button"
+          }
+         },
+         {
+          "key": "first_interaction.element_selector",
+          "value": {
+           "stringValue": "#b1"
+          }
+         },
+         {
+          "key": "first_interaction.time",
+          "value": {
+           "doubleValue": 8255.5
+          }
+         },
+         {
+          "key": "first_interaction.x",
+          "value": {
+           "intValue": 57
+          }
+         },
+         {
+          "key": "first_interaction.y",
+          "value": {
+           "intValue": 91
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "6A733ACFF1CA451A6BC7C296884C5D7C"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/products/:productId"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "B7DF39F0AE3192CD15F5AADB455E5F4B"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Product Detail"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,1051 @@
+{
+ "path": "/v2/logs",
+ "headers": {
+  "Host": "localhost:3999",
+  "Connection": "keep-alive",
+  "Content-Length": "2055",
+  "x-em-did": "B78269E7F5F13397695E3CF0901F82F3",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "content-encoding": "gzip",
+  "sec-ch-ua": "\"Not?A_Brand\";v=\"24\", \"Chromium\";v=\"152\"",
+  "sec-ch-ua-mobile": "?0",
+  "traceparent": "00-98f2b870c30d297b52f5af32c6da5c69-e828b20cada72952-01",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36",
+  "content-type": "application/json",
+  "x-em-aid": "abcde",
+  "Accept": "*/*",
+  "Origin": "http://localhost:3999",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "Referer": "http://localhost:3999/checkout",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "en-US"
+ },
+ "body": {
+  "resourceLogs": [
+   {
+    "resource": {
+     "attributes": [
+      {
+       "key": "telemetry.sdk.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      },
+      {
+       "key": "app_version",
+       "value": {
+        "stringValue": "4.12.0"
+       }
+      },
+      {
+       "key": "app_framework",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "telemetry.sdk.version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "sdk_simple_version",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_platform",
+       "value": {
+        "stringValue": "web"
+       }
+      },
+      {
+       "key": "telemetry.sdk.language",
+       "value": {
+        "stringValue": "webjs"
+       }
+      },
+      {
+       "key": "emb.app_instance_id",
+       "value": {
+        "stringValue": "4A263A0A303D21EEF41DF59E843B93CC"
+       }
+      },
+      {
+       "key": "user_agent.original",
+       "value": {
+        "stringValue": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36"
+       }
+      },
+      {
+       "key": "screen_resolution",
+       "value": {
+        "stringValue": "1512x982"
+       }
+      },
+      {
+       "key": "viewport_resolution",
+       "value": {
+        "stringValue": "0x0"
+       }
+      },
+      {
+       "key": "network_effective_type",
+       "value": {
+        "stringValue": "3g"
+       }
+      },
+      {
+       "key": "device_memory",
+       "value": {
+        "intValue": 16
+       }
+      },
+      {
+       "key": "webdriver",
+       "value": {
+        "boolValue": false
+       }
+      },
+      {
+       "key": "service.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      }
+     ],
+     "droppedAttributesCount": 0
+    },
+    "scopeLogs": [
+     {
+      "scope": {
+       "name": "embrace-web-sdk-logs"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281994958100098",
+        "observedTimeUnixNano": "1793281994958000000",
+        "severityNumber": 17,
+        "severityText": "ERROR",
+        "body": {
+         "stringValue": "Add to cart failed"
+        },
+        "eventName": "emb-log",
+        "attributes": [
+         {
+          "key": "http.status_code",
+          "value": {
+           "stringValue": "503"
+          }
+         },
+         {
+          "key": "sku",
+          "value": {
+           "stringValue": "TRX2"
+          }
+         },
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "sys.log"
+          }
+         },
+         {
+          "key": "emb.stacktrace.js",
+          "value": {
+           "stringValue": "Error\n    at EmbraceLogManager2.message (http://localhost:3999/bundle.js:4749:66)\n    at ProxyLogManager.message (http://localhost:3999/bundle.js:74:30)\n    at Proxy.<anonymous> (http://localhost:3999/bundle.js:27:24)\n    at window.doFail (http://localhost:3999/bundle.js:14042:25)"
+          }
+         },
+         {
+          "key": "emb.js_file_bundle_ids",
+          "value": {
+           "stringValue": "{}"
+          }
+         },
+         {
+          "key": "emb.state",
+          "value": {
+           "stringValue": "foreground"
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "BAD40C4FBF4B66E05926C39C552D247C"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/products/:productId"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "B7DF39F0AE3192CD15F5AADB455E5F4B"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Product Detail"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       },
+       {
+        "timeUnixNano": "1793281994958699951",
+        "observedTimeUnixNano": "1793281994958000000",
+        "severityNumber": 9,
+        "severityText": "INFO",
+        "body": {
+         "stringValue": "Cart updated"
+        },
+        "eventName": "emb-log",
+        "attributes": [
+         {
+          "key": "cart_size",
+          "value": {
+           "stringValue": "3"
+          }
+         },
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "sys.log"
+          }
+         },
+         {
+          "key": "emb.state",
+          "value": {
+           "stringValue": "foreground"
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "0DC80C7FDA64859B0D2E362F24A5A31E"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/products/:productId"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "B7DF39F0AE3192CD15F5AADB455E5F4B"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Product Detail"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       },
+       {
+        "timeUnixNano": "1793281994958699951",
+        "observedTimeUnixNano": "1793281994958000000",
+        "severityNumber": 13,
+        "severityText": "WARNING",
+        "body": {
+         "stringValue": "Slow cart response"
+        },
+        "eventName": "emb-log",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "sys.log"
+          }
+         },
+         {
+          "key": "emb.stacktrace.js",
+          "value": {
+           "stringValue": "Error\n    at EmbraceLogManager2.message (http://localhost:3999/bundle.js:4749:66)\n    at ProxyLogManager.message (http://localhost:3999/bundle.js:74:30)\n    at Proxy.<anonymous> (http://localhost:3999/bundle.js:27:24)\n    at window.doFail (http://localhost:3999/bundle.js:14044:13)"
+          }
+         },
+         {
+          "key": "emb.js_file_bundle_ids",
+          "value": {
+           "stringValue": "{}"
+          }
+         },
+         {
+          "key": "emb.state",
+          "value": {
+           "stringValue": "foreground"
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "5A6D41DD9ED64129AABB9C78EE0CA035"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/products/:productId"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "B7DF39F0AE3192CD15F5AADB455E5F4B"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Product Detail"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       },
+       {
+        "timeUnixNano": "1793281995813199951",
+        "observedTimeUnixNano": "1793281995813000000",
+        "severityNumber": 17,
+        "severityText": "ERROR",
+        "body": {
+         "stringValue": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+        },
+        "eventName": "emb-exception",
+        "attributes": [
+         {
+          "key": "where",
+          "value": {
+           "stringValue": "checkout"
+          }
+         },
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "sys.exception"
+          }
+         },
+         {
+          "key": "emb.exception_handling",
+          "value": {
+           "stringValue": "handled"
+          }
+         },
+         {
+          "key": "emb.exception_cause",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "exception.type",
+          "value": {
+           "stringValue": "SyntaxError"
+          }
+         },
+         {
+          "key": "exception.name",
+          "value": {
+           "stringValue": "SyntaxError"
+          }
+         },
+         {
+          "key": "exception.message",
+          "value": {
+           "stringValue": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+          }
+         },
+         {
+          "key": "exception.stacktrace",
+          "value": {
+           "stringValue": "SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n    at JSON.parse (<anonymous>)\n    at window.doSpan (http://localhost:3999/bundle.js:14052:16)"
+          }
+         },
+         {
+          "key": "emb.js_file_bundle_ids",
+          "value": {
+           "stringValue": "{}"
+          }
+         },
+         {
+          "key": "emb.state",
+          "value": {
+           "stringValue": "foreground"
+          }
+         },
+         {
+          "key": "emb.exception_number",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "8ED9876F92A5DF6FCD1CA41DDF8EEAE6"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/products/:productId"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "B7DF39F0AE3192CD15F5AADB455E5F4B"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Product Detail"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "MaxScrollDepthInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281995815000000",
+        "observedTimeUnixNano": "1793281995815000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "max-scroll-depth",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "emb.otel_log"
+          }
+         },
+         {
+          "key": "max_scroll_depth.pixels",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "max_scroll_depth.did_scroll",
+          "value": {
+           "boolValue": false
+          }
+         },
+         {
+          "key": "max_scroll_depth.percent",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "max_scroll_depth.document_height",
+          "value": {
+           "intValue": 768
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "F6100D0CC3FCC31A9B70FF15CE7A9004"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/checkout"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "975BB31080D920EB216CF4F20711DDE0"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Checkout"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": -1
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "LoafInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281995815000000",
+        "observedTimeUnixNano": "1793281995815000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "emb-loaf-report",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.web_vital"
+          }
+         },
+         {
+          "key": "browser.web_vital.id",
+          "value": {
+           "stringValue": "embracev2-1793281995815-4405703726382"
+          }
+         },
+         {
+          "key": "browser.web_vital.name",
+          "value": {
+           "stringValue": "tbd"
+          }
+         },
+         {
+          "key": "browser.web_vital.value",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "browser.web_vital.rating",
+          "value": {
+           "stringValue": "good"
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_total_duration",
+          "value": {
+           "intValue": 716
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_work_duration",
+          "value": {
+           "intValue": 716
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_style_and_layout_duration",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_count",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_longest_duration",
+          "value": {
+           "intValue": 716
+          }
+         },
+         {
+          "key": "emb.tbd.loaf_longest_duration_excluding_first",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "9A084E374BC4185FA7E91FB398925AF7"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/checkout"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "975BB31080D920EB216CF4F20711DDE0"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Checkout"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "DOMStateInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281995816000000",
+        "observedTimeUnixNano": "1793281995816000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "dom-state",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "emb.otel_log"
+          }
+         },
+         {
+          "key": "dom_state.element_count",
+          "value": {
+           "intValue": 13
+          }
+         },
+         {
+          "key": "dom_state.average_depth",
+          "value": {
+           "doubleValue": 2.6923076923076925
+          }
+         },
+         {
+          "key": "dom_state.document_height",
+          "value": {
+           "intValue": 768
+          }
+         },
+         {
+          "key": "dom_state.document_width",
+          "value": {
+           "intValue": 1024
+          }
+         },
+         {
+          "key": "dom_state.images_above_fold.count",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "dom_state.images_above_fold.viewport_height",
+          "value": {
+           "intValue": 768
+          }
+         },
+         {
+          "key": "dom_state.images_above_fold.viewport_width",
+          "value": {
+           "intValue": 1024
+          }
+         },
+         {
+          "key": "dom_state.images_above_fold.timestamp",
+          "value": {
+           "doubleValue": 1793281993626.1
+          }
+         },
+         {
+          "key": "dom_state.images_above_fold.capture_time",
+          "value": {
+           "doubleValue": 8254.60009765625
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "978233531889B3FF3EA570DB3CAFE50D"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7B1E7A3ADD48B54834147096A2AEEC51"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/checkout"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "975BB31080D920EB216CF4F20711DDE0"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Checkout"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,14 @@
+{
+  "platform": "android",
+  "embrace": {
+    "apps": {
+      "ecommerce": "",
+      "banking": "",
+      "travel": ""
+    }
+  },
+  "chronosphere": {
+    "tenant": "",
+    "api_token": ""
+  }
+}

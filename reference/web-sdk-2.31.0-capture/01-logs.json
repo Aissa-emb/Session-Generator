@@ -1,0 +1,310 @@
+{
+ "path": "/v2/logs",
+ "headers": {
+  "Host": "localhost:3999",
+  "Connection": "keep-alive",
+  "Content-Length": "1112",
+  "x-em-did": "B78269E7F5F13397695E3CF0901F82F3",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "content-encoding": "gzip",
+  "sec-ch-ua": "\"Not?A_Brand\";v=\"24\", \"Chromium\";v=\"152\"",
+  "sec-ch-ua-mobile": "?0",
+  "traceparent": "00-1074e9960bef05a561fd3cdbb57fa06f-186583b7d49c26c4-01",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36",
+  "content-type": "application/json",
+  "x-em-aid": "abcde",
+  "Accept": "*/*",
+  "Origin": "http://localhost:3999",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "Referer": "http://localhost:3999/",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "en-US"
+ },
+ "body": {
+  "resourceLogs": [
+   {
+    "resource": {
+     "attributes": [
+      {
+       "key": "telemetry.sdk.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      },
+      {
+       "key": "app_version",
+       "value": {
+        "stringValue": "4.12.0"
+       }
+      },
+      {
+       "key": "app_framework",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "telemetry.sdk.version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "sdk_simple_version",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_platform",
+       "value": {
+        "stringValue": "web"
+       }
+      },
+      {
+       "key": "telemetry.sdk.language",
+       "value": {
+        "stringValue": "webjs"
+       }
+      },
+      {
+       "key": "emb.app_instance_id",
+       "value": {
+        "stringValue": "4A263A0A303D21EEF41DF59E843B93CC"
+       }
+      },
+      {
+       "key": "user_agent.original",
+       "value": {
+        "stringValue": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36"
+       }
+      },
+      {
+       "key": "screen_resolution",
+       "value": {
+        "stringValue": "1512x982"
+       }
+      },
+      {
+       "key": "viewport_resolution",
+       "value": {
+        "stringValue": "0x0"
+       }
+      },
+      {
+       "key": "network_effective_type",
+       "value": {
+        "stringValue": "3g"
+       }
+      },
+      {
+       "key": "device_memory",
+       "value": {
+        "intValue": 16
+       }
+      },
+      {
+       "key": "webdriver",
+       "value": {
+        "boolValue": false
+       }
+      },
+      {
+       "key": "service.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      }
+     ],
+     "droppedAttributesCount": 0
+    },
+    "scopeLogs": [
+     {
+      "scope": {
+       "name": "WebVitalsInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281985371500000",
+        "observedTimeUnixNano": "1793281985373000000",
+        "severityNumber": 9,
+        "body": {
+         "stringValue": "{\"waitingDuration\":0.19999999925494194,\"cacheDuration\":2.100000001490116,\"dnsDuration\":0.29999999701976776,\"connectionDuration\":0.5,\"requestDuration\":1.4000000022351742}"
+        },
+        "eventName": "browser.web_vital",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.web_vital"
+          }
+         },
+         {
+          "key": "browser.web_vital.name",
+          "value": {
+           "stringValue": "ttfb"
+          }
+         },
+         {
+          "key": "browser.web_vital.value",
+          "value": {
+           "doubleValue": 4.5
+          }
+         },
+         {
+          "key": "browser.web_vital.delta",
+          "value": {
+           "doubleValue": 4.5
+          }
+         },
+         {
+          "key": "browser.web_vital.rating",
+          "value": {
+           "stringValue": "good"
+          }
+         },
+         {
+          "key": "browser.web_vital.id",
+          "value": {
+           "stringValue": "v6-1793281985369-4963534892211"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_type",
+          "value": {
+           "stringValue": "navigate"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_id",
+          "value": {
+           "intValue": 5722
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {
+           "stringValue": "/products/:productId"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "B7DF39F0AE3192CD15F5AADB455E5F4B"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Product Detail"
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.redirect",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.domainLookup",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.tcpConnection",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.tlsNegotiation",
+          "value": {
+           "intValue": 0
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.serverResponse",
+          "value": {
+           "intValue": 1
+          }
+         },
+         {
+          "key": "emb.web_vital.attribution.unattributed",
+          "value": {
+           "intValue": 4
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "1F8DF0D23B6D3EAD1B22DB041A93DD94"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": false
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,550 @@
+{
+ "path": "/v2/logs",
+ "headers": {
+  "Host": "localhost:3999",
+  "Connection": "keep-alive",
+  "Content-Length": "1494",
+  "x-em-did": "B78269E7F5F13397695E3CF0901F82F3",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "content-encoding": "gzip",
+  "sec-ch-ua": "\"Not?A_Brand\";v=\"24\", \"Chromium\";v=\"152\"",
+  "sec-ch-ua-mobile": "?0",
+  "traceparent": "00-401a1eb61b8fb473298f7e3d7dd374f0-729a947457780d8a-01",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36",
+  "content-type": "application/json",
+  "x-em-aid": "abcde",
+  "Accept": "*/*",
+  "Origin": "http://localhost:3999",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "Referer": "http://localhost:3999/checkout",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "en-US"
+ },
+ "body": {
+  "resourceLogs": [
+   {
+    "resource": {
+     "attributes": [
+      {
+       "key": "telemetry.sdk.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      },
+      {
+       "key": "app_version",
+       "value": {
+        "stringValue": "4.12.0"
+       }
+      },
+      {
+       "key": "app_framework",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "telemetry.sdk.version",
+       "value": {
+        "stringValue": "2.31.0"
+       }
+      },
+      {
+       "key": "sdk_simple_version",
+       "value": {
+        "intValue": 1
+       }
+      },
+      {
+       "key": "sdk_platform",
+       "value": {
+        "stringValue": "web"
+       }
+      },
+      {
+       "key": "telemetry.sdk.language",
+       "value": {
+        "stringValue": "webjs"
+       }
+      },
+      {
+       "key": "emb.app_instance_id",
+       "value": {
+        "stringValue": "4A263A0A303D21EEF41DF59E843B93CC"
+       }
+      },
+      {
+       "key": "user_agent.original",
+       "value": {
+        "stringValue": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/4.29.0 Chrome/152.0.7977.167 Safari/537.36"
+       }
+      },
+      {
+       "key": "screen_resolution",
+       "value": {
+        "stringValue": "1512x982"
+       }
+      },
+      {
+       "key": "viewport_resolution",
+       "value": {
+        "stringValue": "0x0"
+       }
+      },
+      {
+       "key": "network_effective_type",
+       "value": {
+        "stringValue": "3g"
+       }
+      },
+      {
+       "key": "device_memory",
+       "value": {
+        "intValue": 16
+       }
+      },
+      {
+       "key": "webdriver",
+       "value": {
+        "boolValue": false
+       }
+      },
+      {
+       "key": "service.name",
+       "value": {
+        "stringValue": "embrace-web-sdk"
+       }
+      }
+     ],
+     "droppedAttributesCount": 0
+    },
+    "scopeLogs": [
+     {
+      "scope": {
+       "name": "FirstInteractionInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281996676000000",
+        "observedTimeUnixNano": "1793281996676000000",
+        "severityNumber": 9,
+        "body": {},
+        "eventName": "first-interaction",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "emb.otel_log"
+          }
+         },
+         {
+          "key": "first_interaction.interaction_type",
+          "value": {
+           "stringValue": "click"
+          }
+         },
+         {
+          "key": "first_interaction.element_type",
+          "value": {
+           "stringValue": "button"
+          }
+         },
+         {
+          "key": "first_interaction.element_selector",
+          "value": {
+           "stringValue": "#b4"
+          }
+         },
+         {
+          "key": "first_interaction.time",
+          "value": {
+           "doubleValue": 861.10009765625
+          }
+         },
+         {
+          "key": "first_interaction.x",
+          "value": {
+           "intValue": 366
+          }
+         },
+         {
+          "key": "first_interaction.y",
+          "value": {
+           "intValue": 91
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "5981DB41A5C915AF62E4AF1BB9E1A8ED"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "embrace-web-sdk-logs"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281996691899902",
+        "observedTimeUnixNano": "1793281996692000000",
+        "severityNumber": 17,
+        "severityText": "ERROR",
+        "body": {
+         "stringValue": "Cannot read properties of undefined (reading 'price')"
+        },
+        "eventName": "emb-exception",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "sys.exception"
+          }
+         },
+         {
+          "key": "emb.exception_handling",
+          "value": {
+           "stringValue": "unhandled_error"
+          }
+         },
+         {
+          "key": "emb.exception_cause",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "exception.type",
+          "value": {
+           "stringValue": "TypeError"
+          }
+         },
+         {
+          "key": "exception.name",
+          "value": {
+           "stringValue": "TypeError"
+          }
+         },
+         {
+          "key": "exception.message",
+          "value": {
+           "stringValue": "Cannot read properties of undefined (reading 'price')"
+          }
+         },
+         {
+          "key": "exception.stacktrace",
+          "value": {
+           "stringValue": "TypeError: Cannot read properties of undefined (reading 'price')\n    at http://localhost:3999/bundle.js:14062:17"
+          }
+         },
+         {
+          "key": "emb.js_file_bundle_ids",
+          "value": {
+           "stringValue": "{}"
+          }
+         },
+         {
+          "key": "emb.state",
+          "value": {
+           "stringValue": "foreground"
+          }
+         },
+         {
+          "key": "emb.exception_number",
+          "value": {
+           "intValue": 2
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "04D4EEA3A5D0073A06CC614EE4446852"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     },
+     {
+      "scope": {
+       "name": "WebVitalsInstrumentation",
+       "version": "1.0.0"
+      },
+      "logRecords": [
+       {
+        "timeUnixNano": "1793281996713300049",
+        "observedTimeUnixNano": "1793281996713000000",
+        "severityNumber": 9,
+        "body": {
+         "stringValue": "{\"timeToFirstByte\":0,\"firstByteToFCP\":1050.800000000745,\"loadState\":\"complete\"}"
+        },
+        "eventName": "browser.web_vital",
+        "attributes": [
+         {
+          "key": "emb.type",
+          "value": {
+           "stringValue": "ux.web_vital"
+          }
+         },
+         {
+          "key": "browser.web_vital.name",
+          "value": {
+           "stringValue": "fcp"
+          }
+         },
+         {
+          "key": "browser.web_vital.value",
+          "value": {
+           "doubleValue": 1050.800000000745
+          }
+         },
+         {
+          "key": "browser.web_vital.delta",
+          "value": {
+           "doubleValue": 1050.800000000745
+          }
+         },
+         {
+          "key": "browser.web_vital.rating",
+          "value": {
+           "stringValue": "good"
+          }
+         },
+         {
+          "key": "browser.web_vital.id",
+          "value": {
+           "stringValue": "v6-1793281996713-5279353934440"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_type",
+          "value": {
+           "stringValue": "soft-navigation"
+          }
+         },
+         {
+          "key": "browser.web_vital.navigation_id",
+          "value": {
+           "intValue": 5729
+          }
+         },
+         {
+          "key": "browser.web_vital.interaction_id",
+          "value": {
+           "intValue": 3471
+          }
+         },
+         {
+          "key": "emb.session_part_id",
+          "value": {
+           "stringValue": "7D2F4D0229E574F9A67E2F14A877C6B8"
+          }
+         },
+         {
+          "key": "browser.url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "app.surface.name",
+          "value": {}
+         },
+         {
+          "key": "app.surface.id",
+          "value": {
+           "stringValue": "5560B714D744643F7A97BB9F509C57FC"
+          }
+         },
+         {
+          "key": "app.surface.label",
+          "value": {
+           "stringValue": "Trail Runner X2 | ShopNova"
+          }
+         },
+         {
+          "key": "log.record.uid",
+          "value": {
+           "stringValue": "3F68101F33AFF4B6E75263CD3337FF29"
+          }
+         },
+         {
+          "key": "emb.user_session_id",
+          "value": {
+           "stringValue": "4854BB98B4642CAEF6A000612EDD0DD1"
+          }
+         },
+         {
+          "key": "emb.user_session_previous_id",
+          "value": {
+           "stringValue": ""
+          }
+         },
+         {
+          "key": "url.full",
+          "value": {
+           "stringValue": "http://localhost:3999/checkout"
+          }
+         },
+         {
+          "key": "emb.is_tab_engaged",
+          "value": {
+           "boolValue": true
+          }
+         },
+         {
+          "key": "user.id",
+          "value": {
+           "stringValue": "u_48213"
+          }
+         },
+         {
+          "key": "emb.perf_clock_lag_ms",
+          "value": {
+           "intValue": 0
+          }
+         }
+        ],
+        "droppedAttributesCount": 0
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}
