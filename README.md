@@ -32,7 +32,7 @@ With a separate app ID per profile, each profile keeps its own brand, package an
 
 ## Always-on mode
 
-The generator runs as a macOS LaunchAgent (`~/Library/LaunchAgents/local.xcor-demo-generator.plist`): it starts at login, restarts if it exits, and averages 3 sessions per minute on a daily curve (quiet overnight, peaks at lunch and in the evening, US Eastern time). It pauses while the Mac sleeps and catches up on wake. Status lines go to `logs/generator.log` every 10 minutes.
+The generator runs as a macOS LaunchAgent (`~/Library/LaunchAgents/local.xcor-demo-generator.plist`): it starts at login, restarts if it exits, and targets 10 sessions per minute total across all three profiles. It pauses while the Mac sleeps and catches up on wake. Status lines go to `logs/generator.log` every 10 minutes. Add `--diurnal` only when an hourly traffic curve is wanted.
 
 ```bash
 tail -f ~/xcor-demo-generator/logs/generator.log
@@ -61,13 +61,16 @@ To change the rate or add an incident, edit the arguments in the plist, then sto
 
    Forward only these API domains. The dashboard only shows the **View trace in Cortex XCOR** link when forwarding succeeded for that request, so this step is required, and it must be in place before you send sessions: Embrace decides forwarding when it processes a session and does not revisit older sessions.
 3. **Chronosphere API token** with permission to write traces (OTLP ingestion).
-4. **Config.** Copy `config.example.json` to `config.json` and fill in the Embrace app IDs and the Chronosphere tenant (the `<tenant>` in `<tenant>.chronosphere.io`). Keep the token out of the file if you prefer:
+4. **Config.** Copy `config.example.json` to `config.json` and fill in the Embrace app IDs and the Chronosphere tenant (the `<tenant>` in `<tenant>.chronosphere.io`). Keep the token in an owner-only file outside the checkout and set `chronosphere.api_token_file` to its path. On macOS/Linux the token file must be owned by the user running the generator and have mode `600` or `400`. Alternatively, inject it through your secret manager as an environment variable:
 
    ```bash
-   export CHRONOSPHERE_API_TOKEN=...
+   # Set through your secret manager; avoid putting real values in shell history.
+   export CHRONOSPHERE_API_TOKEN_FILE=/absolute/path/outside/the/repo/chronosphere.token
    ```
 
    To use one Embrace app for every profile, set `"default": "<appId>"` under `embrace.apps`.
+
+   `CHRONOSPHERE_API_TOKEN` overrides token-file settings. Inline `chronosphere.api_token` is supported for existing installations, but a config containing credentials or custom OTLP headers must have owner-only permissions. The trace inspection tool uses the same credential loading rules. The ingestion token should have only trace-write permission; use a separate identity for administrative changes.
 
 Python 3.10+ only; there are no packages to install.
 
@@ -129,6 +132,8 @@ Without `--incident`, errors are sprinkled in at realistic rates: about 3% of ch
 
 To send backend spans to an OpenTelemetry Collector instead of straight to Chronosphere, set `"otlp": {"endpoint": "http://localhost:4318", "headers": {}}` in `config.json`.
 
+Remote endpoints require HTTPS with normal certificate validation. Credential-free HTTP is supported only for a loopback collector. Redirects are refused, and credentials, query strings, and fragments cannot be embedded in endpoint URLs. Configure the final endpoint directly. Server error bodies are not logged; response sizes and pending network work are bounded. See [SECURITY.md](SECURITY.md) for the security boundary and checks.
+
 ## What makes it look real
 
 ### Android (default)
@@ -147,7 +152,13 @@ To send backend spans to an OpenTelemetry Collector instead of straight to Chron
 
 ## Known limits
 
-- **Backend traces are sent on Embrace's schedule.** Embrace forwards the app's network spans only after a session part ends and is processed, which can be minutes after the request. Chronosphere drops spans that arrive long after the rest of their trace, and also drops them when they arrive before the backend spans of their trace. The generator therefore holds each backend trace until its session part ends and sends it a few seconds later, just ahead of Embrace's forwarding. A trace appears in Chronosphere once its session part has ended, complete with the app span as its root.
+- **Forwarding success does not guarantee retention.** Chronosphere applies sampling after accepting spans. On `demo-sandbox`, Vantra traces previously inherited the `unassigned` dataset's baseline behavior: 50% ordinary traces, 5% fast traces, and 1% small traces. A controlled run on 2026-10-29 exported all payloads successfully, but only 3 of 8 shop traces and 1 of 3 travel traces were retained. Existing retained traces carried `behavior_dataset_slug=unassigned` and `tail_sampling_rate=0.5`.
+
+  The tenant now has a `vantra-end-to-end` dataset matching any span whose service is one of `vantra-android-production`, `shop-experience-api`, `banking-experience-api`, or `travel-experience-api`. Its first-priority `Allow` behavior retains matching traces at 100%. This is a tenant configuration change, not an exporter flag; recreating the generator or moving it to another tenant does not recreate this policy. Other datasets' sampling settings are unchanged. Validate new traces' `behavior_dataset_slug` and `tail_sampling_rate`, and check **every known generated trace ID**, not only a sample of traces already retained. Old traces already sampled out are not recovered by a policy change.
+
+- **Backend traces are sent on Embrace's schedule.** Embrace forwards the app's network spans only after a session part ends and is processed. The generator holds backend traces until that part ends and sends them 3–15 seconds later. Earlier timing experiments were performed with sampling enabled, so missing spans alone did not establish a universal Chronosphere arrival-order rule. Keep the current schedule while measuring timing separately from sampling. Allow processing time before checking for a trace or its app span.
+
+- **All three domains must be enabled in Embrace.** For the shared app, include `api.vantrashop.com`, `api.vantramoney.com`, and `api.vantratravel.com`. A backend trace can exist without its app span when its domain is not forwarded. XCOR retention settings do not enable Embrace forwarding. The NSF configuration manager defaults to refreshing domain settings every five minutes (`NETWORK_SPAN_DESTINATIONS_REFRESH_PERIOD`); wait for propagation and verify newly completed sessions after a domain change. The deployed refresh period can differ from the source default.
 
 - **Location** in Embrace comes from the IP address the payloads are sent from. All sessions from one machine show that machine's location. Run the generator from hosts in other regions for geographic spread.
 - iOS sessions are not generated.

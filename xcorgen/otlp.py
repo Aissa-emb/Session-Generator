@@ -146,14 +146,41 @@ def encode_logs(req):
 
 
 def _read_varint(b, i):
-    n = shift = 0
-    while True:
+    n = 0
+    for shift in range(0, 70, 7):
+        if i >= len(b):
+            raise ValueError("Truncated OTLP varint")
         c = b[i]
         i += 1
+        if shift == 63 and c > 1:
+            raise ValueError("Oversized OTLP varint")
         n |= (c & 0x7F) << shift
-        shift += 7
         if not c & 0x80:
             return n, i
+    raise ValueError("Oversized OTLP varint")
+
+
+def _response_fields(body):
+    i = 0
+    while i < len(body):
+        key, i = _read_varint(body, i)
+        field, wire = key >> 3, key & 7
+        if not field or field >= 1 << 29:
+            raise ValueError("Invalid OTLP field")
+        if wire == 0:
+            value, i = _read_varint(body, i)
+        else:
+            if wire == 2:
+                size, i = _read_varint(body, i)
+            elif wire in (1, 5):
+                size = 8 if wire == 1 else 4
+            else:
+                raise ValueError("Invalid OTLP wire type")
+            if size > len(body) - i:
+                raise ValueError("Truncated OTLP field")
+            value = body[i:i + size]
+            i += size
+        yield field, wire, value
 
 
 def partial_success(body, json_body=False):
@@ -164,26 +191,18 @@ def partial_success(body, json_body=False):
         import json
         ps = json.loads(body).get("partialSuccess") or {}
         return int(ps.get("rejectedSpans") or ps.get("rejectedLogRecords") or 0), ps.get("errorMessage", "")
-    rejected, message, i = 0, "", 0
-    while i < len(body):
-        key, i = _read_varint(body, i)
-        if key >> 3 == 1 and key & 7 == 2:  # partial_success
-            length, i = _read_varint(body, i)
-            ps, j = body[i:i + length], 0
-            i += length
-            while j < len(ps):
-                k, j = _read_varint(ps, j)
-                if k & 7 == 0:
-                    v, j = _read_varint(ps, j)
-                    if k >> 3 == 1:
-                        rejected = v
-                elif k & 7 == 2:
-                    ln, j = _read_varint(ps, j)
-                    if k >> 3 == 2:
-                        message = ps[j:j + ln].decode(errors="replace")
-                    j += ln
-                else:
-                    break
-        else:
-            break
+    rejected, message = 0, ""
+    for field, wire, value in _response_fields(body):
+        if field == 1:
+            if wire != 2:
+                raise ValueError("Invalid OTLP partial success")
+            for field, wire, value in _response_fields(value):
+                if field == 1:
+                    if wire != 0 or value >= 1 << 63:
+                        raise ValueError("Invalid OTLP rejected count")
+                    rejected = value
+                elif field == 2:
+                    if wire != 2:
+                        raise ValueError("Invalid OTLP error message")
+                    message = value.decode(errors="replace")
     return rejected, message

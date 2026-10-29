@@ -12,8 +12,7 @@
     <string>--profile</string>
     <string>all</string>
     <string>--rate</string>
-    <string>3</string>
-    <string>--diurnal</string>
+    <string>10</string>
     <string>--quiet</string>
   </array>
   <key>WorkingDirectory</key>
@@ -24,6 +23,8 @@
   <true/>
   <key>ThrottleInterval</key>
   <integer>60</integer>
+  <key>Umask</key>
+  <integer>63</integer>
   <key>StandardOutPath</key>
   <string>/Users/aissamamdouh/xcor-demo-generator/logs/generator.log</string>
   <key>StandardErrorPath</key>

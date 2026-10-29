@@ -9,6 +9,7 @@ import json
 import os
 import random
 import time
+import tempfile
 
 from .util import emb_id, weighted
 
@@ -158,8 +159,13 @@ class PersonaPool:
         return p
 
     def save(self):
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        tmp = self.path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(self.personas, f)
-        os.replace(tmp, self.path)
+        directory = os.path.dirname(self.path)
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".personas-", suffix=".tmp", dir=directory)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(self.personas, f)
+            os.replace(tmp, self.path)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)

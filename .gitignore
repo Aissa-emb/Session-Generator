@@ -3,3 +3,16 @@ config.json
 out/
 __pycache__/
 logs/
+config.*.json
+!config.example.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.token
+secrets/
+.venv/
+security-*.json

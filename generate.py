@@ -9,6 +9,7 @@ Examples:
 """
 
 import argparse
+import math
 import os
 import random
 import sys
@@ -16,6 +17,7 @@ import time
 
 from xcorgen.profiles import PROFILES, load
 from xcorgen.runner import ROOT, Generator, Sender, load_config, run_burst, run_live
+from xcorgen.security import SecurityError
 
 
 def main():
@@ -41,6 +43,13 @@ def main():
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--verbose", action="store_true")
     a = ap.parse_args()
+    if a.sessions is not None and a.sessions <= 0:
+        ap.error("--sessions must be positive")
+    if a.rate is not None and (not math.isfinite(a.rate) or a.rate <= 0):
+        ap.error("--rate must be a positive finite number")
+    for label in ("spread", "duration"):
+        if not math.isfinite(getattr(a, label)) or getattr(a, label) < 0:
+            ap.error(f"--{label} must be a nonnegative finite number")
 
     keys = list(PROFILES) if a.profile == "all" else [k.strip() for k in a.profile.split(",")]
     if a.list_incidents:
@@ -77,4 +86,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SecurityError as error:
+        sys.exit(str(error))

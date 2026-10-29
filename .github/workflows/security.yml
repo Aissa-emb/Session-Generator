@@ -1,0 +1,39 @@
+name: Security and payload checks
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan all Git history for secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz' | sha256sum --check
+          tar -xzf gitleaks.tar.gz gitleaks
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/gitleaks" git . --config .gitleaks.toml --log-opts=--all --redact=100 --no-banner
+      - name: Security regression tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Validate Android, web, and incident payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 generate.py --profile all --sessions 120 --quiet --dry-run out/android
+          python3 tools/check_output.py out/android
+          python3 generate.py --profile all --sessions 120 --quiet --platform web --dry-run out/web
+          python3 tools/check_output.py out/web
+          python3 generate.py --profile all --sessions 120 --quiet --incident payments-db-pool --dry-run out/incident
+          python3 tools/check_output.py out/incident
