@@ -20,8 +20,22 @@
     "incident_cycle_minutes": 60,
     "incident_onset_minutes": 2,
     "incident_recovery_minutes": 6,
-    "scenario_weights": {"clean": 0.30, "mobile": 0.21, "backend": 0.21, "slow": 0.15, "handled": 0.10, "blockage": 0.016, "crash": 0.014},
+    "scenario_weights": {
+      "clean": 0.15,
+      "mobile": 0.3,
+      "backend": 0.25,
+      "slow": 0.15,
+      "handled": 0.15,
+      "blockage": 0,
+      "crash": 0
+    },
     "transport_share": 0.4,
-    "journey_weights": {"ecommerce_priority": 0.23, "banking_priority": 0.18, "travel_priority": 0.23}
+    "journey_weights": {
+      "ecommerce_priority": 0.23,
+      "banking_priority": 0.18,
+      "travel_priority": 0.23
+    },
+    "crash_session_rate": 0.1,
+    "blockage_session_rate": 0.3
   }
 }

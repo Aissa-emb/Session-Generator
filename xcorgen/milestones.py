@@ -58,10 +58,20 @@ CATALOG = (set(EXTRA) | {anchor for flows in FLOWS.values() for _, start, end, _
            {f"{prefix}_{suffix}" for prefix in REQUEST_MILESTONES.values()
             for suffix in ("requested", "received", "failed")})
 
+# Keep native User Flow anchors and only the context that changes the story.
+# Loading/field/retry-attempt detail belongs in task spans and network records.
+ANCHORS = {anchor for flows in FLOWS.values() for _, start, end, _ in flows for anchor in (start, end)}
+SPARSE_CONTEXT = set("""default_recommendations_displayed
+partial_flight_results_displayed cached_hotel_rates_displayed payment_authorization_attempt_failed
+payment_retry_requested transfer_status_pending reservation_status_pending checkout_cancelled
+booking_cancelled statement_open_cancelled card_lock_confirmed trip_details_viewed""".split())
+
 
 def mark(s, name):
     if name not in CATALOG:
         raise ValueError(f"Unknown milestone: {name}")
+    if name not in ANCHORS and name not in SPARSE_CONTEXT:
+        return
     if not hasattr(s, "milestones"):
         s.milestones = []
     s.breadcrumb(name)

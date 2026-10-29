@@ -1,6 +1,29 @@
 """Business-state-driven journeys shared by Android and web capture adapters."""
 from .client_faults import blockage, fault
-from .milestones import mark, REQUEST_MILESTONES
+from .milestones import mark
+
+ROOT_OPERATIONS = {
+    "search": "search_products", "get_product": "load_product", "get_recommendations": "load_recommendations",
+    "add_to_cart": "update_cart", "get_cart": "load_cart", "shipping_options": "quote_shipping",
+    "place_order": "authorize_payment", "get_order": "load_order_confirmation",
+    "accounts": "load_accounts", "transactions": "load_transaction_history", "payees": "load_recipients",
+    "create_transfer": "submit_transfer", "statement": "download_statement", "lock_card": "lock_card",
+    "flight_search": "search_flights", "hotel_search": "search_hotels", "hotel_revalidate": "revalidate_hotel_rate",
+    "offer": "revalidate_fare", "create_booking": "authorize_booking", "trips": "load_itineraries",
+    "operation_status": "reconcile_operation", "login": "authenticate", "mfa_verify": "verify_identity_challenge",
+}
+
+
+def traced_attempt(s, key, params):
+    name = ROOT_OPERATIONS.get(key)
+    if not name:
+        return s.api(key, **params)
+    with s.flow(name) as task:
+        result = s.api(key, **params)
+        task["failed"] = not result.ok
+        task["attributes"] = {"app.operation": key, "http.response.status_code": result.status,
+                              "app.fallback.used": any(result.data.get(k) for k in ("fallback", "snapshot", "cached", "partial"))}
+    return result
 
 
 def tap(s, label):
@@ -12,18 +35,13 @@ def request(s, key, **params):
     transport = getattr(s.plan, "transport", None)
     if transport and not s.plan.used and key == s.plan.target:
         params["_transport"] = transport
-    prefix = REQUEST_MILESTONES[key]
-    mark(s, f"{prefix}_requested")
-    r = s.api(key, **params)
-    mark(s, f"{prefix}_{'received' if r.ok else 'failed'}")
+    r = traced_attempt(s, key, params)
     if r.status is None:
         mark(s, "request_retry_requested")
         s.wait(.8, 2)
         mark(s, "connectivity_restored")
         params.pop("_transport", None)
-        mark(s, f"{prefix}_requested")
-        r = s.api(key, **params)
-        mark(s, f"{prefix}_{'received' if r.ok else 'failed'}")
+        r = traced_attempt(s, key, params)
     return r
 
 
@@ -35,11 +53,11 @@ def begin(s, page, **params):
 
 
 def client_issue(s, stage="content"):
-    if stage == "content" and s.plan.primary != "crash" and hasattr(s, "background") and s.rng.random() < .08:
+    if stage == "content" and s.plan.client_fault != "crash" and hasattr(s, "background") and s.rng.random() < .08:
         mark(s, "app_backgrounded")
         s.background(4, 12)
         mark(s, "session_resumed")
-    if s.plan.primary == "crash":
+    if s.plan.client_fault == "crash":
         stages = {"ecommerce": ("authorization", "callback", "cart", "content", "content"),
                   "banking": ("content", "callback", "content", "content", "content"),
                   "travel": ("authorization", "callback", "content", "content", "content")}
@@ -51,7 +69,7 @@ def client_issue(s, stage="content"):
         if s.plan.crash_family == 4:
             s.persona["cache_schema_version"] = 3
         fault(s, fatal=True)
-    elif stage == "content" and s.plan.primary == "blockage":
+    elif stage == "content" and s.plan.client_fault == "blockage":
         blockage(s)
     elif stage == "content" and s.plan.primary == "handled":
         fault(s)
@@ -73,9 +91,7 @@ def payment(s, key):
     mark(s, "payment_form_validated")
     mark(s, "payment_authorization_started")
     tap(s, "Confirm payment")
-    with s.flow("authorize_payment") as task:
-        r = request(s, key)
-        task["failed"] = not r.ok
+    r = request(s, key)
     client_issue(s, "authorization")
     client_issue(s, "callback")
     if r.ok:
@@ -105,9 +121,9 @@ def ecommerce(s):
     from .profiles.ecommerce import PRODUCTS, SEARCHES
     plan, rng = s.plan, s.rng
     priority = plan.primary == "mobile" and not getattr(plan, "transport", None) or rng.random() < plan.settings.get("journey_weights", {}).get("ecommerce_priority", .23)
-    priority |= plan.primary == "crash" and plan.crash_family in (0, 1, 2)
     if plan.primary == "backend":
         priority = rng.random() < plan.settings.get("journey_weights", {}).get("ecommerce_priority", .23)
+    priority |= plan.client_fault == "crash" and plan.crash_family in (0, 1, 2)
     plan.target = {"payments-db-pool": "place_order", "payment-timeouts": "place_order",
                    "inventory-sync": "add_to_cart", "reviews-n-plus-one": "get_product",
                    "recs-latency": "get_recommendations"}.get(plan.incident)
@@ -118,7 +134,7 @@ def ecommerce(s):
     begin(s, "home")
     request(s, "home")
     mark(s, "home_content_rendered")
-    if plan.primary == "clean" and rng.random() < .35:
+    if plan.primary == "clean" and not plan.client_fault and rng.random() < .35:
         request(s, "get_recommendations", sku="home")
         mark(s, "recommendations_displayed")
         s.wait(4, 14)
@@ -138,8 +154,7 @@ def ecommerce(s):
         mark(s, "product_sort_changed")
     tap(s, name)
     s.page_view("product", sku=sku)
-    with s.flow("load_product"):
-        request(s, "get_product", sku=sku)
+    request(s, "get_product", sku=sku)
     mark(s, "product_details_viewed")
     mark(s, "product_image_expanded")
     mark(s, "reviews_expanded")
@@ -193,7 +208,7 @@ def ecommerce(s):
 def banking(s):
     from .profiles.banking import ACCOUNTS
     plan, rng = s.plan, s.rng
-    if plan.primary == "clean" and plan.ring == "stable" and rng.random() < .42:
+    if plan.primary == "clean" and not plan.client_fault and plan.ring == "stable" and rng.random() < .42:
         begin(s, "cards")
         mark(s, "card_controls_opened")
         mark(s, "card_status_displayed")
@@ -207,7 +222,7 @@ def banking(s):
         mark(s, "card_help_viewed")
         return done(s)
     priority = plan.primary == "mobile" and not getattr(plan, "transport", None) or plan.incident == "fraud-latency" or rng.random() < plan.settings.get("journey_weights", {}).get("banking_priority", .18)
-    priority |= plan.primary == "crash" and plan.crash_family == 1
+    priority |= plan.client_fault == "crash" and plan.crash_family == 1
     statement = plan.incident == "statements-slow" or (not priority and rng.random() < .25)
     plan.target = {"fraud-latency": "create_transfer", "rails-outage": "create_transfer",
                    "account-read-fallback": "accounts", "core-banking-latency": "accounts",
@@ -227,8 +242,7 @@ def banking(s):
         mark(s, "identity_verified")
     s.page_view("dashboard")
     mark(s, "account_overview_opened")
-    with s.flow("load_accounts"):
-        account_result = request(s, "accounts")
+    account_result = request(s, "accounts")
     if account_result.data.get("snapshot"):
         mark(s, "cached_account_snapshot_displayed")
         mark(s, "account_snapshot_as_of_displayed")
@@ -266,9 +280,7 @@ def banking(s):
         s.wait(2, 5)
         tap(s, "Send transfer")
         mark(s, "fraud_check_started")
-        with s.flow("submit_transfer") as task:
-            r = request(s, "create_transfer")
-            task["failed"] = not r.ok
+        r = request(s, "create_transfer")
         client_issue(s, "callback")
         if not r.ok:
             mark(s, "transfer_status_pending")
@@ -286,8 +298,7 @@ def banking(s):
         s.page_view("statements")
         mark(s, "statement_period_selected")
         mark(s, "statement_download_requested")
-        with s.flow("download_statement"):
-            r = request(s, "statement")
+        r = request(s, "statement")
         if r.ok and not (plan.incident == "statements-slow" and rng.random() < .2):
             mark(s, "statement_opened")
         else:
@@ -302,7 +313,7 @@ def banking(s):
 def travel(s):
     from .profiles.travel import ROUTES
     plan, rng = s.plan, s.rng
-    if plan.primary == "clean" and plan.ring == "stable" and rng.random() < .42:
+    if plan.primary == "clean" and not plan.client_fault and plan.ring == "stable" and rng.random() < .42:
         begin(s, "trips")
         mark(s, "trip_list_opened")
         request(s, "trips")
@@ -315,7 +326,7 @@ def travel(s):
         mark(s, "offline_itinerary_opened")
         return done(s)
     priority = plan.primary == "mobile" and not getattr(plan, "transport", None) or rng.random() < plan.settings.get("journey_weights", {}).get("travel_priority", .23)
-    priority |= plan.primary == "crash" and plan.crash_family in (0, 1)
+    priority |= plan.client_fault == "crash" and plan.crash_family in (0, 1)
     hotel = plan.incident == "hotel-supplier-outage" or (not priority and plan.incident not in ("supplier-timeouts", "search-complexity") and rng.random() < .3)
     plan.target = {"payments-db-pool": "create_booking", "gds-pnr-timeouts": "create_booking",
                    "supplier-timeouts": "flight_search", "search-complexity": "flight_search",
@@ -370,8 +381,7 @@ def travel(s):
     mark(s, "flight_search_criteria_reviewed")
     mark(s, "flight_search_submitted")
     s.page_view("flights", origin=origin, dest=dest, **{"from": from_city, "to": city})
-    with s.flow("search_flights"):
-        r = request(s, "flight_search", origin=origin, dest=dest)
+    r = request(s, "flight_search", origin=origin, dest=dest)
     mark(s, "partial_flight_results_displayed" if r.data.get("partial") else "flight_results_displayed")
     mark(s, "flight_result_count_displayed")
     s.wait(4, 14)

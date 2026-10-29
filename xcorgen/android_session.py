@@ -514,10 +514,11 @@ class AndroidSession:
         yield holder
         self._use("start_span")
         a = dict(attrs)
+        a.update(holder.get("attributes", {}))
         if holder["failed"]:
             a["emb.error_code"] = "failure"
         a["emb.type"] = "perf"
-        self._span(name, start, self.t + self.rng.uniform(2, 25), a, status="Error" if holder["failed"] else "Unset")
+        self._span(name, start, self.t, a, status="Error" if holder["failed"] else "Unset")
 
     # --- network --------------------------------------------------------------------------------
 

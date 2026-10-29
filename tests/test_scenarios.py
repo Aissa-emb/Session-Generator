@@ -45,7 +45,9 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual(r["outcome"], "ok")
         for settings in ({"canary_share": 1}, {"transport_share": float("nan")},
                          {"scenario_weights": {"clean": .1}}, {"incident_cycle_minutes": 5},
-                         {"crash_family": 9}, {"journey_weights": {"banking_priority": 2}}):
+                         {"crash_family": 9}, {"journey_weights": {"banking_priority": 2}},
+                         {"crash_session_rate": .8, "blockage_session_rate": .3},
+                         {"blockage_session_rate": float("nan")}, {"crash_session_rate": -1}):
             with self.assertRaises(ValueError):
                 validate_settings(settings)
 
@@ -112,7 +114,13 @@ class ScenarioTests(unittest.TestCase):
             r = next(r for r in s.plan.evidence if r["key"] == key)
             self.assertEqual(r["status"], 200)
             self.assertGreater(r["backend_errors"], 0)
-            self.assertIn(milestone, [m["name"] for m in s.milestones])
+            if profile != "banking":
+                self.assertIn(milestone, [m["name"] for m in s.milestones])
+            task = next(x for d in s.deliveries if d.get("fmt") == "envelope"
+                        for x in d["payload"]["data"].get("spans", [])
+                        if attributes(x).get("app.operation") == key)
+            self.assertEqual(task["status"], "Unset")
+            self.assertEqual(attributes(task)["app.fallback.used"], "true")
             root = next(x for x in spans(s) if x["spanId"] == r["first_backend_span_id"])
             self.assertEqual(root["status"]["code"], 0)
 
@@ -159,6 +167,7 @@ class ScenarioTests(unittest.TestCase):
         block = next(x for x in records if x["name"] == "emb-thread-blockage")
         self.assertTrue(block["events"])
         self.assertEqual(attributes(block)["emb.type"], "perf.thread_blockage")
+        self.assertGreaterEqual(block["end_time_unix_nano"] - block["start_time_unix_nano"], 6000000000)
         for part in (x for x in records if x["name"] == "emb-session"):
             for event in part["events"]:
                 self.assertFalse(block["start_time_unix_nano"] < event["time_unix_nano"] < block["end_time_unix_nano"])
@@ -228,16 +237,44 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual(s.properties["feature_exposed"], "false")
 
     def test_flow_catalog_timeouts_and_breadcrumb_budgets(self):
+        from tools.calibrate import timeline_metrics
         self.assertEqual(sum(len(v) for v in FLOWS.values()), 12)
         for profile in FLOWS:
             for _, start, end, timeout in FLOWS[profile]:
                 self.assertNotEqual(start, end)
                 self.assertLessEqual(timeout, 300)
-            s = generate(profile, primary="clean")
+            for primary in (None, "clean", "mobile", "backend", "blockage", "crash"):
+                for seed in range(20):
+                    s = generate(profile, primary=primary, seed=seed)
+                    self.assertLessEqual(timeline_metrics(s.deliveries)["max_consecutive_breadcrumbs"], 2)
+                    self.assertLessEqual(len(getattr(s, "milestones", [])), 12)
+
+    def test_business_root_spans_match_failed_network_attempts(self):
+        from xcorgen.journeys import ROOT_OPERATIONS
+        for profile in FLOWS:
+            s = generate(profile, primary="mobile")
+            tasks = [x for d in s.deliveries if d.get("fmt") == "envelope"
+                     for x in d["payload"]["data"].get("spans", []) if attributes(x).get("app.operation")]
+            for request in s.plan.evidence:
+                if request["key"] not in ROOT_OPERATIONS:
+                    continue
+                task = next(x for x in tasks if attributes(x)["app.operation"] == request["key"]
+                            and abs(x["start_time_unix_nano"] / 1e6 - request["start"]) < 1)
+                self.assertIn(task.get("parent_span_id"), (None, "", "0" * 16))
+                self.assertEqual(task["status"] == "Error", request["status"] is None or request["status"] >= 400)
+                self.assertGreaterEqual(task["end_time_unix_nano"] / 1e6, request["end"])
+
+    def test_completed_tasks_do_not_extend_past_fatal_process_termination(self):
+        for profile in FLOWS:
+            s = generate(profile, primary="crash", family=0)
+            crash = next(x for d in s.deliveries if d.get("fmt") == "envelope"
+                         for x in d["payload"]["data"].get("logs", []) if attributes(x).get("emb.type") == "sys.android.crash")
+            part = attributes(crash)["emb.session_part_id"]
             for d in s.deliveries:
                 if d.get("fmt") == "envelope":
                     for span in d["payload"]["data"].get("spans", []):
-                        self.assertLessEqual(sum(e["name"] == "emb-breadcrumb" for e in span.get("events", [])), 75)
+                        if attributes(span).get("app.operation") and attributes(span).get("emb.session_part_id") == part:
+                            self.assertLessEqual(span["end_time_unix_nano"], crash["time_unix_nano"])
 
 
 if __name__ == "__main__":

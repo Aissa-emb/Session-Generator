@@ -54,8 +54,7 @@ def fault(s, fatal=False):
 def blockage(s):
     mark(s, "main_thread_work_started")
     cause = s.plan.settings.get("blockage_cause") or s.rng.choice(("migration", "worker_lock", "layout"))
-    severe = s.rng.random() < .2
-    duration = s.rng.uniform(5500, 8500) if severe else s.rng.uniform(1500, 3500)
+    duration = s.rng.uniform(6000, 12000)
     start = s.t
     package = s.app["package"] if hasattr(s, "app") else s.profile.android["package"]
     frames = {

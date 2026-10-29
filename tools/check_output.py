@@ -29,6 +29,10 @@ TP = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-01$")
 # Keys added by app code (session properties, custom span/log attributes) rather than the SDK.
 CUSTOM_OK = re.compile(r"^(emb\.properties\.|journey\.|product\.|checkout\.|order\.|http\.status_code$|auth\.|transfer\.|"
                        r"statement\.|search\.|booking\.|mfa\.|account\.|error\.type$|emb\.error_code$)")
+# App-supplied attributes on custom performance spans; validate their types
+# rather than treating them as built-in keys present in the reference capture.
+CUSTOM_TASK_ATTRIBUTES = {"app.operation": "stringValue", "app.fallback.used": "boolValue",
+                          "http.response.status_code": "intValue"}
 
 
 GOLDEN = os.path.join(ROOT, "reference", "android-sdk-golden")
@@ -211,6 +215,8 @@ def main(d):
                     ref = schema.get(k) or schema.get(next((x for x in schema if x[:2] == k[:2]), None), {})
                     for a in it.get("attributes", []):
                         r = ref.get(a["key"])
+                        if r is None and k[2] == "perf":
+                            r = CUSTOM_TASK_ATTRIBUTES.get(a["key"])
                         if r is None and not CUSTOM_OK.match(a["key"]):
                             problem(f"{k[1]}/{k[2]}: key not in capture: {a['key']}")
                         elif r is not None and r != vtype(a["value"]) and r != "empty":

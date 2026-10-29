@@ -21,6 +21,34 @@ def attrs(record):
             for a in record.get("attributes", [])}
 
 
+def timeline_metrics(deliveries):
+    """Count emitted Android timeline records, including tied timestamps.
+
+    Span rows precede breadcrumb rows on a tie: this conservatively catches
+    breadcrumbs clustered around an operation's completion and next start.
+    """
+    timeline, roots, failed_roots = [], 0, 0
+    for d in deliveries:
+        if d.get("fmt") != "envelope":
+            continue
+        for span in d["payload"]["data"].get("spans", []):
+            a = attrs(span)
+            if a.get("emb.type") in ("perf", "perf.network_request", "ux.view", "perf.thread_blockage"):
+                timeline.append((span["start_time_unix_nano"], False))
+            if a.get("app.operation") and span.get("parent_span_id") in (None, "", "0" * 16):
+                roots += 1
+                failed_roots += span["status"] == "Error"
+            for event in span.get("events", []):
+                if event["name"] in ("emb-breadcrumb", "emb-ui-tap"):
+                    timeline.append((event["time_unix_nano"], event["name"] == "emb-breadcrumb"))
+    longest = run = 0
+    for _, crumb in sorted(timeline):
+        run = run + 1 if crumb else 0
+        longest = max(longest, run)
+    return {"root_spans": roots, "failed_root_spans": failed_roots,
+            "max_consecutive_breadcrumbs": longest}
+
+
 def measure(s, deliveries):
     records = s.plan.evidence
     failed = [r for r in records if r["status"] is None or r["status"] >= 400]
@@ -47,6 +75,7 @@ def measure(s, deliveries):
     priority_start, priority_end = FLOWS[s.profile.key][2][1:3]
     exposed = [r for r in records if r["context"].get("feature_exposed") == "true"]
     return {"issue": bool(failed or hidden or crash or handled or blockage or slow),
+            "client_issue": bool(failed or crash or handled or blockage),
             "crash": bool(crash), "crash_families": sorted(crash), "blockage": blockage,
             "handled": handled, "mobile_failed": bool(failed), "attempts": len(records), "failed_attempts": len(failed),
             "business_conflicts": sum(r["status"] == 409 for r in records),
@@ -77,13 +106,18 @@ def run(n, seed):
                        "success_after_timeout": 0, "incomplete_with_crash": 0, "durations_ms": []}
                  for name, _, _, _ in FLOWS[profile]}
         breadcrumb_counts = {"short": [], "engaged": [], "priority": [], "interrupted": []}
-        largest_part = 0
+        largest_part = max_consecutive = 0
+        root_counts, failed_root_counts = [], []
         assigned_users = {"stable": set(), "canary": set()}
         cohort_sessions = collections.Counter()
         exposed_sessions = collections.Counter()
         for index in range(n):
             s, _, deliveries = gen.session(1793300000000 + index * 20000)
             m = measure(s, deliveries)
+            timeline = timeline_metrics(deliveries)
+            max_consecutive = max(max_consecutive, timeline["max_consecutive_breadcrumbs"])
+            root_counts.append(timeline["root_spans"])
+            failed_root_counts.append(timeline["failed_root_spans"])
             assigned_users[s.plan.ring].add(s.persona["device_id"])
             cohort_sessions[s.plan.ring] += 1
             if s.properties.get("feature_exposed") == "true":
@@ -115,7 +149,7 @@ def run(n, seed):
             for r in s.plan.evidence:
                 if r["incident"]:
                     examples.setdefault(r["incident"], {"session_id": s.user_session_id, "request": r})
-        rates = {k: round(counts[k] * 100 / n, 3) for k in ("issue", "crash", "blockage", "handled", "mobile_failed",
+        rates = {k: round(counts[k] * 100 / n, 3) for k in ("issue", "client_issue", "crash", "blockage", "handled", "mobile_failed",
                     "backend_degraded_200", "slow", "flow_eligible", "priority_started")}
         rates["failed_attempts"] = round(counts["failed_attempts"] * 100 / max(1, counts["attempts"]), 3)
         rates["canary_backend_error"] = round(counts["canary_backend_error"] * 100 / max(1, counts["canary_exposed"]), 3)
@@ -130,6 +164,9 @@ def run(n, seed):
         output["profiles"][profile] = {"counts": dict(counts), "rates_percent": rates,
                                        "crash_families": dict(families), "incident_examples": examples,
                                        "flow_evidence": flows, "largest_part_breadcrumb_count": largest_part,
+                                       "max_consecutive_breadcrumbs": max_consecutive,
+                                       "root_span_distribution": distribution(root_counts),
+                                       "failed_root_span_distribution": distribution(failed_root_counts),
                                        "cohorts": {"assigned_device_identities": {k: len(v) for k, v in assigned_users.items()},
                                                    "sessions": dict(cohort_sessions), "exposed_sessions": dict(exposed_sessions)},
                                        "breadcrumb_distributions": {k: distribution(v) for k, v in breadcrumb_counts.items()}}

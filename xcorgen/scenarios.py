@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 
 from .util import weighted
 
-DEFAULT_WEIGHTS = dict(clean=.30, mobile=.21, backend=.21, slow=.15,
-                       handled=.10, blockage=.016, crash=.014)
+DEFAULT_WEIGHTS = dict(clean=.15, mobile=.30, backend=.25, slow=.15,
+                       handled=.15, blockage=0, crash=0)
 FEATURES = {
     "ecommerce": {"place_order": "payment_orchestration", "get_recommendations": "recommendation_serving"},
     "banking": {"accounts": "banking_api_routing", "create_transfer": "banking_api_routing"},
@@ -39,6 +39,10 @@ def validate_settings(settings):
         return value
     share = number("canary_share", .25, 0, .999)
     number("transport_share", .4, 0, 1)
+    crash_rate = number("crash_session_rate", .10, 0, 1)
+    blockage_rate = number("blockage_session_rate", .30, 0, 1)
+    if crash_rate + blockage_rate > 1:
+        raise ValueError("Crash and blockage session rates must sum to at most 1")
     cycle = number("incident_cycle_minutes", 60, 2, 1440)
     onset = number("incident_onset_minutes", 2, 0, cycle)
     recovery = number("incident_recovery_minutes", 6, 0, cycle)
@@ -126,6 +130,16 @@ class Plan:
         self.incident = forced or session.rng.choice(INCIDENTS[session.profile.key].get(self.primary, (None,)))
         if forced:
             self.primary = self.settings.get("primary_scenario") or next((k for k, values in INCIDENTS[session.profile.key].items() if forced in values), "mobile")
+        # Client faults are assigned across both rollout groups, before any
+        # journey executes. One client-fault budget can overlap a backend issue.
+        if self.primary in ("crash", "blockage"):
+            self.client_fault = self.primary
+        elif forced or self.settings.get("primary_scenario"):
+            self.client_fault = None  # explicit controls stay reproducible
+        else:
+            cr = self.settings.get("crash_session_rate", .10)
+            bl = self.settings.get("blockage_session_rate", .30)
+            self.client_fault = weighted([(None, 1 - cr - bl), ("crash", cr), ("blockage", bl)], session.rng)
         self.phase = incident_phase_at(session.start_ms, self.settings)
         cycle = self.settings.get("incident_cycle_minutes", 60)
         self.occurrence = f"payments-{int(session.start_ms // (cycle * 60000))}"

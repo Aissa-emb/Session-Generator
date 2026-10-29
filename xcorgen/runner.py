@@ -288,9 +288,20 @@ class Generator:
                   "session_id": s.user_session_id, "device_id": s.persona["device_id"],
                   "start_ms": s.start_ms, "end_ms": s.end_ms, "properties": s.properties,
                   "primary_scenario": s.plan.primary, "requests": s.plan.evidence,
+                  "client_fault": s.plan.client_fault,
                   "milestones": getattr(s, "milestones", []), "blockage": getattr(s, "blockage_evidence", None),
                   "crash": getattr(s, "crash_evidence", None),
-                  "crash_family": s.plan.crash_family if s.plan.primary == "crash" else None}
+                  "crash_family": s.plan.crash_family if getattr(s, "crash_evidence", None) else None}
+        record["mobile_root_spans"] = []
+        for delivery in s.deliveries:
+            if delivery.get("fmt") != "envelope":
+                continue
+            for span in delivery["payload"]["data"].get("spans", []):
+                attributes = {a["key"]: a["value"] for a in span.get("attributes", [])}
+                if attributes.get("emb.type") == "perf" and span.get("parent_span_id") in (None, "", "0" * 16):
+                    record["mobile_root_spans"].append({"name": span["name"], "trace_id": span["trace_id"],
+                        "span_id": span["span_id"], "status": span["status"], "start_ns": span["start_time_unix_nano"],
+                        "end_ns": span["end_time_unix_nano"], "attributes": attributes})
         append_manifest(path, record)
 
     def _shared_make_user(self, p):

@@ -450,11 +450,13 @@ class WebSession:
         start = self.t
         yield holder
         a = dict(attrs)
+        a.update(holder.get("attributes", {}))
         if holder["failed"]:
             a["emb.error_code"] = "FAILURE"
         a["emb.type"] = "perf"
         a.update(self._page_attrs())
-        self._span("traces", name, start, self.t + self.rng.uniform(2, 30), a)
+        self._span("traces", name, start, self.t, a,
+                   status=otlp.STATUS_ERROR if holder["failed"] else otlp.STATUS_UNSET)
 
     # --- network ----------------------------------------------------------------
 
