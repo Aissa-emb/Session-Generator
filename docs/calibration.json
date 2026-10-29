@@ -22,7 +22,7 @@
         "flow_starts": 13544,
         "priority_started": 1940,
         "priority_completed": 1006,
-        "breadcrumbs": 21588,
+        "breadcrumbs": 22073,
         "canary_exposed": 1281,
         "canary_backend_error": 1026
       },
@@ -354,7 +354,7 @@
         "flow_starts": 12426,
         "priority_started": 1828,
         "priority_completed": 1366,
-        "breadcrumbs": 26094,
+        "breadcrumbs": 26628,
         "canary_exposed": 1245,
         "canary_backend_error": 986
       },
@@ -689,7 +689,7 @@
         "flow_starts": 8636,
         "priority_started": 1885,
         "priority_completed": 1014,
-        "breadcrumbs": 18001,
+        "breadcrumbs": 18494,
         "canary_exposed": 1218,
         "canary_backend_error": 972
       },
@@ -1038,7 +1038,7 @@
       "flow_starts": 34606,
       "priority_started": 5653,
       "priority_completed": 3386,
-      "breadcrumbs": 65683,
+      "breadcrumbs": 67195,
       "canary_exposed": 3744,
       "canary_backend_error": 2984
     },

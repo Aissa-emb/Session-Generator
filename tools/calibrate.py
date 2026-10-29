@@ -54,6 +54,7 @@ def measure(s, deliveries):
     failed = [r for r in records if r["status"] is None or r["status"] >= 400]
     hidden = [r for r in records if r["status"] is not None and r["status"] < 400 and r["backend_errors"]]
     crash, handled, blockage = set(), False, False
+    breadcrumb_count = 0
     for d in deliveries:
         if d["target"] != "embrace" or d.get("fmt") != "envelope":
             continue
@@ -64,6 +65,7 @@ def measure(s, deliveries):
             handled |= a.get("emb.type") == "sys.exception" and a.get("emb.exception_handling") == "handled"
         for span in d["payload"]["data"].get("spans", []):
             blockage |= attrs(span).get("emb.type") == "perf.thread_blockage"
+            breadcrumb_count += sum(e["name"] == "emb-breadcrumb" for e in span.get("events", []))
     # Endpoint-specific user-visible budgets, measured from physical timings.
     budgets = {"get_product": 1500, "get_recommendations": 1000, "accounts": 1400,
                "statement": 3000, "create_transfer": 2000, "flight_search": 3500,
@@ -82,7 +84,7 @@ def measure(s, deliveries):
             "cancelled_attempts": sum(r["transport"] == "cancelled" for r in records),
             "backend_degraded_200": bool(hidden), "slow": slow,
             "flow_eligible": bool(starts), "flow_starts": starts, "priority_started": priority_start in names,
-            "priority_completed": priority_end in names, "breadcrumbs": len(marks),
+            "priority_completed": priority_end in names, "breadcrumbs": breadcrumb_count,
             "canary_exposed": s.plan.ring == "canary" and bool(exposed),
             "canary_backend_error": s.plan.ring == "canary" and any(r["backend_errors"] for r in exposed)}
 

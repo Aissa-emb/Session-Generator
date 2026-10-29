@@ -218,3 +218,5 @@ python3 tools/check_output.py out/
 | `deploy/local.xcor-demo-generator.plist` | The always-on LaunchAgent definition |
 | `AGENTS.md` | Handoff notes for AI agents continuing the work |
 | `reference/` | Payloads captured from the real Web SDK |
+
+The current sparse-timeline/failure-intensity deployment is documented in `docs/session-tuning-verification.json`. Its fresh runtime cohort is separate from the earlier full incident audit in `docs/verification-summary.json`; percentages from that earlier snapshot have been superseded.

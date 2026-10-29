@@ -67,5 +67,6 @@
     "github_ci": "both security and payload checks passed"
   },
   "dashboard_status": "User will create User Flows. Filter picker, product navigation, native crash grouping and native flow metrics remain UI-unverified; in-app browser was signed out.",
-  "links_note": "Embrace URLs came from emb.dashboard_session on retained forwarded spans; exact trace IDs and all parent chains were verified through the Data API."
+  "links_note": "Embrace URLs came from emb.dashboard_session on retained forwarded spans; exact trace IDs and all parent chains were verified through the Data API.",
+  "scope": "Earlier full incident audit at runtime 802478e; current breadcrumb density and client-failure targets are documented in session-tuning-verification.json."
 }

@@ -2,23 +2,69 @@
   "provenance": "synthetic demonstration telemetry; no production customer activity",
   "baseline_commit": "b488edbe87ba48861c0edeea637618bf0592eaea",
   "audit": [
-    {"requirement":"Preserve ingestion and forwarding", "location":"calls.py, runner.py", "gap":"Known-ID evidence must be refreshed after deployment", "verification":"Query every generated request ID and match forwarded client/first server parent"},
-    {"requirement":"70% session issue union and bounded rare events", "location":"runner.Generator.session and profile journeys", "gap":"Independent per-request outcomes and conditional random crashes", "verification":"Seeded 5000-session corpus per profile, evidence-derived denominators"},
-    {"requirement":"Stable rollout exposure", "location":"personas.py, session properties", "gap":"No rollout policy or request-local propagation", "verification":"Stable hashing, exposure timing, concurrent context isolation and Redis/log assertions"},
-    {"requirement":"Twelve breadcrumb User Flows", "location":"profile journey functions", "gap":"Dynamic descriptive messages; no central start/end catalog", "verification":"Anchor ordering, timeout/restart rules, current dashboard definitions and fresh sessions"},
-    {"requirement":"Shared payment contention", "location":"profiles/platform.authorize_payment", "gap":"Random pool counters; no occupying traces or coordinated occurrence", "verification":"Shared instance/lock/pool, overlapping holders, 3000 ms wait, no SQL after failed acquisition, recovery"},
-    {"requirement":"Truthful fallback and retries", "location":"profiles/*.py", "gap":"Hotel fallback lacks cache; payment retries lack reconciliation; random cache branches", "verification":"Hit/miss/fill state, snapshot freshness, exact failed child and successful contract"},
-    {"requirement":"Five crash families and blockage", "location":"android_session.py", "gap":"One NPE family; no blockage adapter", "verification":"SDK crash golden schema and ThreadBlockageOtelMapper schema, stopped UI, deferred relaunch upload, live issue views"},
-    {"requirement":"Transport failures", "location":"calls.simulate and session._request", "gap":"Only HTTP responses", "verification":"Absent status and backend work for pre-server failure; cancellation separate from faults"},
-    {"requirement":"Trace causality", "location":"backend.py", "gap":"Deadline overrun ambiguity, uncoupled peer addresses, raw Redis keys", "verification":"Kinds, parents, bounded deadlines/residual work, sanitized keys, context on every descendant"}
+    {
+      "requirement": "Preserve ingestion and forwarding",
+      "location": "calls.py, runner.py",
+      "gap": "Known-ID evidence must be refreshed after deployment",
+      "verification": "Query every generated request ID and match forwarded client/first server parent"
+    },
+    {
+      "requirement": "70% session issue union and bounded rare events",
+      "location": "runner.Generator.session and profile journeys",
+      "gap": "Independent per-request outcomes and conditional random crashes",
+      "verification": "Seeded 5000-session corpus per profile, evidence-derived denominators"
+    },
+    {
+      "requirement": "Stable rollout exposure",
+      "location": "personas.py, session properties",
+      "gap": "No rollout policy or request-local propagation",
+      "verification": "Stable hashing, exposure timing, concurrent context isolation and Redis/log assertions"
+    },
+    {
+      "requirement": "Twelve breadcrumb User Flows",
+      "location": "profile journey functions",
+      "gap": "Dynamic descriptive messages; no central start/end catalog",
+      "verification": "Anchor ordering, timeout/restart rules, current dashboard definitions and fresh sessions"
+    },
+    {
+      "requirement": "Shared payment contention",
+      "location": "profiles/platform.authorize_payment",
+      "gap": "Random pool counters; no occupying traces or coordinated occurrence",
+      "verification": "Shared instance/lock/pool, overlapping holders, 3000 ms wait, no SQL after failed acquisition, recovery"
+    },
+    {
+      "requirement": "Truthful fallback and retries",
+      "location": "profiles/*.py",
+      "gap": "Hotel fallback lacks cache; payment retries lack reconciliation; random cache branches",
+      "verification": "Hit/miss/fill state, snapshot freshness, exact failed child and successful contract"
+    },
+    {
+      "requirement": "Five crash families and blockage",
+      "location": "android_session.py",
+      "gap": "One NPE family; no blockage adapter",
+      "verification": "SDK crash golden schema and ThreadBlockageOtelMapper schema, stopped UI, deferred relaunch upload, live issue views"
+    },
+    {
+      "requirement": "Transport failures",
+      "location": "calls.simulate and session._request",
+      "gap": "Only HTTP responses",
+      "verification": "Absent status and backend work for pre-server failure; cancellation separate from faults"
+    },
+    {
+      "requirement": "Trace causality",
+      "location": "backend.py",
+      "gap": "Deadline overrun ambiguity, uncoupled peer addresses, raw Redis keys",
+      "verification": "Kinds, parents, bounded deadlines/residual work, sanitized keys, context on every descendant"
+    }
   ],
   "capture": {
-    "breadcrumbs":"verified Android envelope / emb-breadcrumb event; web captured SDK event",
-    "network":"verified Android perf.network_request / web fetch OTLP schema",
-    "task_operations":"verified custom perf spans; distinct from configured User Flows",
-    "handled_exceptions":"verified sys.exception log schema",
-    "fatal_crashes":"verified sys.android.crash golden schema; synthetic process lifecycle",
-    "thread_blockage":"Android ThreadBlockageOtelMapper perf.thread_blockage and samples; ingestion adapter, not OS-confirmed ANR",
-    "os_confirmed_anr":"not generated or claimed without an instrumented device and OS exit evidence"
-  }
+    "breadcrumbs": "verified Android envelope / emb-breadcrumb event; web captured SDK event",
+    "network": "verified Android perf.network_request / web fetch OTLP schema",
+    "task_operations": "verified custom perf spans; distinct from configured User Flows",
+    "handled_exceptions": "verified sys.exception log schema",
+    "fatal_crashes": "verified sys.android.crash golden schema; synthetic process lifecycle",
+    "thread_blockage": "Android ThreadBlockageOtelMapper perf.thread_blockage and samples; ingestion adapter, not OS-confirmed ANR",
+    "os_confirmed_anr": "not generated or claimed without an instrumented device and OS exit evidence"
+  },
+  "latest_user_steering": "On 2026-10-29 the owner superseded the original rare-event and dense-breadcrumb requirements: target 30% captured freezes and 10% fatal crashes, sparse milestones, business root spans; User Flow definitions remain user-owned."
 }
