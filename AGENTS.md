@@ -42,8 +42,8 @@ The owner has local clones in `~/Claudecode/` (Embrace SDKs, Go backend `go/`, d
 
 - **Embrace app**: one Android app, `5nrc2` ("Vantra", production, US), used for all three profiles. Because several profiles share one app ID, the generator runs in **shared super-app mode**: one app `com.vantra.android` with three lines of business told apart by the session property `business_unit` = `retail` | `banking` | `travel`, plus `market`, `membership_tier`, `entry_point` and business-specific properties. One user base and account system across the app.
 - **Forwarded domains in Embrace NSF**: `api.vantrashop.com`, `api.vantramoney.com`, `api.vantratravel.com`. The owner added the missing money domain at approximately 2026-10-29 16:11 UTC. The NSF configuration manager defaults to a five-minute refresh (`NETWORK_SPAN_DESTINATIONS_REFRESH_PERIOD`). Sessions processed before the refreshed domain configuration can still lack app spans. At approximately 16:19 UTC, all 5/5 known Money traces generated after that refresh window were complete, with app roots joined to their backend children. The post-retention-fix Shop cohort was 5/5 complete and Travel 1/1 complete. Every one of these traces carried `behavior_dataset_slug=vantra-end-to-end` and `tail_sampling_rate=1`.
-- **Chronosphere tenant**: `demo-sandbox`. The API token is in `config.json` (git-ignored, mode 600). **Never commit `config.json` or print the token.** `config.example.json` shows the shape.
-- **Always-on service**: macOS LaunchAgent `local.xcor-demo-generator` (copy in `deploy/`), running `generate.py --profile all --rate 3 --diurnal --quiet`. Logs in `logs/generator.log` (status line every 10 min). After code changes restart it: `launchctl kickstart -k gui/$(id -u)/local.xcor-demo-generator`. It stops while the Mac sleeps.
+- **Chronosphere tenant**: `demo-sandbox`. Credentials belong outside the checkout, referenced by `chronosphere.api_token_file` or `CHRONOSPHERE_API_TOKEN_FILE`; `CHRONOSPHERE_API_TOKEN` can override this. Token files and any config containing inline secrets must be owner-only. **Never commit credentials or print them.** `config.example.json` shows the shape.
+- **Always-on service**: macOS LaunchAgent `local.xcor-demo-generator` (copy in `deploy/`), running `generate.py --profile all --rate 10 --quiet`. Logs in `logs/generator.log` (status line every 10 min). Preserve the pending deliveries when restarting: SIGINT flushes them; a forced kill loses them. Launchd KeepAlive may immediately restart an old invocation, so verify the resulting PID and arguments after reloading. It stops while the Mac sleeps.
 - `.state/` holds the returning-visitor pool (device IDs, user IDs, session counters). Deleting it makes every visitor new; do not delete it casually.
 
 ## Code map
@@ -76,6 +76,7 @@ Journeys are plain functions that drive a session object (`page_view`, `click`, 
    ```
    Dry runs do not touch `.state/`.
 3. If you touched `otlp.py`, run `tools/check_protobuf.py` in a venv with `opentelemetry-proto`.
+   Run `python3 -m unittest discover -s tests -v` for the security regression suite. Secret scans must use redacted output and the narrow fixture exception in `.gitleaks.toml`. Never broaden that exception to entire directories. Bandit intentionally excludes B311 for the simulator's seeded non-cryptographic randomness; it must never be used for real credentials.
 4. Restart the LaunchAgent, wait ~8 minutes, then confirm in Chronosphere:
    ```bash
    python3 tools/chronosphere_traces.py completeness <restart time, RFC3339 UTC>

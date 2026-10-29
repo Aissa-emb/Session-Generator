@@ -32,7 +32,7 @@ With a separate app ID per profile, each profile keeps its own brand, package an
 
 ## Always-on mode
 
-The generator runs as a macOS LaunchAgent (`~/Library/LaunchAgents/local.xcor-demo-generator.plist`): it starts at login, restarts if it exits, and averages 3 sessions per minute on a daily curve (quiet overnight, peaks at lunch and in the evening, US Eastern time). It pauses while the Mac sleeps and catches up on wake. Status lines go to `logs/generator.log` every 10 minutes.
+The generator runs as a macOS LaunchAgent (`~/Library/LaunchAgents/local.xcor-demo-generator.plist`): it starts at login, restarts if it exits, and targets 10 sessions per minute total across all three profiles. It pauses while the Mac sleeps and catches up on wake. Status lines go to `logs/generator.log` every 10 minutes. Add `--diurnal` only when an hourly traffic curve is wanted.
 
 ```bash
 tail -f ~/xcor-demo-generator/logs/generator.log
@@ -61,13 +61,16 @@ To change the rate or add an incident, edit the arguments in the plist, then sto
 
    Forward only these API domains. The dashboard only shows the **View trace in Cortex XCOR** link when forwarding succeeded for that request, so this step is required, and it must be in place before you send sessions: Embrace decides forwarding when it processes a session and does not revisit older sessions.
 3. **Chronosphere API token** with permission to write traces (OTLP ingestion).
-4. **Config.** Copy `config.example.json` to `config.json` and fill in the Embrace app IDs and the Chronosphere tenant (the `<tenant>` in `<tenant>.chronosphere.io`). Keep the token out of the file if you prefer:
+4. **Config.** Copy `config.example.json` to `config.json` and fill in the Embrace app IDs and the Chronosphere tenant (the `<tenant>` in `<tenant>.chronosphere.io`). Keep the token in an owner-only file outside the checkout and set `chronosphere.api_token_file` to its path. On macOS/Linux the token file must be owned by the user running the generator and have mode `600` or `400`. Alternatively, inject it through your secret manager as an environment variable:
 
    ```bash
-   export CHRONOSPHERE_API_TOKEN=...
+   # Set through your secret manager; avoid putting real values in shell history.
+   export CHRONOSPHERE_API_TOKEN_FILE=/absolute/path/outside/the/repo/chronosphere.token
    ```
 
    To use one Embrace app for every profile, set `"default": "<appId>"` under `embrace.apps`.
+
+   `CHRONOSPHERE_API_TOKEN` overrides token-file settings. Inline `chronosphere.api_token` is supported for existing installations, but a config containing credentials or custom OTLP headers must have owner-only permissions. The trace inspection tool uses the same credential loading rules. The ingestion token should have only trace-write permission; use a separate identity for administrative changes.
 
 Python 3.10+ only; there are no packages to install.
 
@@ -128,6 +131,8 @@ Without `--incident`, errors are sprinkled in at realistic rates: about 3% of ch
 | `--seed N` | Reproducible output |
 
 To send backend spans to an OpenTelemetry Collector instead of straight to Chronosphere, set `"otlp": {"endpoint": "http://localhost:4318", "headers": {}}` in `config.json`.
+
+Remote endpoints require HTTPS with normal certificate validation. Credential-free HTTP is supported only for a loopback collector. Redirects are refused, and credentials, query strings, and fragments cannot be embedded in endpoint URLs. Configure the final endpoint directly. Server error bodies are not logged; response sizes and pending network work are bounded. See [SECURITY.md](SECURITY.md) for the security boundary and checks.
 
 ## What makes it look real
 

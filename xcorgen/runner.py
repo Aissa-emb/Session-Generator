@@ -10,8 +10,6 @@ import re
 import sys
 import threading
 import time
-import urllib.error
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -20,6 +18,8 @@ from . import otlp
 from .personas import PersonaPool
 from .profiles import load
 from .util import uuid4, weighted
+from .security import (SecurityError, TransportError, post, read_token_file,
+                       require_private_file, tenant_url, validate_endpoint, validate_headers)
 from .android_session import AndroidSession, SessionEnded, shift_envelope
 from .web_session import WebSession, shift
 
@@ -28,11 +28,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def load_config(path):
     cfg = {"platform": "android", "embrace": {"apps": {}, "data_url": None},
-           "chronosphere": {"tenant": None, "api_token": None},
+           "chronosphere": {"tenant": None, "api_token": None},  # nosec B105
            "otlp": {"endpoint": None, "headers": {}, "encoding": "protobuf"}}
     if path and os.path.exists(path):
         with open(path) as f:
             user = json.load(f)
+            if user.get("chronosphere", {}).get("api_token") or user.get("otlp", {}).get("headers"):
+                require_private_file(f)
         for k, v in user.items():
             if isinstance(v, dict):
                 cfg.setdefault(k, {}).update(v)
@@ -50,10 +52,28 @@ def load_config(path):
         cfg["chronosphere"]["tenant"] = env["CHRONOSPHERE_TENANT"]
     if env.get("CHRONOSPHERE_API_TOKEN"):
         cfg["chronosphere"]["api_token"] = env["CHRONOSPHERE_API_TOKEN"]
+    else:
+        token_path = env.get("CHRONOSPHERE_API_TOKEN_FILE") or cfg["chronosphere"].get("api_token_file")
+        if token_path:
+            if not os.path.isabs(token_path):
+                token_path = os.path.join(os.path.dirname(os.path.abspath(path or os.path.join(ROOT, "config.json"))), token_path)
+            cfg["chronosphere"]["api_token"] = read_token_file(token_path)
     if env.get("OTLP_ENDPOINT"):
         cfg["otlp"]["endpoint"] = env["OTLP_ENDPOINT"]
     if env.get("OTLP_HEADERS"):
-        cfg["otlp"]["headers"].update(dict(h.split("=", 1) for h in env["OTLP_HEADERS"].split(",") if "=" in h))
+        try:
+            cfg["otlp"]["headers"].update(dict(h.split("=", 1) for h in env["OTLP_HEADERS"].split(",")))
+        except ValueError:
+            raise SecurityError("OTLP_HEADERS must contain comma-separated name=value pairs.") from None
+    if cfg["chronosphere"].get("tenant"):
+        tenant_url(cfg["chronosphere"]["tenant"])
+    validate_headers(cfg["otlp"]["headers"])
+    if cfg["chronosphere"].get("api_token"):
+        validate_headers({"API-Token": cfg["chronosphere"]["api_token"]})
+    if cfg["otlp"].get("endpoint"):
+        validate_endpoint(cfg["otlp"]["endpoint"], cfg["otlp"]["headers"])
+    if cfg["embrace"].get("data_url"):
+        validate_endpoint(cfg["embrace"]["data_url"], {"X-EM-AID": "app-id"})
     return cfg
 
 
@@ -68,6 +88,7 @@ class Sender:
     def __init__(self, cfg, dry_run_dir=None, workers=8, verbose=False):
         self.cfg, self.dry, self.verbose = cfg, dry_run_dir, verbose
         self.pool = ThreadPoolExecutor(max_workers=workers)
+        self.pending_slots = threading.BoundedSemaphore(workers * 4)
         self.lock = threading.Lock()
         self.stats = {"embrace_spans": 0, "embrace_logs": 0, "otlp_traces": 0, "otlp_logs": 0, "errors": 0}
         self.counter = itertools.count(1)
@@ -75,10 +96,10 @@ class Sender:
         ch = cfg["chronosphere"]
         o = cfg["otlp"]
         if o.get("endpoint"):
-            self.otlp_base = o["endpoint"].rstrip("/")
+            self.otlp_base = validate_endpoint(o["endpoint"], o.get("headers") or {})
             self.otlp_headers = dict(o.get("headers") or {})
         elif ch.get("tenant"):
-            self.otlp_base = f"https://{ch['tenant']}.chronosphere.io/data/opentelemetry"
+            self.otlp_base = tenant_url(ch['tenant']) + "/data/opentelemetry"
             self.otlp_headers = {"API-Token": ch.get("api_token") or ""}
         else:
             self.otlp_base, self.otlp_headers = None, {}
@@ -87,7 +108,13 @@ class Sender:
             os.makedirs(dry_run_dir, exist_ok=True)
 
     def submit(self, d):
-        self.pool.submit(self._send, d)
+        self.pending_slots.acquire()
+        try:
+            future = self.pool.submit(self._send, d)
+        except BaseException:
+            self.pending_slots.release()
+            raise
+        future.add_done_callback(lambda _: self.pending_slots.release())
 
     def _send(self, d):
         key = f"{d['target']}_{d['kind']}"
@@ -105,22 +132,18 @@ class Sender:
         except Exception as e:  # keep generating; report at the end
             with self.lock:
                 self.stats["errors"] += 1
-                self.last_errors = (self.last_errors + [f"{key}: {e}"])[-5:]
+                detail = str(e) if isinstance(e, (SecurityError, TransportError)) else "Payload delivery failed (details suppressed)."
+                self.last_errors = (self.last_errors + [f"{key}: {detail}"])[-5:]
             if self.verbose:
-                print(f"  ! {key} failed: {e}", file=sys.stderr)
+                print(f"  ! {key} failed: {detail}", file=sys.stderr)
 
     def _post(self, url, body, headers):
-        req = urllib.request.Request(url, data=gzip.compress(body), method="POST",
-                                     headers=dict(headers, **{"Content-Encoding": "gzip"}))
+        compressed = gzip.compress(body)
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    return resp.read()
-            except urllib.error.HTTPError as e:
-                if e.code < 500 or attempt == 2:
-                    raise RuntimeError(f"HTTP {e.code} from {url}: {e.read()[:300]!r}")
-            except OSError:  # URLError, connection resets, timeouts
-                if attempt == 2:
+                return post(url, compressed, dict(headers, **{"Content-Encoding": "gzip"}))
+            except TransportError as e:
+                if (e.status is not None and e.status != 429 and e.status < 500) or attempt == 2:
                     raise
             time.sleep(0.5 * (attempt + 1))
 
@@ -140,9 +163,9 @@ class Sender:
             enc = otlp.encode_traces if d["kind"] == "traces" else otlp.encode_logs
             body, ctype = enc(d["payload"]), "application/x-protobuf"
         resp = self._post(f"{self.otlp_base}/v1/{d['kind']}", body, dict(self.otlp_headers, **{"Content-Type": ctype}))
-        rejected, message = otlp.partial_success(resp or b"", json_body=self.encoding == "json")
+        rejected, _ = otlp.partial_success(resp or b"", json_body=self.encoding == "json")
         if rejected:
-            raise RuntimeError(f"backend rejected {rejected} {d['kind']} records: {message}")
+            raise TransportError(f"Backend rejected {rejected} {d['kind']} records.")
 
     def close(self):
         self.pool.shutdown(wait=True)
@@ -159,7 +182,10 @@ class Generator:
         # Profiles that share one Android app ID are lines of business in one super app, with one user base.
         by_app = {}
         for p in self.profiles:
-            by_app.setdefault(app_id_for(cfg, p.key), []).append(p)
+            app = app_id_for(cfg, p.key)
+            if not isinstance(app, str) or not re.fullmatch(r"[A-Za-z0-9]{5}", app):
+                raise SecurityError("Each selected profile needs a five-character alphanumeric Embrace app ID.")
+            by_app.setdefault(app, []).append(p)
         self.shared = {p.key for group in by_app.values() if len(group) > 1 and platform == "android" for p in group}
         self.pools = {}
         for app, group in by_app.items():
@@ -173,9 +199,6 @@ class Generator:
         self._make_user = {}
         for p in self.profiles:
             app = app_id_for(cfg, p.key)
-            if not app or not re.fullmatch(r"[A-Za-z0-9]{5}", app):
-                raise SystemExit(f"No valid Embrace app ID for profile '{p.key}'. Set embrace.apps.{p.key} in "
-                                 f"config.json or EMBRACE_APP_ID_{p.key.upper()}.")
             if self.incident and self.incident not in p.incidents and len(self.profiles) == 1:
                 raise SystemExit(f"Unknown incident '{incident}' for {p.key}. Options: {', '.join(p.incidents)}")
 

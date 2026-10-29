@@ -17,24 +17,25 @@ import base64
 import datetime
 import json
 import os
-import urllib.error
-import urllib.request
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+from xcorgen.runner import load_config
+from xcorgen.security import SecurityError, TransportError, post, tenant_url
 APP_SERVICE = "vantra-android-production"
 
 
 def query(cfg, body):
-    req = urllib.request.Request(f"https://{cfg['tenant']}.chronosphere.io/api/v1/data/traces",
-                                 data=json.dumps(body).encode(), method="POST",
-                                 headers={"API-Token": cfg["api_token"], "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return json.load(r)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
+        raw = post(tenant_url(cfg['tenant']) + "/api/v1/data/traces", json.dumps(body).encode(),
+                   {"API-Token": cfg["api_token"], "Content-Type": "application/json"},
+                   timeout=60, max_response_bytes=32 * 1024 * 1024)
+        return json.loads(raw)
+    except TransportError as e:
+        if e.status == 404:
             return {"traces": []}
-        raise SystemExit(f"HTTP {e.code}: {e.read()[:300].decode()}")
+        raise SystemExit(str(e)) from None
 
 
 def hexid(v):
@@ -95,8 +96,7 @@ def main():
     c.add_argument("start")
     c.add_argument("--settle-min", type=float, default=4)
     a = ap.parse_args()
-    with open(os.path.join(ROOT, "config.json")) as f:
-        cfg = json.load(f)["chronosphere"]
+    cfg = load_config(os.path.join(ROOT, "config.json"))["chronosphere"]
     if a.cmd == "trace":
         cmd_trace(cfg, a.ids)
     else:
@@ -104,4 +104,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SecurityError as error:
+        sys.exit(str(error))

@@ -9,6 +9,6 @@
   },
   "chronosphere": {
     "tenant": "",
-    "api_token": ""
+    "api_token_file": ""
   }
 }

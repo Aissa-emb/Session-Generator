@@ -145,7 +145,8 @@ class AndroidSession:
 
     def _resource(self):
         p, a = self.persona, self.app
-        build_id = hashlib.md5(f"{a['package']}:{self.app_version}".encode()).hexdigest().upper()
+        # Deterministic SDK build label, never an authentication or integrity check.
+        build_id = hashlib.md5(f"{a['package']}:{self.app_version}".encode(), usedforsecurity=False).hexdigest().upper()
         r = {
             "app_version": self.app_version, "app_framework": 1, "build_id": build_id,
             "app_ecosystem_id": a["package"], "build_type": "release", "build_flavor": "production",

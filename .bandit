@@ -1,0 +1,3 @@
+[bandit]
+# This simulator uses seeded randomness for fictional telemetry, never credentials.
+skips = B311
