@@ -16,7 +16,10 @@
     "cohort_seed": "vantra-2026-10",
     "canary_share": 0.25,
     "rollout_phase": "active",
-    "incident_phase": "incident",
+    "incident_phase": "scheduled",
+    "incident_cycle_minutes": 60,
+    "incident_onset_minutes": 2,
+    "incident_recovery_minutes": 6,
     "scenario_weights": {"clean": 0.30, "mobile": 0.21, "backend": 0.21, "slow": 0.15, "handled": 0.10, "blockage": 0.016, "crash": 0.014},
     "transport_share": 0.4,
     "journey_weights": {"ecommerce_priority": 0.23, "banking_priority": 0.18, "travel_priority": 0.23}

@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--seed", type=int)
     ap.add_argument("--scenario", choices=["clean", "mobile", "backend", "slow", "handled", "blockage", "crash"],
                     help="select a primary scenario for a bounded verification run; excluded from population-rate claims")
-    ap.add_argument("--incident-phase", choices=["onset", "incident", "recovery"])
+    ap.add_argument("--incident-phase", choices=["scheduled", "onset", "incident", "recovery"])
     ap.add_argument("--rollout-phase", choices=["active", "rollback"])
     ap.add_argument("--crash-family", type=int, choices=range(5), help="bounded crash-family verification, 0 through 4")
     ap.add_argument("--manifest", help="owner-only JSONL evidence file for live sessions and acceptance receipts")

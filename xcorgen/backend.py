@@ -188,6 +188,8 @@ class TraceBuild:
         if svc.name not in self._pods:
             if svc.name == "payment-authorization-service" and self.context.get("incident.occurrence_id"):
                 self._pods[svc.name] = svc.pods[0]
+            elif svc.name == "payment-authorization-service":
+                self._pods[svc.name] = svc.pods[1] if self.context.get("routing.target") == "canary" else svc.pods[-1]
             elif self.context.get("routing.target"):
                 # A stable canary pod belongs to the existing service identity.
                 self._pods[svc.name] = svc.pods[-1] if self.context["routing.target"] == "canary" else svc.pods[0]

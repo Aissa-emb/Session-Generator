@@ -482,6 +482,8 @@ class AndroidSession:
     def _crash(self, jtype, jmsg, frames):
         crash_id = emb_id()
         self.part.crash_id = crash_id
+        self.crash_evidence = {"record_id": crash_id, "part_id": self.part.id, "time_ms": self.t,
+                               "exception_type": jtype, "message": jmsg, "frames": frames}
         cause = [{"n": jtype, "m": jmsg, "tt": frames, "length": len(frames)}]
         threads = [{"threadId": 2, "state": "WAITING", "n": "FinalizerDaemon", "p": 5, "fc": 4,
                     "tt": ["java.lang.Object.wait(Native Method)", "java.lang.Object.wait(Object.java:405)",

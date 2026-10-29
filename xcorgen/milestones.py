@@ -27,8 +27,12 @@ account_refresh_requested cached_account_snapshot_displayed account_snapshot_as_
 transaction_filter_changed transaction_results_displayed transaction_selection_changed
 recipient_list_displayed recipient_selected transfer_amount_entered transfer_amount_corrected
 transfer_amount_validated transfer_review_displayed fraud_check_started transfer_status_pending transfer_help_opened
-statement_period_selected statement_download_retried statement_download_cancelled
+statement_period_selected statement_download_retried statement_open_cancelled statement_download_failed
 flight_origin_entered flight_destination_entered flight_results_displayed partial_flight_results_displayed
+flight_search_opened trip_type_selected departure_date_selected return_date_selected passenger_count_selected
+cabin_selected flight_search_criteria_reviewed flight_result_count_displayed
+hotel_search_opened hotel_destination_selected check_in_date_selected check_out_date_selected
+guest_count_selected hotel_search_criteria_reviewed
 flight_departure_filter_changed fare_rules_displayed fare_revalidated booking_cancelled
 traveler_details_entered traveler_details_corrected traveler_details_validated booking_review_displayed
 reservation_status_checked reservation_status_pending hotel_results_displayed cached_hotel_rates_displayed
@@ -39,7 +43,20 @@ cache_upgrade_started main_thread_work_started main_thread_responsive support_op
 card_controls_opened card_status_displayed card_lock_selected card_lock_confirmed card_help_viewed
 trip_list_opened trip_list_rendered trip_details_viewed itinerary_saved offline_itinerary_opened
 """.split()
-CATALOG = set(EXTRA) | {anchor for flows in FLOWS.values() for _, start, end, _ in flows for anchor in (start, end)}
+REQUEST_MILESTONES = {
+    "home": "home_catalog", "search": "product_results", "get_product": "product_data",
+    "get_recommendations": "recommendation_data", "add_to_cart": "cart_item_update",
+    "get_cart": "cart_summary", "shipping_options": "shipping_quote", "place_order": "order_submission",
+    "get_order": "order_receipt", "login": "identity_verification", "mfa_verify": "challenge_verification",
+    "accounts": "account_balances", "transactions": "transaction_history", "payees": "saved_recipients",
+    "create_transfer": "transfer_submission", "statement": "statement_document", "lock_card": "card_lock_update",
+    "locations": "location_suggestions", "flight_search": "flight_offers", "hotel_search": "hotel_rates",
+    "hotel_revalidate": "hotel_rate_validation", "offer": "fare_quote", "create_booking": "reservation_submission",
+    "trips": "saved_itineraries", "operation_status": "operation_reconciliation",
+}
+CATALOG = (set(EXTRA) | {anchor for flows in FLOWS.values() for _, start, end, _ in flows for anchor in (start, end)} |
+           {f"{prefix}_{suffix}" for prefix in REQUEST_MILESTONES.values()
+            for suffix in ("requested", "received", "failed")})
 
 
 def mark(s, name):

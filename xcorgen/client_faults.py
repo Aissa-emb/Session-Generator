@@ -57,7 +57,7 @@ def blockage(s):
     severe = s.rng.random() < .2
     duration = s.rng.uniform(5500, 8500) if severe else s.rng.uniform(1500, 3500)
     start = s.t
-    package = s.profile.android["package"]
+    package = s.app["package"] if hasattr(s, "app") else s.profile.android["package"]
     frames = {
         "migration": ["android.database.sqlite.SQLiteConnection.nativeExecute(Native Method)",
                       f"{package}.{s.profile.key}.LocalCache.migrate(LocalCache.kt:71)"],

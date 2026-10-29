@@ -206,6 +206,12 @@ class Generator:
         self.runtime = Runtime()
         self.settings = cfg.get("generation", {})
         self.verification_queue = list(self.settings.get("verification_plan", []))
+        from .scenarios import validate_settings
+        validate_settings(self.settings)
+        for case in self.verification_queue:
+            if case.get("profile") not in profile_keys:
+                raise ValueError("Verification case profile must be included in the run")
+            validate_settings(dict(self.settings, **case.get("settings", {})))
         for profile in self.profiles:
             install(profile)
         state = os.path.join(ROOT, ".state")
@@ -277,11 +283,13 @@ class Generator:
             return
         s = session
         record = {"provenance": "synthetic", "stage": "generated", "profile": s.profile.key,
+                  "generator_revision": self.settings.get("build_revision"),
                   "verification_case": s.verification_case, "app_id": s.app_id,
                   "session_id": s.user_session_id, "device_id": s.persona["device_id"],
                   "start_ms": s.start_ms, "end_ms": s.end_ms, "properties": s.properties,
                   "primary_scenario": s.plan.primary, "requests": s.plan.evidence,
                   "milestones": getattr(s, "milestones", []), "blockage": getattr(s, "blockage_evidence", None),
+                  "crash": getattr(s, "crash_evidence", None),
                   "crash_family": s.plan.crash_family if s.plan.primary == "crash" else None}
         append_manifest(path, record)
 
@@ -304,7 +312,7 @@ class Generator:
 
 
 def describe(s, journey, tenant):
-    errors = [c for c in s.calls if c[1] >= 400]
+    errors = [c for c in s.calls if c[1] is None or c[1] >= 400]
     p = s.persona
     device = p["model"] if p.get("platform") == "android" else p["kind"]
     line = (f"{s.profile.key:<9} {journey:<20} {device:<22} parts={s.part.index:<2} api={len(s.calls):<3} "

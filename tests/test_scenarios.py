@@ -32,6 +32,29 @@ def spans(s):
 
 
 class ScenarioTests(unittest.TestCase):
+    def test_schedule_uses_request_time_and_invalid_budgets_fail_before_generation(self):
+        from xcorgen.scenarios import incident_phase_at, validate_settings
+        for minute, phase in ((1, "onset"), (3, "incident"), (53, "incident"), (54, "recovery"), (61, "onset")):
+            self.assertEqual(incident_phase_at(minute * 60000, {}), phase)
+        s = generate("ecommerce", "payments-db-pool")
+        s.plan.settings["incident_phase"] = "scheduled"
+        s.plan.used = False
+        s.t = 54 * 60000
+        r = s.plan.request(s.plan.target, {})
+        self.assertEqual(r["attributes"]["incident.phase"], "recovery")
+        self.assertEqual(r["outcome"], "ok")
+        for settings in ({"canary_share": 1}, {"transport_share": float("nan")},
+                         {"scenario_weights": {"clean": .1}}, {"incident_cycle_minutes": 5},
+                         {"crash_family": 9}, {"journey_weights": {"banking_priority": 2}}):
+            with self.assertRaises(ValueError):
+                validate_settings(settings)
+
+    def test_verbose_summary_accepts_transport_without_http_response(self):
+        from xcorgen.runner import describe
+        s = generate("banking", primary="clean")
+        s.calls.append(("accounts", None, "1" * 32))
+        self.assertIn("None", describe(s, "accounts", "tenant"))
+
     def test_shared_pool_has_real_holders_and_no_sql_after_failed_acquisition(self):
         paired = [generate(p, "payments-db-pool") for p in ("ecommerce", "travel")]
         occurrences = []

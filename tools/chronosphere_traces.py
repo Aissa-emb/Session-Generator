@@ -18,6 +18,7 @@ import datetime
 import json
 import os
 import sys
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -27,15 +28,19 @@ APP_SERVICE = "vantra-android-production"
 
 
 def query(cfg, body):
-    try:
-        raw = post(tenant_url(cfg['tenant']) + "/api/v1/data/traces", json.dumps(body).encode(),
-                   {"API-Token": cfg["api_token"], "Content-Type": "application/json"},
-                   timeout=60, max_response_bytes=32 * 1024 * 1024)
-        return json.loads(raw)
-    except TransportError as e:
-        if e.status == 404:
-            return {"traces": []}
-        raise SystemExit(str(e)) from None
+    for attempt in range(4):
+        try:
+            raw = post(tenant_url(cfg['tenant']) + "/api/v1/data/traces", json.dumps(body).encode(),
+                       {"API-Token": cfg["api_token"], "Content-Type": "application/json"},
+                       timeout=45, max_response_bytes=32 * 1024 * 1024)
+            return json.loads(raw)
+        except TransportError as e:
+            if e.status == 404:
+                return {"traces": []}
+            if e.status in (429, 502, 503, 504) and attempt < 3:
+                time.sleep(2 ** attempt)
+                continue
+            raise SystemExit(str(e)) from None
 
 
 def hexid(v):

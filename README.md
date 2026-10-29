@@ -123,7 +123,7 @@ Without `--incident`, a seeded session policy chooses one primary scenario and g
 
 The `generation` section of `config.example.json` controls primary weights, cohort seed/share, priority journey probabilities and transport-failure share. Stable identity assignment is persisted in the persona pool. Session exposure starts false on each visit and changes only when a feature request runs. Feature context is explicitly propagated to backend spans and logs, including Redis clients; it is never stored in service resources.
 
-Additional controls: `--scenario clean|mobile|backend|slow|handled|blockage|crash`, `--crash-family 0..4`, `--incident-phase onset|incident|recovery`, and `--rollout-phase active|rollback`. These select bounded verification cases; do not use such a selected corpus to claim population rates. `--manifest /absolute/path.jsonl` records live session/request identities and separate export receipts. `--verification-plan cases.json` runs a finite JSON case list at the existing rate, then resumes the normal distribution.
+Additional controls: `--scenario clean|mobile|backend|slow|handled|blockage|crash`, `--crash-family 0..4`, `--incident-phase scheduled|onset|incident|recovery`, and `--rollout-phase active|rollback`. Scheduled shared-payment contention defaults to hourly UTC cycles: two minutes of onset, 52 active minutes and six recovery minutes. Phase is evaluated at request time; Shop and Travel share the occurrence, affected PAS instance and deterministic occupant traces. Healthy routes use other instances. Explicit phases select bounded verification cases; do not use such a selected corpus to claim population rates. `--manifest /absolute/path.jsonl` records live session/request identities and separate export receipts. `--verification-plan cases.json` runs a finite JSON case list at the existing rate, then resumes the normal distribution. Remove the plan from persistent configuration after the run so restarting does not repeat the selected corpus.
 
 The smallest explicit new incident is `banking --incident account-read-fallback`: an actual core-read deadline, a separate retained snapshot, HTTP 200 with read-only/as-of semantics, and no claim that the snapshot confirms a transfer. Pending payment/PNR outcomes use a status endpoint and the same idempotency identifier. A timeout never becomes an invented confirmation.
 
@@ -179,6 +179,22 @@ python3 -m unittest discover -s tests -v
 ```
 
 `docs/upgrade-audit.json` records the original gaps and capture capabilities. `xcorgen/milestones.py` is the central breadcrumb and twelve profile-flow catalog. User Flows are configured in the dashboard; custom task spans alone do not create those definitions. The current dashboard form expects **milliseconds** (maximum 300,000), and exposes “Ignore restarts while in progress” when the feature is enabled. Fresh sessions must be generated after definitions are saved. The shared app has one payment anchor pair for Shop and Travel, so scope its views by `business_unit` instead of claiming the name alone scopes a definition.
+
+`docs/user-flows.json` contains the setup recipes and `docs/session-filters.json` the source-confirmed Session Property Key/Value conditions. These are recipes, not an import format. In app **Vantra / 5nrc2**, create separate AND conditions for business unit, release ring, exposure and the relevant feature variant. Select the actual incident window. Add the supported HTTP-status filter only for visible mobile failures; leave it off for successful-HTTP fallback demos. In User Flows, create each unique breadcrumb start/end pair, enter its `timeout_ms`, and enable **Ignore restarts while in progress** when available. Generate fresh sessions after saving. Native Error/Abandoned/completion counts require dashboard reconciliation and must not be inferred from a custom failure breadcrumb.
+
+`docs/calibration.json` measures 5,000 sessions per profile with seed 7331 in the representative active incident phase. It includes the union of issue-bearing sessions, overlapping categories, five crash families per profile, actual emitted breadcrumb counts, start/end evidence and expected starts/hour at 10 total sessions/minute with equal profile shares. Simulated return visits accumulate prospectively; no mature D1/D7 retention is claimed.
+
+For live proof, query **all known generated IDs**, preserving missing IDs in the denominator:
+
+```bash
+python3 tools/verify_manifest.py /absolute/path/run.jsonl --config config.json --settle-seconds 240 --output out/verification.json
+```
+
+This records the forwarded mobile span, its exact first backend child, all ancestor checks, failed spans, Redis attributes, product-supplied Embrace session link, separate pool-occupant traces and seed-7331 random exposed-canary samples. API retention is distinct from successful exporter receipts and from dashboard navigation. A transient query failure remains explicitly unverified.
+
+Request enrichment originates in `scenarios.Plan.request` before the outcome. An allowlisted per-call context is scoped using `ContextVar` while builders execute, then passed explicitly to `backend.build_trace`; every descendant and correlated log receives the same applicable values. The OTLP encoder preserves their types and the current direct exporter applies no attribute transformation. Redis spans belong to the caller's resource and carry request attributes, never connection-level attribution. Both `db.system.name=redis` and legacy `db.system=redis` are emitted; `db.namespace=0` identifies the modeled database. Sanitized command text excludes raw identifiers. Custom `routing.*`, `cache.*`, `feature.*`, `incident.*` and pool/lock fields are application metadata. The simulator models propagation; these helpers are not a drop-in instrumentation library for real services.
+
+Standalone `payment-authorization-service / authorization_worker.batch` traces need retention too. The demo tenant uses a narrowly scoped Allow dataset for that service/operation in addition to the existing `vantra-end-to-end` dataset. The request's failed acquisition links to these 50 occupying connections and the maintenance lock. Backend logs are optional and disabled in the live service; trace exception events remain available.
 
 ```bash
 python3 generate.py --profile all --sessions 20 --dry-run out/

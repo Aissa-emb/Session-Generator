@@ -4,6 +4,7 @@ This module models synthetic demonstration data. It never determines coverage
 from its own scenario labels: validation inspects the emitted records.
 """
 import hashlib
+import math
 import random
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -27,6 +28,49 @@ INCIDENTS = {
                "slow": ("search-complexity",), "handled": ("traveler-validation",)},
 }
 REQUEST = ContextVar("request_context", default=None)
+
+
+def validate_settings(settings):
+    """Reject impossible budgets before generating or exporting any sessions."""
+    def number(key, default, low, high):
+        value = settings.get(key, default)
+        if not isinstance(value, (float, int)) or not math.isfinite(value) or not low <= value <= high:
+            raise ValueError(f"generation.{key} must be finite and between {low} and {high}")
+        return value
+    share = number("canary_share", .25, 0, .999)
+    number("transport_share", .4, 0, 1)
+    cycle = number("incident_cycle_minutes", 60, 2, 1440)
+    onset = number("incident_onset_minutes", 2, 0, cycle)
+    recovery = number("incident_recovery_minutes", 6, 0, cycle)
+    if onset + recovery >= cycle:
+        raise ValueError("Incident onset and recovery must leave an active incident window")
+    if settings.get("incident_phase", "scheduled") not in ("scheduled", "onset", "incident", "recovery"):
+        raise ValueError("Unknown incident_phase")
+    if settings.get("rollout_phase", "active") not in ("active", "rollback"):
+        raise ValueError("Unknown rollout_phase")
+    if settings.get("primary_scenario") not in (None, *DEFAULT_WEIGHTS):
+        raise ValueError("Unknown primary_scenario")
+    if settings.get("crash_family") not in (None, 0, 1, 2, 3, 4):
+        raise ValueError("crash_family must be 0..4")
+    weights = dict(DEFAULT_WEIGHTS, **settings.get("scenario_weights", {}))
+    if (set(weights) != set(DEFAULT_WEIGHTS) or
+            any(not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in weights.values()) or
+            abs(sum(weights.values()) - 1) > 1e-6 or
+            any(weights[k] < share * v for k, v in dict(clean=.2, mobile=.2, backend=.6).items())):
+        raise ValueError("scenario_weights must sum to 1 and accommodate the configured canary allocation")
+    for key, value in settings.get("journey_weights", {}).items():
+        if key not in ("ecommerce_priority", "banking_priority", "travel_priority") or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+            raise ValueError("journey_weights must use profile_priority keys and probabilities in [0, 1]")
+
+
+def incident_phase_at(timestamp_ms, settings):
+    phase = settings.get("incident_phase", "scheduled")
+    if phase != "scheduled":
+        return phase
+    cycle = settings.get("incident_cycle_minutes", 60)
+    minute = (timestamp_ms / 60000) % cycle
+    return ("onset" if minute < settings.get("incident_onset_minutes", 2) else
+            "recovery" if minute >= cycle - settings.get("incident_recovery_minutes", 6) else "incident")
 
 
 def fraction(identity, salt):
@@ -82,8 +126,9 @@ class Plan:
         self.incident = forced or session.rng.choice(INCIDENTS[session.profile.key].get(self.primary, (None,)))
         if forced:
             self.primary = self.settings.get("primary_scenario") or next((k for k, values in INCIDENTS[session.profile.key].items() if forced in values), "mobile")
-        self.phase = self.settings.get("incident_phase", "incident")
-        self.occurrence = f"payments-{int(session.start_ms // 1_200_000)}"
+        self.phase = incident_phase_at(session.start_ms, self.settings)
+        cycle = self.settings.get("incident_cycle_minutes", 60)
+        self.occurrence = f"payments-{int(session.start_ms // (cycle * 60000))}"
         self.target = None
         self.used = False
         self.attempts = {}
@@ -112,7 +157,8 @@ class Plan:
             context["retry.attempt"] = self.attempts[key] - 1
         incident = self.incident if key == self.target and not self.used else None
         if incident == "payments-db-pool":
-            self.occurrence = f"payments-{int(s.t // 1_200_000)}"
+            self.phase = incident_phase_at(s.t, self.settings)
+            self.occurrence = f"payments-{int(s.t // (self.settings.get('incident_cycle_minutes', 60) * 60000))}"
             context.update({"incident.occurrence_id": self.occurrence, "incident.phase": self.phase,
                             "routing.reason": "weighted_deployment_route",
                             "routing.target": "payments-hot", "db.client.connection.pool.name": "HikariPool-1"})

@@ -107,6 +107,7 @@ def simulate(session, key, params, start, rng=random):
             req["plan"].runtime.operations.pop(next(iter(req["plan"].runtime.operations)))
     if hasattr(session, "plan"):
         session.plan.evidence.append({"key": key, "status": status, "trace_id": trace_id, "client_span_id": span_id,
+            "method": ep.method, "route": ep.route, "url": call.url,
             "traceparent": call.traceparent, "start": start, "end": end, "part_id": session.part.id,
             "incident": req["incident"], "context": context, "transport": call.transport, "data": data,
             "backend_errors": sum(bool(n[3].get("status", {}).get("code") == 2) for n in tb.spans) if tb else 0,

@@ -1,6 +1,6 @@
 """Business-state-driven journeys shared by Android and web capture adapters."""
 from .client_faults import blockage, fault
-from .milestones import mark
+from .milestones import mark, REQUEST_MILESTONES
 
 
 def tap(s, label):
@@ -12,13 +12,18 @@ def request(s, key, **params):
     transport = getattr(s.plan, "transport", None)
     if transport and not s.plan.used and key == s.plan.target:
         params["_transport"] = transport
+    prefix = REQUEST_MILESTONES[key]
+    mark(s, f"{prefix}_requested")
     r = s.api(key, **params)
+    mark(s, f"{prefix}_{'received' if r.ok else 'failed'}")
     if r.status is None:
         mark(s, "request_retry_requested")
         s.wait(.8, 2)
         mark(s, "connectivity_restored")
         params.pop("_transport", None)
+        mark(s, f"{prefix}_requested")
         r = s.api(key, **params)
+        mark(s, f"{prefix}_{'received' if r.ok else 'failed'}")
     return r
 
 
@@ -286,7 +291,7 @@ def banking(s):
         if r.ok and not (plan.incident == "statements-slow" and rng.random() < .2):
             mark(s, "statement_opened")
         else:
-            mark(s, "statement_download_cancelled")
+            mark(s, "statement_open_cancelled" if r.ok else "statement_download_failed")
     elif account_result.data.get("snapshot"):
         mark(s, "account_refresh_requested")
         request(s, "accounts")
@@ -322,8 +327,16 @@ def travel(s):
     s.wait(2, 5)
     if hotel:
         tap(s, "Stays")
+        mark(s, "hotel_search_opened")
         s.type_text(len(city))
         request(s, "locations", q=city[:3])
+        mark(s, "hotel_destination_selected")
+        tap(s, "Check-in and check-out dates")
+        mark(s, "check_in_date_selected")
+        mark(s, "check_out_date_selected")
+        tap(s, "2 adults, 1 room")
+        mark(s, "guest_count_selected")
+        mark(s, "hotel_search_criteria_reviewed")
         mark(s, "hotel_search_submitted")
         s.page_view("hotels", city=city)
         r = request(s, "hotel_search", city=city)
@@ -339,15 +352,28 @@ def travel(s):
         mark(s, "hotel_rate_revalidated" if r.ok else "hotel_rate_unavailable")
         client_issue(s)
         return done(s)
+    mark(s, "flight_search_opened")
+    tap(s, "Round trip")
+    mark(s, "trip_type_selected")
+    s.type_text(len(from_city))
     mark(s, "flight_origin_entered")
     request(s, "locations", q=from_city[:3])
+    s.type_text(len(city))
     mark(s, "flight_destination_entered")
     request(s, "locations", q=city[:3])
+    tap(s, "Departure and return dates")
+    mark(s, "departure_date_selected")
+    mark(s, "return_date_selected")
+    tap(s, "2 passengers, economy")
+    mark(s, "passenger_count_selected")
+    mark(s, "cabin_selected")
+    mark(s, "flight_search_criteria_reviewed")
     mark(s, "flight_search_submitted")
     s.page_view("flights", origin=origin, dest=dest, **{"from": from_city, "to": city})
     with s.flow("search_flights"):
         r = request(s, "flight_search", origin=origin, dest=dest)
     mark(s, "partial_flight_results_displayed" if r.data.get("partial") else "flight_results_displayed")
+    mark(s, "flight_result_count_displayed")
     s.wait(4, 14)
     if rng.random() < .4:
         tap(s, "Earlier departures")

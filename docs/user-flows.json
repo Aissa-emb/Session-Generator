@@ -24,6 +24,16 @@
         "end_match": "product_details_viewed",
         "timeout_ms": 90000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "reviews-n-plus-one",
+        "recs-latency"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.recommendation_serving": "v2"
       }
     },
     {
@@ -46,6 +56,15 @@
         "end_match": "cart_item_added",
         "timeout_ms": 120000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "inventory-sync"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.recommendation_serving": "v2"
       }
     },
     {
@@ -68,6 +87,16 @@
         "end_match": "order_confirmation_viewed",
         "timeout_ms": 180000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "payment-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
       }
     },
     {
@@ -90,6 +119,16 @@
         "end_match": "payment_authorization_succeeded",
         "timeout_ms": 45000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "payment-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
       }
     },
     {
@@ -112,6 +151,16 @@
         "end_match": "account_overview_rendered",
         "timeout_ms": 30000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "core-banking-latency",
+        "account-read-fallback"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
       }
     },
     {
@@ -134,6 +183,15 @@
         "end_match": "transaction_details_viewed",
         "timeout_ms": 90000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "account-read-fallback"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
       }
     },
     {
@@ -156,6 +214,16 @@
         "end_match": "transfer_confirmation_viewed",
         "timeout_ms": 120000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "fraud-latency",
+        "rails-outage"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
       }
     },
     {
@@ -178,6 +246,15 @@
         "end_match": "statement_opened",
         "timeout_ms": 45000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "statements-slow"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
       }
     },
     {
@@ -200,6 +277,16 @@
         "end_match": "itinerary_selected",
         "timeout_ms": 120000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "supplier-timeouts",
+        "search-complexity"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.search_aggregation": "v2"
       }
     },
     {
@@ -222,6 +309,15 @@
         "end_match": "hotel_selected",
         "timeout_ms": 120000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "hotel-supplier-outage"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.search_aggregation": "v2"
       }
     },
     {
@@ -244,6 +340,16 @@
         "end_match": "booking_confirmation_viewed",
         "timeout_ms": 240000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "gds-pnr-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
       }
     },
     {
@@ -266,7 +372,19 @@
         "end_match": "payment_authorization_succeeded",
         "timeout_ms": 45000,
         "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "gds-pnr-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
       }
     }
-  ]
+  ],
+  "recipe_only": true,
+  "api_payload_note": "Source-confirmed dashboard request shape, not a native import format; is_self_preserving requires the restart-setting feature to be enabled."
 }
