@@ -1,0 +1,702 @@
+{
+  "status": "source-confirmed recipe; live picker and saved filters not dashboard-verified",
+  "filters": [
+    {
+      "name": "ecommerce / Payment orchestration v2",
+      "app_id": "5nrc2",
+      "profile": "ecommerce",
+      "session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "retail"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.payment_orchestration",
+            "property_values": [
+              "v2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ecommerce / payment_orchestration legacy control",
+      "app_id": "5nrc2",
+      "profile": "ecommerce",
+      "session_properties": {
+        "business_unit": "retail",
+        "release_ring": "stable",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "legacy"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "retail"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "stable"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.payment_orchestration",
+            "property_values": [
+              "legacy"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ecommerce / Recommendation serving v2",
+      "app_id": "5nrc2",
+      "profile": "ecommerce",
+      "session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.recommendation_serving": "v2"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "retail"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.recommendation_serving",
+            "property_values": [
+              "v2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ecommerce / recommendation_serving legacy control",
+      "app_id": "5nrc2",
+      "profile": "ecommerce",
+      "session_properties": {
+        "business_unit": "retail",
+        "release_ring": "stable",
+        "feature_exposed": "true",
+        "feature.recommendation_serving": "legacy"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "retail"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "stable"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.recommendation_serving",
+            "property_values": [
+              "legacy"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "banking / Banking API v2",
+      "app_id": "5nrc2",
+      "profile": "banking",
+      "session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "banking"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.banking_api_routing",
+            "property_values": [
+              "v2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "banking / banking_api_routing legacy control",
+      "app_id": "5nrc2",
+      "profile": "banking",
+      "session_properties": {
+        "business_unit": "banking",
+        "release_ring": "stable",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "legacy"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "banking"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "stable"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.banking_api_routing",
+            "property_values": [
+              "legacy"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "travel / Payment orchestration v2",
+      "app_id": "5nrc2",
+      "profile": "travel",
+      "session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "travel"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.payment_orchestration",
+            "property_values": [
+              "v2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "travel / payment_orchestration legacy control",
+      "app_id": "5nrc2",
+      "profile": "travel",
+      "session_properties": {
+        "business_unit": "travel",
+        "release_ring": "stable",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "legacy"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "travel"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "stable"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.payment_orchestration",
+            "property_values": [
+              "legacy"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "travel / Search aggregation v2",
+      "app_id": "5nrc2",
+      "profile": "travel",
+      "session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.search_aggregation": "v2"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "travel"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.search_aggregation",
+            "property_values": [
+              "v2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "travel / search_aggregation legacy control",
+      "app_id": "5nrc2",
+      "profile": "travel",
+      "session_properties": {
+        "business_unit": "travel",
+        "release_ring": "stable",
+        "feature_exposed": "true",
+        "feature.search_aggregation": "legacy"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "travel"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "stable"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature.search_aggregation",
+            "property_values": [
+              "legacy"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ecommerce / Canary rollout",
+      "app_id": "5nrc2",
+      "profile": "ecommerce",
+      "session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "retail"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "banking / Canary rollout",
+      "app_id": "5nrc2",
+      "profile": "banking",
+      "session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "banking"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "travel / Canary rollout",
+      "app_id": "5nrc2",
+      "profile": "travel",
+      "session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "travel"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "mobile_failure_only": {
+    "ui_label": "Status Code Range",
+    "key": "status_code",
+    "range": [
+      500,
+      599
+    ],
+    "note": "Add only for backend-caused HTTP failures; omit for HTTP-200 fallbacks. Connection errors are a separate filter and do not prove backend failure."
+  },
+  "source_revision": "dashjs 8bbe1ae683ba4091548d2088f12f695da3a00f61",
+  "source_paths": [
+    "src/widgets/AdvancedFilter/helpers/getAPIFiltersFromMetric.test.ts",
+    "src/pages/UserJourney/components/UserJourneyForm/UserJourneyForm.tsx",
+    "src/pages/UserJourney/helpers/convertSegmentIntoSegmentConfiguration.ts"
+  ]
+}

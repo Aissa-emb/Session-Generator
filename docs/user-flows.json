@@ -1,0 +1,390 @@
+{
+  "configuration_status": "User will create the definitions from this catalog; generator is ready and running.",
+  "form_units": "milliseconds",
+  "max_timeout_ms": 300000,
+  "shared_app_note": "Payment authorization has one shared anchor pair. Use one definition and business_unit filters for retail/travel; the catalog contains 12 profile views and 11 unique definitions.",
+  "flows": [
+    {
+      "name": "Product discovery",
+      "profile": "ecommerce",
+      "business_unit": "retail",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "product_search_submitted",
+      "end_type": "Breadcrumb",
+      "end": "product_details_viewed",
+      "timeout_seconds": 90,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 90000,
+      "api_payload": {
+        "name": "Product discovery",
+        "start_type": "breadcrumb",
+        "start_match": "product_search_submitted",
+        "end_type": "breadcrumb",
+        "end_match": "product_details_viewed",
+        "timeout_ms": 90000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "reviews-n-plus-one",
+        "recs-latency"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.recommendation_serving": "v2"
+      }
+    },
+    {
+      "name": "Product to cart",
+      "profile": "ecommerce",
+      "business_unit": "retail",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "product_details_viewed",
+      "end_type": "Breadcrumb",
+      "end": "cart_item_added",
+      "timeout_seconds": 120,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 120000,
+      "api_payload": {
+        "name": "Product to cart",
+        "start_type": "breadcrumb",
+        "start_match": "product_details_viewed",
+        "end_type": "breadcrumb",
+        "end_match": "cart_item_added",
+        "timeout_ms": 120000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "inventory-sync"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.recommendation_serving": "v2"
+      }
+    },
+    {
+      "name": "Checkout completion",
+      "profile": "ecommerce",
+      "business_unit": "retail",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "checkout_started",
+      "end_type": "Breadcrumb",
+      "end": "order_confirmation_viewed",
+      "timeout_seconds": 180,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 180000,
+      "api_payload": {
+        "name": "Checkout completion",
+        "start_type": "breadcrumb",
+        "start_match": "checkout_started",
+        "end_type": "breadcrumb",
+        "end_match": "order_confirmation_viewed",
+        "timeout_ms": 180000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "payment-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
+      }
+    },
+    {
+      "name": "Payment authorization",
+      "profile": "ecommerce",
+      "business_unit": "retail",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "payment_authorization_started",
+      "end_type": "Breadcrumb",
+      "end": "payment_authorization_succeeded",
+      "timeout_seconds": 45,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 45000,
+      "api_payload": {
+        "name": "Payment authorization",
+        "start_type": "breadcrumb",
+        "start_match": "payment_authorization_started",
+        "end_type": "breadcrumb",
+        "end_match": "payment_authorization_succeeded",
+        "timeout_ms": 45000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "payment-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
+      }
+    },
+    {
+      "name": "Account overview",
+      "profile": "banking",
+      "business_unit": "banking",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "account_overview_opened",
+      "end_type": "Breadcrumb",
+      "end": "account_overview_rendered",
+      "timeout_seconds": 30,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 30000,
+      "api_payload": {
+        "name": "Account overview",
+        "start_type": "breadcrumb",
+        "start_match": "account_overview_opened",
+        "end_type": "breadcrumb",
+        "end_match": "account_overview_rendered",
+        "timeout_ms": 30000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "core-banking-latency",
+        "account-read-fallback"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
+      }
+    },
+    {
+      "name": "Transaction lookup",
+      "profile": "banking",
+      "business_unit": "banking",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "transaction_search_submitted",
+      "end_type": "Breadcrumb",
+      "end": "transaction_details_viewed",
+      "timeout_seconds": 90,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 90000,
+      "api_payload": {
+        "name": "Transaction lookup",
+        "start_type": "breadcrumb",
+        "start_match": "transaction_search_submitted",
+        "end_type": "breadcrumb",
+        "end_match": "transaction_details_viewed",
+        "timeout_ms": 90000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "account-read-fallback"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
+      }
+    },
+    {
+      "name": "Transfer completion",
+      "profile": "banking",
+      "business_unit": "banking",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "transfer_started",
+      "end_type": "Breadcrumb",
+      "end": "transfer_confirmation_viewed",
+      "timeout_seconds": 120,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 120000,
+      "api_payload": {
+        "name": "Transfer completion",
+        "start_type": "breadcrumb",
+        "start_match": "transfer_started",
+        "end_type": "breadcrumb",
+        "end_match": "transfer_confirmation_viewed",
+        "timeout_ms": 120000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "fraud-latency",
+        "rails-outage"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
+      }
+    },
+    {
+      "name": "Statement retrieval",
+      "profile": "banking",
+      "business_unit": "banking",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "statement_download_requested",
+      "end_type": "Breadcrumb",
+      "end": "statement_opened",
+      "timeout_seconds": 45,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 45000,
+      "api_payload": {
+        "name": "Statement retrieval",
+        "start_type": "breadcrumb",
+        "start_match": "statement_download_requested",
+        "end_type": "breadcrumb",
+        "end_match": "statement_opened",
+        "timeout_ms": 45000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "statements-slow"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.banking_api_routing": "v2"
+      }
+    },
+    {
+      "name": "Flight selection",
+      "profile": "travel",
+      "business_unit": "travel",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "flight_search_submitted",
+      "end_type": "Breadcrumb",
+      "end": "itinerary_selected",
+      "timeout_seconds": 120,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 120000,
+      "api_payload": {
+        "name": "Flight selection",
+        "start_type": "breadcrumb",
+        "start_match": "flight_search_submitted",
+        "end_type": "breadcrumb",
+        "end_match": "itinerary_selected",
+        "timeout_ms": 120000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "supplier-timeouts",
+        "search-complexity"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.search_aggregation": "v2"
+      }
+    },
+    {
+      "name": "Hotel selection",
+      "profile": "travel",
+      "business_unit": "travel",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "hotel_search_submitted",
+      "end_type": "Breadcrumb",
+      "end": "hotel_selected",
+      "timeout_seconds": 120,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 120000,
+      "api_payload": {
+        "name": "Hotel selection",
+        "start_type": "breadcrumb",
+        "start_match": "hotel_search_submitted",
+        "end_type": "breadcrumb",
+        "end_match": "hotel_selected",
+        "timeout_ms": 120000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "hotel-supplier-outage"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.search_aggregation": "v2"
+      }
+    },
+    {
+      "name": "Booking completion",
+      "profile": "travel",
+      "business_unit": "travel",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "booking_started",
+      "end_type": "Breadcrumb",
+      "end": "booking_confirmation_viewed",
+      "timeout_seconds": 240,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 240000,
+      "api_payload": {
+        "name": "Booking completion",
+        "start_type": "breadcrumb",
+        "start_match": "booking_started",
+        "end_type": "breadcrumb",
+        "end_match": "booking_confirmation_viewed",
+        "timeout_ms": 240000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "gds-pnr-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
+      }
+    },
+    {
+      "name": "Payment authorization",
+      "profile": "travel",
+      "business_unit": "travel",
+      "app_id": "5nrc2",
+      "start_type": "Breadcrumb",
+      "start": "payment_authorization_started",
+      "end_type": "Breadcrumb",
+      "end": "payment_authorization_succeeded",
+      "timeout_seconds": 45,
+      "ignore_restarts_while_in_progress": true,
+      "timeout_ms": 45000,
+      "api_payload": {
+        "name": "Payment authorization",
+        "start_type": "breadcrumb",
+        "start_match": "payment_authorization_started",
+        "end_type": "breadcrumb",
+        "end_match": "payment_authorization_succeeded",
+        "timeout_ms": 45000,
+        "is_self_preserving": true
+      },
+      "associated_incidents": [
+        "payments-db-pool",
+        "gds-pnr-timeouts"
+      ],
+      "suggested_session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true",
+        "feature.payment_orchestration": "v2"
+      }
+    }
+  ],
+  "recipe_only": true,
+  "api_payload_note": "Source-confirmed dashboard request shape, not a native import format; is_self_preserving requires the restart-setting feature to be enabled."
+}

@@ -28,7 +28,11 @@ TP = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-01$")
 
 # Keys added by app code (session properties, custom span/log attributes) rather than the SDK.
 CUSTOM_OK = re.compile(r"^(emb\.properties\.|journey\.|product\.|checkout\.|order\.|http\.status_code$|auth\.|transfer\.|"
-                       r"statement\.|search\.|booking\.|mfa\.|emb\.error_code$)")
+                       r"statement\.|search\.|booking\.|mfa\.|account\.|error\.type$|emb\.error_code$)")
+# App-supplied attributes on custom performance spans; validate their types
+# rather than treating them as built-in keys present in the reference capture.
+CUSTOM_TASK_ATTRIBUTES = {"app.operation": "stringValue", "app.fallback.used": "boolValue",
+                          "http.response.status_code": "intValue"}
 
 
 GOLDEN = os.path.join(ROOT, "reference", "android-sdk-golden")
@@ -110,7 +114,10 @@ def check_envelope(doc, problem, client_spans, devices):
             m = TP.match(tp)
             if not m or m.group(1) != s["trace_id"] or m.group(2) != s["span_id"]:
                 problem("traceparent does not match the network span IDs")
-            if s["status"] != ("Error" if int(a["http.response.status_code"]) >= 400 else "Unset"):
+            code = a.get("http.response.status_code")
+            if code is None and not a.get("error.type"):
+                problem("request without a response needs a transport error")
+            if s["status"] != ("Error" if code is None or int(code) >= 400 else "Unset"):
                 problem("network span status must be Unset for 1xx-3xx and Error for 4xx/5xx")
             client_spans[s["trace_id"]] = {"spanId": s["span_id"], "startTimeUnixNano": str(s["start_time_unix_nano"]),
                                            "endTimeUnixNano": str(s["end_time_unix_nano"])}
@@ -208,6 +215,8 @@ def main(d):
                     ref = schema.get(k) or schema.get(next((x for x in schema if x[:2] == k[:2]), None), {})
                     for a in it.get("attributes", []):
                         r = ref.get(a["key"])
+                        if r is None and k[2] == "perf":
+                            r = CUSTOM_TASK_ATTRIBUTES.get(a["key"])
                         if r is None and not CUSTOM_OK.match(a["key"]):
                             problem(f"{k[1]}/{k[2]}: key not in capture: {a['key']}")
                         elif r is not None and r != vtype(a["value"]) and r != "empty":
@@ -239,6 +248,11 @@ def main(d):
     for tid, spans in backend.items():
         b = browser_spans.get(tid)
         if not b:
+            roots = [s for _, s in spans if not s.get("parentSpanId")]
+            if len(roots) == 1 and roots[0]["name"] == "authorization_worker.batch":
+                a = {x["key"]: next(iter(x["value"].values())) for x in roots[0]["attributes"]}
+                if a.get("workload.source") == "scheduled_authorizations" and len(spans) == 52:
+                    continue
             problem("backend trace without a matching browser network span")
             continue
         ids = {s["spanId"]: s for _, s in spans}

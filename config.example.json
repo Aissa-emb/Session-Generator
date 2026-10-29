@@ -10,5 +10,32 @@
   "chronosphere": {
     "tenant": "",
     "api_token_file": ""
+  },
+  "generation": {
+    "provenance": "synthetic demonstration telemetry",
+    "cohort_seed": "vantra-2026-10",
+    "canary_share": 0.25,
+    "rollout_phase": "active",
+    "incident_phase": "scheduled",
+    "incident_cycle_minutes": 60,
+    "incident_onset_minutes": 2,
+    "incident_recovery_minutes": 6,
+    "scenario_weights": {
+      "clean": 0.15,
+      "mobile": 0.3,
+      "backend": 0.25,
+      "slow": 0.15,
+      "handled": 0.15,
+      "blockage": 0,
+      "crash": 0
+    },
+    "transport_share": 0.4,
+    "journey_weights": {
+      "ecommerce_priority": 0.23,
+      "banking_priority": 0.18,
+      "travel_priority": 0.23
+    },
+    "crash_session_rate": 0.1,
+    "blockage_session_rate": 0.3
   }
 }

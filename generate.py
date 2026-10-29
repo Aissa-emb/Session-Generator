@@ -40,6 +40,13 @@ def main():
     ap.add_argument("--diurnal", action="store_true",
                     help="live mode: follow a daily traffic curve (US Eastern time) around the --rate average")
     ap.add_argument("--seed", type=int)
+    ap.add_argument("--scenario", choices=["clean", "mobile", "backend", "slow", "handled", "blockage", "crash"],
+                    help="select a primary scenario for a bounded verification run; excluded from population-rate claims")
+    ap.add_argument("--incident-phase", choices=["scheduled", "onset", "incident", "recovery"])
+    ap.add_argument("--rollout-phase", choices=["active", "rollback"])
+    ap.add_argument("--crash-family", type=int, choices=range(5), help="bounded crash-family verification, 0 through 4")
+    ap.add_argument("--manifest", help="owner-only JSONL evidence file for live sessions and acceptance receipts")
+    ap.add_argument("--verification-plan", help="JSON list of bounded verification cases, then resume the normal mix at the same rate")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--verbose", action="store_true")
     a = ap.parse_args()
@@ -59,6 +66,17 @@ def main():
     if a.seed is not None:
         random.seed(a.seed)
     cfg = load_config(a.config)
+    generation = cfg.setdefault("generation", {})
+    if a.manifest:
+        generation["manifest_path"] = os.path.abspath(a.manifest)
+    if a.verification_plan:
+        import json
+        with open(a.verification_plan) as f:
+            generation["verification_plan"] = json.load(f)
+    for key, value in (("primary_scenario", a.scenario), ("incident_phase", a.incident_phase),
+                       ("rollout_phase", a.rollout_phase), ("crash_family", a.crash_family)):
+        if value is not None:
+            generation[key] = value
     if a.dry_run:
         for k in keys:
             cfg["embrace"]["apps"].setdefault(k, cfg["embrace"]["apps"].get("default") or "dryrn")

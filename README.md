@@ -1,12 +1,8 @@
 # XCOR demo data generator
 
-Generates realistic Android app sessions (or web sessions with `--platform web`) in Cortex XCOR RUM (Embrace) and full distributed backend traces in Cortex XCOR (Chronosphere), stitched together end to end:
+This project creates realistic demo sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. All of that activity is simulated by the generator; it does not run a real app or backend.
 
-- Every API call in a session carries a W3C `traceparent`.
-- The backend trace for that call uses the same trace ID, and its root span's parent is the app's network span.
-- Embrace's network span forwarding sends the app's network span to Chronosphere, where it becomes the root of the trace. The session timeline in Embrace then shows **Forwarded** and **View trace in Cortex XCOR** for each call.
-
-Every request enters through the shared platform: `api-gateway` (token validation, Redis rate limiting) and the line of business's experience API, with `customer-identity-service` and `customer-profile-service` behind it. Retail checkout and travel booking both authorize through `payment-authorization-service` (with `fraud-risk-scoring-service`), and order and booking events reach `customer-notification-service` over Kafka. Key traces are large: a checkout is about 60 spans across 14 services, a booking about 50.
+The generator sends session data directly to Embrace using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Embrace's Network Spans Forwarding integration sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the Embrace session timeline.
 
 Three lines of business are included:
 
@@ -119,7 +115,13 @@ Each session prints one line with the journey, device, number of pages, API call
 | travel | `gds-pnr-timeouts` | PNR creation times out; bookings fail with 504 |
 | travel | `hotel-supplier-outage` | Hotel supplier returns 503; results fall back to cached rates |
 
-Without `--incident`, errors are sprinkled in at realistic rates: about 3% of checkouts and 6% of bookings hit the payments connection pool, plus card declines, processor and PNR timeouts, inventory deadlocks that are retried, product-cache timeouts that fall back to the database, rate-limiter timeouts that fail open, and core-banking calls that succeed on retry. Most traces are healthy.
+Without `--incident`, a seeded session policy chooses one primary scenario and generates related consequences. This is an intentionally enriched **synthetic demonstration distribution**, not a claim about production reliability. The current presentation mix targets 10% fatal crashes and 30% captured main-thread freezes lasting 6–12 seconds. These client faults are assigned across stable and canary users, independently of the primary backend/handled-error scenario, so client and backend failures can overlap. Backend-issue coverage still targets 80% of exposed canary sessions. Explicit `--scenario` or `--incident` cases remain reproducible and do not receive an unrelated random client fault. `tools/calibrate.py` measures actual emitted evidence and overlapping categories per profile; labels are not counted as proof.
+
+The `generation` section of `config.example.json` controls `crash_session_rate`, `blockage_session_rate`, primary weights, cohort seed/share, priority journey probabilities and transport-failure share. Crash and blockage probabilities must sum to at most one. Stable identity assignment is persisted in the persona pool. Session exposure starts false on each visit and changes only when a feature request runs. Feature context is explicitly propagated to backend spans and logs, including Redis clients; it is never stored in service resources.
+
+Additional controls: `--scenario clean|mobile|backend|slow|handled|blockage|crash`, `--crash-family 0..4`, `--incident-phase scheduled|onset|incident|recovery`, and `--rollout-phase active|rollback`. Scheduled shared-payment contention defaults to hourly UTC cycles: two minutes of onset, 52 active minutes and six recovery minutes. Phase is evaluated at request time; Shop and Travel share the occurrence, affected PAS instance and deterministic occupant traces. Healthy routes use other instances. Explicit phases select bounded verification cases; do not use such a selected corpus to claim population rates. `--manifest /absolute/path.jsonl` records live session/request identities and separate export receipts. `--verification-plan cases.json` runs a finite JSON case list at the existing rate, then resumes the normal distribution. Remove the plan from persistent configuration after the run so restarting does not repeat the selected corpus.
+
+The smallest explicit new incident is `banking --incident account-read-fallback`: an actual core-read deadline, a separate retained snapshot, HTTP 200 with read-only/as-of semantics, and no claim that the snapshot confirms a transfer. Pending payment/PNR outcomes use a status endpoint and the same idempotency identifier. A timeout never becomes an invented confirmation.
 
 ### Other options
 
@@ -141,7 +143,7 @@ Remote endpoints require HTTPS with normal certificate validation. Credential-fr
 - **Envelopes match the Android SDK.** Sessions are posted the way SDK 9.3.x posts them: gzipped Embrace envelopes (`resource`, `metadata`, `version` 0.1.0, `type` spans or logs) to `a-<appId>.data.emb-api.com/v2/spans` and `/v2/logs`, with `User-Agent: Embrace/a/<sdk version>`, `X-EM-AID`, `X-EM-DID` and `X-EM-PAYLOAD-TYPES`. Span, event and log shapes, names and attribute keys follow the SDK source and its integration-test golden files (copies in `reference/android-sdk-golden/`); every attribute value is a string, as the SDK sends it.
 - **Real devices.** Galaxy S25, S25 Ultra, S24, S23, A16, A15, A35 and Z Fold7, Pixel 10, 9, 9 Pro, 9a, 8 and 8a, moto g, and OnePlus 12, reported with their `Build.MODEL` codes (for example `SM-S931U`) so Embrace shows market names, on Android 14 to 16 with matching API levels, screens, SoCs and storage.
 - **App lifecycle.** Cold and warm starts with the SDK's startup span tree (`emb-app-startup-cold` with process init, Embrace init, activity init and render), an activity view plus a view per screen (`Embrace.startView`), navigation state on logs, OkHttp network spans named `emb-<METHOD> <path>` with `Error` status for 4xx/5xx, taps (Compose labels for Northline and Vantra, View resource IDs such as `com.corviabank.mobile:id/sign_in_button` for Corvia), breadcrumbs, custom spans, logs, and session properties. Some sessions are interrupted by switching apps, which gives multi-part user sessions; sign-out in banking ends the session as `Embrace.endSession()` does.
-- **Crashes.** When a checkout or booking failure leads to an unhandled error, the app crashes with a Kotlin `NullPointerException` in the screen's ViewModel: a `sys.android.crash` log with thread dumps, and a session that ends with `emb.crash_id`.
+- **Crashes and freezes.** Five stable crash families per profile use the verified `sys.android.crash` schema, terminate the process, and upload at a modeled relaunch with a new process ID. Main-thread migration, worker-lock and layout freezes use the SDK's `perf.thread_blockage` interval and sample schema. These are generated ingestion records; OS-confirmed ANRs require a real instrumented device and are not claimed here.
 
 ### Web (`--platform web`)
 
@@ -165,6 +167,31 @@ Remote endpoints require HTTPS with normal certificate validation. Credential-fr
 
 ## Check output without sending
 
+For population calibration (no export, no state saved):
+
+```bash
+python3 tools/calibrate.py --sessions 5000 --seed 7331 --output out/calibration.json
+python3 -m unittest discover -s tests -v
+```
+
+`docs/upgrade-audit.json` records the original gaps and capture capabilities. `xcorgen/milestones.py` is the central breadcrumb and twelve profile-flow catalog. Timelines keep only flow anchors and a few meaningful fallback/cancellation milestones; repetitive form changes and request-start/request-end breadcrumbs are suppressed. Business operations instead emit named root spans with their measured duration, HTTP outcome and fallback attribute. Failed HTTP or transport attempts mark the task span as Error; a successful fallback remains successful with failed backend children. The calibration checks that no timeline contains three consecutive breadcrumb rows. User Flows are configured in the dashboard; custom task spans alone do not create those definitions. The current dashboard form expects **milliseconds** (maximum 300,000), and exposes “Ignore restarts while in progress” when the feature is enabled. Fresh sessions must be generated after definitions are saved. The shared app has one payment anchor pair for Shop and Travel, so scope its views by `business_unit` instead of claiming the name alone scopes a definition.
+
+`docs/user-flows.json` contains the setup recipes and `docs/session-filters.json` the source-confirmed Session Property Key/Value conditions. These are recipes, not an import format. In app **Vantra / 5nrc2**, create separate AND conditions for business unit, release ring, exposure and the relevant feature variant. Select the actual incident window. Add the supported HTTP-status filter only for visible mobile failures; leave it off for successful-HTTP fallback demos. In User Flows, create each unique breadcrumb start/end pair, enter its `timeout_ms`, and enable **Ignore restarts while in progress** when available. Generate fresh sessions after saving. Native Error/Abandoned/completion counts require dashboard reconciliation and must not be inferred from a custom failure breadcrumb.
+
+`docs/calibration.json` measures 5,000 sessions per profile with seed 7331 in the representative active incident phase. It includes the union of issue-bearing sessions, overlapping categories, five crash families per profile, actual emitted breadcrumb counts, start/end evidence and expected starts/hour at 10 total sessions/minute with equal profile shares. Simulated return visits accumulate prospectively; no mature D1/D7 retention is claimed.
+
+For live proof, query **all known generated IDs**, preserving missing IDs in the denominator:
+
+```bash
+python3 tools/verify_manifest.py /absolute/path/run.jsonl --config config.json --settle-seconds 240 --output out/verification.json
+```
+
+This records the forwarded mobile span, its exact first backend child, all ancestor checks, failed spans, Redis attributes, product-supplied Embrace session link, separate pool-occupant traces and seed-7331 random exposed-canary samples. API retention is distinct from successful exporter receipts and from dashboard navigation. A transient query failure remains explicitly unverified.
+
+Request enrichment originates in `scenarios.Plan.request` before the outcome. An allowlisted per-call context is scoped using `ContextVar` while builders execute, then passed explicitly to `backend.build_trace`; every descendant and correlated log receives the same applicable values. The OTLP encoder preserves their types and the current direct exporter applies no attribute transformation. Redis spans belong to the caller's resource and carry request attributes, never connection-level attribution. Both `db.system.name=redis` and legacy `db.system=redis` are emitted; `db.namespace=0` identifies the modeled database. Sanitized command text excludes raw identifiers. Custom `routing.*`, `cache.*`, `feature.*`, `incident.*` and pool/lock fields are application metadata. The simulator models propagation; these helpers are not a drop-in instrumentation library for real services.
+
+Standalone `payment-authorization-service / authorization_worker.batch` traces need retention too. The demo tenant uses a narrowly scoped Allow dataset for that service/operation in addition to the existing `vantra-end-to-end` dataset. The request's failed acquisition links to these 50 occupying connections and the maintenance lock. Backend logs are optional and disabled in the live service; trace exception events remain available.
+
 ```bash
 python3 generate.py --profile all --sessions 20 --dry-run out/
 python3 tools/check_output.py out/
@@ -187,3 +214,5 @@ python3 tools/check_output.py out/
 | `deploy/local.xcor-demo-generator.plist` | The always-on LaunchAgent definition |
 | `AGENTS.md` | Handoff notes for AI agents continuing the work |
 | `reference/` | Payloads captured from the real Web SDK |
+
+The current sparse-timeline/failure-intensity deployment is documented in `docs/session-tuning-verification.json`. Its fresh runtime cohort is separate from the earlier full incident audit in `docs/verification-summary.json`; percentages from that earlier snapshot have been superseded.

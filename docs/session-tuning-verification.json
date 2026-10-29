@@ -1,0 +1,269 @@
+{
+  "provenance": "synthetic demonstration telemetry",
+  "generated_at": "2026-10-29T19:25:19.867854+00:00",
+  "deployment": {
+    "previous_commit": "802478e18bec9d6fe3322906dba9548a0b8a7f7f",
+    "deployed_commit": "447eb6c4c21a1abdccad84dec413fa60d9c4a272",
+    "restarted_at": "2026-10-29T19:16:19.891323+00:00",
+    "rate_per_minute": 10,
+    "shutdown_zero_errors": true,
+    "verification_cases": 0,
+    "log_offset": 5113
+  },
+  "configured_targets": {
+    "captured_freeze_session_rate": 0.3,
+    "fatal_crash_session_rate": 0.1,
+    "sessions_per_minute": 10
+  },
+  "local_calibration": {
+    "sessions": 15000,
+    "freeze_percent": 29.567,
+    "crash_percent": 10.08,
+    "client_issue_percent": 67.04,
+    "breadcrumbs_per_session": 4.48,
+    "max_consecutive_breadcrumbs": 2,
+    "per_profile": {
+      "ecommerce": {
+        "rates_percent": {
+          "issue": 90.86,
+          "client_issue": 67.4,
+          "crash": 9.7,
+          "blockage": 30.48,
+          "handled": 25.68,
+          "mobile_failed": 44.26,
+          "backend_degraded_200": 24.8,
+          "slow": 26.46,
+          "flow_eligible": 96.64,
+          "priority_started": 38.8,
+          "failed_attempts": 6.819,
+          "canary_backend_error": 80.094
+        },
+        "breadcrumb_distributions": {
+          "short": {
+            "count": 168,
+            "min": 0,
+            "max": 0,
+            "p50": 0,
+            "p95": 0
+          },
+          "engaged": {
+            "count": 2717,
+            "min": 2,
+            "max": 4,
+            "p50": 3,
+            "p95": 4
+          },
+          "priority": {
+            "count": 1630,
+            "min": 7,
+            "max": 9,
+            "p50": 7,
+            "p95": 9
+          },
+          "interrupted": {
+            "count": 485,
+            "min": 3,
+            "max": 7,
+            "p50": 6,
+            "p95": 7
+          }
+        },
+        "root_span_distribution": {
+          "count": 5000,
+          "min": 1,
+          "max": 10,
+          "p50": 4,
+          "p95": 10
+        },
+        "failed_root_span_distribution": {
+          "count": 5000,
+          "min": 0,
+          "max": 1,
+          "p50": 0,
+          "p95": 1
+        }
+      },
+      "banking": {
+        "rates_percent": {
+          "issue": 90.34,
+          "client_issue": 67.36,
+          "crash": 10.68,
+          "blockage": 28.24,
+          "handled": 26.38,
+          "mobile_failed": 28.9,
+          "backend_degraded_200": 24.58,
+          "slow": 24.2,
+          "flow_eligible": 97.82,
+          "priority_started": 36.56,
+          "failed_attempts": 5.387,
+          "canary_backend_error": 79.197
+        },
+        "breadcrumb_distributions": {
+          "short": {
+            "count": 109,
+            "min": 1,
+            "max": 1,
+            "p50": 1,
+            "p95": 1
+          },
+          "engaged": {
+            "count": 2645,
+            "min": 4,
+            "max": 6,
+            "p50": 5,
+            "p95": 6
+          },
+          "priority": {
+            "count": 1712,
+            "min": 6,
+            "max": 7,
+            "p50": 6,
+            "p95": 7
+          },
+          "interrupted": {
+            "count": 534,
+            "min": 5,
+            "max": 6,
+            "p50": 5,
+            "p95": 6
+          }
+        },
+        "root_span_distribution": {
+          "count": 5000,
+          "min": 1,
+          "max": 8,
+          "p50": 5,
+          "p95": 8
+        },
+        "failed_root_span_distribution": {
+          "count": 5000,
+          "min": 0,
+          "max": 1,
+          "p50": 0,
+          "p95": 1
+        }
+      },
+      "travel": {
+        "rates_percent": {
+          "issue": 91.16,
+          "client_issue": 66.36,
+          "crash": 9.86,
+          "blockage": 29.98,
+          "handled": 24.32,
+          "mobile_failed": 29.06,
+          "backend_degraded_200": 25.38,
+          "slow": 16.78,
+          "flow_eligible": 97.32,
+          "priority_started": 37.7,
+          "failed_attempts": 6.569,
+          "canary_backend_error": 79.803
+        },
+        "breadcrumb_distributions": {
+          "short": {
+            "count": 134,
+            "min": 1,
+            "max": 1,
+            "p50": 1,
+            "p95": 1
+          },
+          "engaged": {
+            "count": 2784,
+            "min": 1,
+            "max": 3,
+            "p50": 2,
+            "p95": 3
+          },
+          "priority": {
+            "count": 1589,
+            "min": 6,
+            "max": 8,
+            "p50": 7,
+            "p95": 8
+          },
+          "interrupted": {
+            "count": 493,
+            "min": 2,
+            "max": 6,
+            "p50": 5,
+            "p95": 6
+          }
+        },
+        "root_span_distribution": {
+          "count": 5000,
+          "min": 1,
+          "max": 6,
+          "p50": 2,
+          "p95": 6
+        },
+        "failed_root_span_distribution": {
+          "count": 5000,
+          "min": 0,
+          "max": 1,
+          "p50": 0,
+          "p95": 1
+        }
+      }
+    }
+  },
+  "fresh_live_sample": {
+    "sessions": 35,
+    "expected_requests": 167,
+    "retained": 167,
+    "linked": 167,
+    "context_mismatch_requests": 0,
+    "pre_server_transport_failures": 5,
+    "measured_window_utc": [
+      "2026-10-29T19:16:19.996630+00:00",
+      "2026-10-29T19:20:41.750818+00:00"
+    ],
+    "by_profile": {
+      "banking": 12,
+      "ecommerce": 10,
+      "travel": 13
+    },
+    "captured_freezes": 3,
+    "fatal_crashes": 3,
+    "task_root_spans": 141,
+    "failed_task_root_spans": 13,
+    "generated_since_restart": 88
+  },
+  "export_receipts_since_restart": [
+    {
+      "stage": "accepted",
+      "target": "embrace",
+      "kind": "logs",
+      "count": 37
+    },
+    {
+      "stage": "accepted",
+      "target": "embrace",
+      "kind": "spans",
+      "count": 90
+    },
+    {
+      "stage": "accepted",
+      "target": "otlp",
+      "kind": "traces",
+      "count": 363
+    }
+  ],
+  "query_errors": [],
+  "validation": {
+    "regression_tests": 36,
+    "android_dry_run_sessions": 120,
+    "web_dry_run_sessions": 120,
+    "incident_dry_run_sessions": 120,
+    "gitleaks_working_tree": "passed",
+    "bandit": "passed",
+    "github_security_and_payload_checks": "passed for deployed revision"
+  },
+  "limitations": [
+    "Local percentages measure emitted records; a small live sample is not proof of an exact population percentage.",
+    "Captured freezes use the Android SDK thread-blockage/ANR interval schema. OS-confirmed ANRs are not simulated.",
+    "Export acceptance and retained XCOR parentage are verified separately. Native Embrace issue groups and timeline rendering remain UI-unverified.",
+    "Embrace links are exact dashboard-session URLs returned on retained forwarded spans; browser navigation was not authenticated.",
+    "User Flow definitions remain user-owned. Their existing start/end breadcrumbs are preserved.",
+    "The live LaunchAgent pauses while this Mac sleeps."
+  ],
+  "pull_request": "https://github.com/Aissa-emb/Session-Generator/pull/2"
+}

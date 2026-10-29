@@ -1,0 +1,1051 @@
+{
+  "provenance": "synthetic",
+  "scope": "locally generated evidence; retention/dashboard unverified",
+  "seed": 7331,
+  "sessions_per_profile": 5000,
+  "profiles": {
+    "ecommerce": {
+      "counts": {
+        "issue": 4543,
+        "client_issue": 3370,
+        "crash": 485,
+        "blockage": 1524,
+        "handled": 1284,
+        "mobile_failed": 2213,
+        "attempts": 32453,
+        "failed_attempts": 2213,
+        "business_conflicts": 749,
+        "cancelled_attempts": 104,
+        "backend_degraded_200": 1240,
+        "slow": 1323,
+        "flow_eligible": 4832,
+        "flow_starts": 13544,
+        "priority_started": 1940,
+        "priority_completed": 1006,
+        "breadcrumbs": 22073,
+        "canary_exposed": 1281,
+        "canary_backend_error": 1026
+      },
+      "rates_percent": {
+        "issue": 90.86,
+        "client_issue": 67.4,
+        "crash": 9.7,
+        "blockage": 30.48,
+        "handled": 25.68,
+        "mobile_failed": 44.26,
+        "backend_degraded_200": 24.8,
+        "slow": 26.46,
+        "flow_eligible": 96.64,
+        "priority_started": 38.8,
+        "failed_attempts": 6.819,
+        "canary_backend_error": 80.094
+      },
+      "crash_families": {
+        "java.lang.NullPointerException:com.northlinegoods.android.ecommerce.CheckoutResultMapper.mapResult(CheckoutResultMapper.kt:84)": 193,
+        "java.lang.IllegalStateException:com.northlinegoods.android.ecommerce.CheckoutFragment.onResult(CheckoutFragment.kt:126)": 117,
+        "java.lang.IndexOutOfBoundsException:com.northlinegoods.android.ecommerce.CartAdapter.onItemSelected(CartAdapter.kt:67)": 84,
+        "java.lang.NumberFormatException:com.northlinegoods.android.ecommerce.PriceParser.parseAmount(PriceParser.kt:52)": 51,
+        "android.database.sqlite.SQLiteException:com.northlinegoods.android.ecommerce.CatalogCacheMigration.migrate(CatalogCacheMigration.kt:41)": 40
+      },
+      "incident_examples": {
+        "payments-db-pool": {
+          "session_id": "7C1A623A0787F8BAA64B7800F4777C2E",
+          "request": {
+            "key": "place_order",
+            "status": 502,
+            "trace_id": "aa3ea43ab63021e3e208f592ea77f0f6",
+            "client_span_id": "0e90c28c9658e041",
+            "method": "POST",
+            "route": "/api/v2/checkout/orders",
+            "url": "https://api.northlinegoods.com/api/v2/checkout/orders",
+            "traceparent": "00-aa3ea43ab63021e3e208f592ea77f0f6-0e90c28c9658e041-01",
+            "start": 1793300035469.3489,
+            "end": 1793300038599.2437,
+            "part_id": "7E483F8377B50C7933EF14E17E96021B",
+            "incident": "payments-db-pool",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "retail",
+              "app.version": "6.14.2",
+              "feature_exposed": "true",
+              "feature.payment_orchestration": "legacy",
+              "routing.policy": "payment_orchestration.legacy",
+              "routing.reason": "weighted_deployment_route",
+              "routing.target": "payments-hot",
+              "operation.id": "fb170bd89728e12922a8cfe4",
+              "retry.attempt": 0,
+              "incident.occurrence_id": "payments-498138",
+              "incident.phase": "incident",
+              "db.client.connection.pool.name": "HikariPool-1"
+            },
+            "transport": null,
+            "data": {
+              "order_id": "507-4690250-9570663"
+            },
+            "backend_errors": 8,
+            "first_backend_span_id": "60678c9a5055fe57",
+            "companion_trace_ids": [
+              "e96b82177e8cf94416a3a0b104118619"
+            ]
+          }
+        },
+        "payment-timeouts": {
+          "session_id": "0C163B218C03204C50F755F36D4875EC",
+          "request": {
+            "key": "place_order",
+            "status": 504,
+            "trace_id": "e49fd128132b05ea61d8b104071a84ff",
+            "client_span_id": "4dfa921b1db2369e",
+            "method": "POST",
+            "route": "/api/v2/checkout/orders",
+            "url": "https://api.northlinegoods.com/api/v2/checkout/orders",
+            "traceparent": "00-e49fd128132b05ea61d8b104071a84ff-4dfa921b1db2369e-01",
+            "start": 1793300061072.7449,
+            "end": 1793300068994.162,
+            "part_id": "FD88A52D8CBB1EF255A86EF6398C6F5C",
+            "incident": "payment-timeouts",
+            "context": {
+              "release_ring": "canary",
+              "business_unit": "retail",
+              "app.version": "6.14.2",
+              "feature_exposed": "true",
+              "feature.payment_orchestration": "v2",
+              "routing.policy": "payment_orchestration.v2",
+              "routing.reason": "stable_identity",
+              "routing.target": "canary",
+              "operation.id": "a5ece93febb750080b2c472f",
+              "retry.attempt": 0
+            },
+            "transport": null,
+            "data": {
+              "order_id": "423-7562060-1371277"
+            },
+            "backend_errors": 8,
+            "first_backend_span_id": "b1a25bee194a7410"
+          }
+        },
+        "recs-latency": {
+          "session_id": "68F5466C8A1F9814AB0D23DF94334AA0",
+          "request": {
+            "key": "get_recommendations",
+            "status": 200,
+            "trace_id": "803c43367b42ce6f77484ec9cf6fdd28",
+            "client_span_id": "665b894425b79321",
+            "method": "GET",
+            "route": "/api/v2/recommendations",
+            "url": "https://api.northlinegoods.com/api/v2/recommendations?sku=1033519",
+            "traceparent": "00-803c43367b42ce6f77484ec9cf6fdd28-665b894425b79321-01",
+            "start": 1793300055624.459,
+            "end": 1793300056520.8293,
+            "part_id": "5953A5236D07BE7885F270298A981E3E",
+            "incident": "recs-latency",
+            "context": {
+              "release_ring": "canary",
+              "business_unit": "retail",
+              "app.version": "6.14.2",
+              "feature_exposed": "true",
+              "feature.recommendation_serving": "v2",
+              "routing.policy": "recommendation_serving.v2",
+              "routing.reason": "stable_identity",
+              "routing.target": "canary"
+            },
+            "transport": null,
+            "data": {
+              "fallback": true,
+              "source": "popular_products"
+            },
+            "backend_errors": 2,
+            "first_backend_span_id": "b9f6d207aeb6a28b"
+          }
+        },
+        "inventory-sync": {
+          "session_id": "D22CEA0D28666351AFE5C9363A455B40",
+          "request": {
+            "key": "add_to_cart",
+            "status": 409,
+            "trace_id": "8c552c4556c669d9c3b356bc4ca24965",
+            "client_span_id": "f4929d62c3981416",
+            "method": "POST",
+            "route": "/api/v2/cart/items",
+            "url": "https://api.northlinegoods.com/api/v2/cart/items",
+            "traceparent": "00-8c552c4556c669d9c3b356bc4ca24965-f4929d62c3981416-01",
+            "start": 1793300126554.7156,
+            "end": 1793300126607.6724,
+            "part_id": "FF10CBA697AFE4063FD8DFF2AD74B57B",
+            "incident": "inventory-sync",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "retail",
+              "app.version": "6.12.4",
+              "feature_exposed": "false"
+            },
+            "transport": null,
+            "data": {},
+            "backend_errors": 3,
+            "first_backend_span_id": "0b213e79355f300b"
+          }
+        },
+        "reviews-n-plus-one": {
+          "session_id": "235E8FB56CCD656DEB451060356A6A89",
+          "request": {
+            "key": "get_product",
+            "status": 200,
+            "trace_id": "d7df5dc33016195d83a45af79fe185c5",
+            "client_span_id": "c6192b8cc87ba159",
+            "method": "GET",
+            "route": "/api/v2/products/:sku",
+            "url": "https://api.northlinegoods.com/api/v2/products/1090412",
+            "traceparent": "00-d7df5dc33016195d83a45af79fe185c5-c6192b8cc87ba159-01",
+            "start": 1793300314296.7278,
+            "end": 1793300316413.674,
+            "part_id": "5AC2A6807F1FDF1F8B572DA46C15E85B",
+            "incident": "reviews-n-plus-one",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "retail",
+              "app.version": "6.14.2",
+              "feature_exposed": "false"
+            },
+            "transport": null,
+            "data": {},
+            "backend_errors": 0,
+            "first_backend_span_id": "846320be30cd04be"
+          }
+        }
+      },
+      "flow_evidence": {
+        "Product discovery": {
+          "starts": 4832,
+          "success_endpoints": 4832,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 0,
+          "durations_ms": {
+            "count": 4832,
+            "min": 2480.5632,
+            "max": 12500.821504,
+            "p50": 6154.13,
+            "p95": 9248.6
+          },
+          "starts_per_hour_at_10_total_even_profiles": 193.28
+        },
+        "Product to cart": {
+          "starts": 4832,
+          "success_endpoints": 2986,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 91,
+          "durations_ms": {
+            "count": 2986,
+            "min": 4355.05792,
+            "max": 35906.870272,
+            "p50": 13186.88,
+            "p95": 24095.56
+          },
+          "starts_per_hour_at_10_total_even_profiles": 193.28
+        },
+        "Checkout completion": {
+          "starts": 1940,
+          "success_endpoints": 1006,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 310,
+          "durations_ms": {
+            "count": 1006,
+            "min": 5861.567488,
+            "max": 24084.910848,
+            "p50": 11977.91,
+            "p95": 19714.12
+          },
+          "starts_per_hour_at_10_total_even_profiles": 77.6
+        },
+        "Payment authorization": {
+          "starts": 1940,
+          "success_endpoints": 1006,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 310,
+          "durations_ms": {
+            "count": 1006,
+            "min": 336.090112,
+            "max": 10155.644928,
+            "p50": 770.77,
+            "p95": 8377.09
+          },
+          "starts_per_hour_at_10_total_even_profiles": 77.6
+        }
+      },
+      "largest_part_breadcrumb_count": 9,
+      "max_consecutive_breadcrumbs": 2,
+      "root_span_distribution": {
+        "count": 5000,
+        "min": 1,
+        "max": 10,
+        "p50": 4,
+        "p95": 10
+      },
+      "failed_root_span_distribution": {
+        "count": 5000,
+        "min": 0,
+        "max": 1,
+        "p50": 0,
+        "p95": 1
+      },
+      "cohorts": {
+        "assigned_device_identities": {
+          "stable": 3719,
+          "canary": 1281
+        },
+        "sessions": {
+          "stable": 3719,
+          "canary": 1281
+        },
+        "exposed_sessions": {
+          "stable": 3719,
+          "canary": 1281
+        }
+      },
+      "breadcrumb_distributions": {
+        "short": {
+          "count": 168,
+          "min": 0,
+          "max": 0,
+          "p50": 0,
+          "p95": 0
+        },
+        "engaged": {
+          "count": 2717,
+          "min": 2,
+          "max": 4,
+          "p50": 3,
+          "p95": 4
+        },
+        "priority": {
+          "count": 1630,
+          "min": 7,
+          "max": 9,
+          "p50": 7,
+          "p95": 9
+        },
+        "interrupted": {
+          "count": 485,
+          "min": 3,
+          "max": 7,
+          "p50": 6,
+          "p95": 7
+        }
+      }
+    },
+    "banking": {
+      "counts": {
+        "issue": 4517,
+        "client_issue": 3368,
+        "crash": 534,
+        "blockage": 1412,
+        "handled": 1319,
+        "mobile_failed": 1445,
+        "attempts": 26822,
+        "failed_attempts": 1445,
+        "business_conflicts": 0,
+        "cancelled_attempts": 87,
+        "backend_degraded_200": 1229,
+        "slow": 1210,
+        "flow_eligible": 4891,
+        "flow_starts": 12426,
+        "priority_started": 1828,
+        "priority_completed": 1366,
+        "breadcrumbs": 26628,
+        "canary_exposed": 1245,
+        "canary_backend_error": 986
+      },
+      "rates_percent": {
+        "issue": 90.34,
+        "client_issue": 67.36,
+        "crash": 10.68,
+        "blockage": 28.24,
+        "handled": 26.38,
+        "mobile_failed": 28.9,
+        "backend_degraded_200": 24.58,
+        "slow": 24.2,
+        "flow_eligible": 97.82,
+        "priority_started": 36.56,
+        "failed_attempts": 5.387,
+        "canary_backend_error": 79.197
+      },
+      "crash_families": {
+        "java.lang.IndexOutOfBoundsException:com.corviabank.mobile.banking.TransactionAdapter.onItemSelected(TransactionAdapter.kt:67)": 63,
+        "java.lang.IllegalStateException:com.corviabank.mobile.banking.TransferFragment.onResult(TransferFragment.kt:126)": 116,
+        "java.lang.NullPointerException:com.corviabank.mobile.banking.AccountSummaryMapper.mapResult(AccountSummaryMapper.kt:84)": 227,
+        "android.database.sqlite.SQLiteException:com.corviabank.mobile.banking.AccountCacheMigration.migrate(AccountCacheMigration.kt:41)": 45,
+        "java.lang.NumberFormatException:com.corviabank.mobile.banking.AmountParser.parseAmount(AmountParser.kt:52)": 83
+      },
+      "incident_examples": {
+        "account-read-fallback": {
+          "session_id": "83601B5A8B8025E482477A6BA2BD1F9B",
+          "request": {
+            "key": "accounts",
+            "status": 200,
+            "trace_id": "13192ae9d4c9173e4274a9853b8ac988",
+            "client_span_id": "8a2aa2866c12952f",
+            "method": "GET",
+            "route": "/api/v1/accounts",
+            "url": "https://api.corviabank.com/api/v1/accounts",
+            "traceparent": "00-13192ae9d4c9173e4274a9853b8ac988-8a2aa2866c12952f-01",
+            "start": 1793300054560.5767,
+            "end": 1793300055921.3022,
+            "part_id": "BC25E1D6232BDF4E78B612471E5EA2B5",
+            "incident": "account-read-fallback",
+            "context": {
+              "release_ring": "canary",
+              "business_unit": "banking",
+              "app.version": "26.42.0",
+              "feature_exposed": "true",
+              "feature.banking_api_routing": "v2",
+              "routing.policy": "banking_api_routing.v2",
+              "routing.reason": "stable_identity",
+              "routing.target": "canary"
+            },
+            "transport": null,
+            "data": {
+              "snapshot": true,
+              "as_of_ms": 1793299874560,
+              "read_only": true
+            },
+            "backend_errors": 3,
+            "first_backend_span_id": "94e9411020ffce69"
+          }
+        },
+        "statements-slow": {
+          "session_id": "59480FFDE6B428EA69B7293A0C4412B5",
+          "request": {
+            "key": "statement",
+            "status": 200,
+            "trace_id": "4d56c91966f6a608b81b0370d2633884",
+            "client_span_id": "76948b7a21917d45",
+            "method": "GET",
+            "route": "/api/v1/statements/:statementId/pdf",
+            "url": "https://api.corviabank.com/api/v1/statements/2026-09/pdf",
+            "traceparent": "00-4d56c91966f6a608b81b0370d2633884-76948b7a21917d45-01",
+            "start": 1793300194725.1953,
+            "end": 1793300200959.994,
+            "part_id": "5CCA3D1AAE43268B6022CF12C6DF4215",
+            "incident": "statements-slow",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "banking",
+              "app.version": "26.42.0",
+              "feature_exposed": "false"
+            },
+            "transport": null,
+            "data": {},
+            "backend_errors": 0,
+            "first_backend_span_id": "f39e8f405d754e92"
+          }
+        },
+        "core-banking-latency": {
+          "session_id": "605B67C6295B5CF9EA6AA09575BCD54B",
+          "request": {
+            "key": "accounts",
+            "status": 200,
+            "trace_id": "48136ff16e3902f7b89d489c85a959b8",
+            "client_span_id": "da5e387c890dcfa0",
+            "method": "GET",
+            "route": "/api/v1/accounts",
+            "url": "https://api.corviabank.com/api/v1/accounts",
+            "traceparent": "00-48136ff16e3902f7b89d489c85a959b8-da5e387c890dcfa0-01",
+            "start": 1793300353012.4197,
+            "end": 1793300355031.1028,
+            "part_id": "22FC81EED2A4AD308C9D1FF45711D161",
+            "incident": "core-banking-latency",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "banking",
+              "app.version": "26.43.1",
+              "feature_exposed": "true",
+              "feature.banking_api_routing": "legacy",
+              "routing.policy": "banking_api_routing.legacy",
+              "routing.reason": "stable_identity",
+              "routing.target": "stable"
+            },
+            "transport": null,
+            "data": {
+              "snapshot": false,
+              "as_of_ms": 1793300353012,
+              "read_only": false
+            },
+            "backend_errors": 0,
+            "first_backend_span_id": "90131ffabeb948f8"
+          }
+        },
+        "fraud-latency": {
+          "session_id": "10CF56AD2F41169445EFEFCF7851876E",
+          "request": {
+            "key": "create_transfer",
+            "status": 504,
+            "trace_id": "d6aafda0d5cc697fe949e9effd38a406",
+            "client_span_id": "1b1ca2bdce66769b",
+            "method": "POST",
+            "route": "/api/v1/transfers",
+            "url": "https://api.corviabank.com/api/v1/transfers",
+            "traceparent": "00-d6aafda0d5cc697fe949e9effd38a406-1b1ca2bdce66769b-01",
+            "start": 1793300412419.6433,
+            "end": 1793300416483.801,
+            "part_id": "918D15E7462A1EB7A84D9850C25D45C7",
+            "incident": "fraud-latency",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "banking",
+              "app.version": "26.39.2",
+              "feature_exposed": "true",
+              "feature.banking_api_routing": "legacy",
+              "routing.policy": "banking_api_routing.legacy",
+              "routing.reason": "stable_identity",
+              "routing.target": "stable",
+              "operation.id": "f990fa7b5a27f36757d69f95",
+              "retry.attempt": 0
+            },
+            "transport": null,
+            "data": {
+              "transfer_id": "TRF8777260102"
+            },
+            "backend_errors": 7,
+            "first_backend_span_id": "e4056317857d3092"
+          }
+        },
+        "rails-outage": {
+          "session_id": "506819AC64AED7F4B262B735C55E37C9",
+          "request": {
+            "key": "create_transfer",
+            "status": 503,
+            "trace_id": "e9adda2079bf718cb5de90b8b4a6062e",
+            "client_span_id": "7766c8acb66beecc",
+            "method": "POST",
+            "route": "/api/v1/transfers",
+            "url": "https://api.corviabank.com/api/v1/transfers",
+            "traceparent": "00-e9adda2079bf718cb5de90b8b4a6062e-7766c8acb66beecc-01",
+            "start": 1793300491440.2786,
+            "end": 1793300491583.1702,
+            "part_id": "DBFA155573D328B3A7614519C503BB33",
+            "incident": "rails-outage",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "banking",
+              "app.version": "26.43.1",
+              "feature_exposed": "true",
+              "feature.banking_api_routing": "legacy",
+              "routing.policy": "banking_api_routing.legacy",
+              "routing.reason": "stable_identity",
+              "routing.target": "stable",
+              "operation.id": "f8173b03630a556ca3562554",
+              "retry.attempt": 0
+            },
+            "transport": null,
+            "data": {
+              "transfer_id": "TRF2033993691"
+            },
+            "backend_errors": 8,
+            "first_backend_span_id": "a3c38115abefbd78"
+          }
+        }
+      },
+      "flow_evidence": {
+        "Account overview": {
+          "starts": 4891,
+          "success_endpoints": 4891,
+          "duplicate_starts": 0,
+          "success_after_timeout": 2,
+          "incomplete_with_crash": 0,
+          "durations_ms": {
+            "count": 4891,
+            "min": 46.084096,
+            "max": 35163.825152,
+            "p50": 374.62,
+            "p95": 16655.81
+          },
+          "starts_per_hour_at_10_total_even_profiles": 195.64
+        },
+        "Transaction lookup": {
+          "starts": 4891,
+          "success_endpoints": 4891,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 0,
+          "durations_ms": {
+            "count": 4891,
+            "min": 3156.830208,
+            "max": 8685.342208,
+            "p50": 5809.84,
+            "p95": 8063.51
+          },
+          "starts_per_hour_at_10_total_even_profiles": 195.64
+        },
+        "Transfer completion": {
+          "starts": 1828,
+          "success_endpoints": 1366,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 116,
+          "durations_ms": {
+            "count": 1366,
+            "min": 3446.063104,
+            "max": 15237.047296,
+            "p50": 8110.81,
+            "p95": 13526.9
+          },
+          "starts_per_hour_at_10_total_even_profiles": 73.12
+        },
+        "Statement retrieval": {
+          "starts": 816,
+          "success_endpoints": 776,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 0,
+          "durations_ms": {
+            "count": 776,
+            "min": 240.182016,
+            "max": 7753.976832,
+            "p50": 995.77,
+            "p95": 5450.2
+          },
+          "starts_per_hour_at_10_total_even_profiles": 32.64
+        }
+      },
+      "largest_part_breadcrumb_count": 7,
+      "max_consecutive_breadcrumbs": 2,
+      "root_span_distribution": {
+        "count": 5000,
+        "min": 1,
+        "max": 8,
+        "p50": 5,
+        "p95": 8
+      },
+      "failed_root_span_distribution": {
+        "count": 5000,
+        "min": 0,
+        "max": 1,
+        "p50": 0,
+        "p95": 1
+      },
+      "cohorts": {
+        "assigned_device_identities": {
+          "stable": 3755,
+          "canary": 1245
+        },
+        "sessions": {
+          "stable": 3755,
+          "canary": 1245
+        },
+        "exposed_sessions": {
+          "stable": 3646,
+          "canary": 1245
+        }
+      },
+      "breadcrumb_distributions": {
+        "short": {
+          "count": 109,
+          "min": 1,
+          "max": 1,
+          "p50": 1,
+          "p95": 1
+        },
+        "engaged": {
+          "count": 2645,
+          "min": 4,
+          "max": 6,
+          "p50": 5,
+          "p95": 6
+        },
+        "priority": {
+          "count": 1712,
+          "min": 6,
+          "max": 7,
+          "p50": 6,
+          "p95": 7
+        },
+        "interrupted": {
+          "count": 534,
+          "min": 5,
+          "max": 6,
+          "p50": 5,
+          "p95": 6
+        }
+      }
+    },
+    "travel": {
+      "counts": {
+        "issue": 4558,
+        "client_issue": 3318,
+        "crash": 493,
+        "blockage": 1499,
+        "handled": 1216,
+        "mobile_failed": 1453,
+        "attempts": 22119,
+        "failed_attempts": 1453,
+        "business_conflicts": 0,
+        "cancelled_attempts": 105,
+        "backend_degraded_200": 1269,
+        "slow": 839,
+        "flow_eligible": 4866,
+        "flow_starts": 8636,
+        "priority_started": 1885,
+        "priority_completed": 1014,
+        "breadcrumbs": 18494,
+        "canary_exposed": 1218,
+        "canary_backend_error": 972
+      },
+      "rates_percent": {
+        "issue": 91.16,
+        "client_issue": 66.36,
+        "crash": 9.86,
+        "blockage": 29.98,
+        "handled": 24.32,
+        "mobile_failed": 29.06,
+        "backend_degraded_200": 25.38,
+        "slow": 16.78,
+        "flow_eligible": 97.32,
+        "priority_started": 37.7,
+        "failed_attempts": 6.569,
+        "canary_backend_error": 79.803
+      },
+      "crash_families": {
+        "java.lang.NullPointerException:com.vantratravel.android.travel.BookingConfirmationMapper.mapResult(BookingConfirmationMapper.kt:84)": 179,
+        "java.lang.IndexOutOfBoundsException:com.vantratravel.android.travel.ItineraryAdapter.onItemSelected(ItineraryAdapter.kt:67)": 82,
+        "java.lang.IllegalStateException:com.vantratravel.android.travel.BookingFragment.onResult(BookingFragment.kt:126)": 117,
+        "java.lang.NumberFormatException:com.vantratravel.android.travel.FareParser.parseAmount(FareParser.kt:52)": 77,
+        "android.database.sqlite.SQLiteException:com.vantratravel.android.travel.ItineraryCacheMigration.migrate(ItineraryCacheMigration.kt:41)": 38
+      },
+      "incident_examples": {
+        "supplier-timeouts": {
+          "session_id": "63E05C9848B18BD2357650EBD45BF0E4",
+          "request": {
+            "key": "flight_search",
+            "status": 200,
+            "trace_id": "fe53c522a8cfc8e47fe21540389a7b6b",
+            "client_span_id": "91a7a31005e63d75",
+            "method": "POST",
+            "route": "/api/v3/flights/search",
+            "url": "https://api.vantratravel.com/api/v3/flights/search",
+            "traceparent": "00-fe53c522a8cfc8e47fe21540389a7b6b-91a7a31005e63d75-01",
+            "start": 1793300009597.1924,
+            "end": 1793300012760.127,
+            "part_id": "AF62989B5B18E1CE70E843A89A6B2F4C",
+            "incident": "supplier-timeouts",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "travel",
+              "app.version": "10.25.1",
+              "feature_exposed": "true",
+              "feature.search_aggregation": "legacy",
+              "routing.policy": "search_aggregation.legacy",
+              "routing.reason": "stable_identity",
+              "routing.target": "stable"
+            },
+            "transport": null,
+            "data": {
+              "partial": true
+            },
+            "backend_errors": 3,
+            "first_backend_span_id": "117a72424a9550fc"
+          }
+        },
+        "search-complexity": {
+          "session_id": "57DBFF2931D2563493DD58B5CAA7ACB3",
+          "request": {
+            "key": "flight_search",
+            "status": 200,
+            "trace_id": "c3eb52c53b39549a2d1a6e53da5a5e5b",
+            "client_span_id": "fc26c363d0fa3757",
+            "method": "POST",
+            "route": "/api/v3/flights/search",
+            "url": "https://api.vantratravel.com/api/v3/flights/search",
+            "traceparent": "00-c3eb52c53b39549a2d1a6e53da5a5e5b-fc26c363d0fa3757-01",
+            "start": 1793300029038.3608,
+            "end": 1793300033664.128,
+            "part_id": "D59428BEB2F0D473C2531A4A2B1FF895",
+            "incident": "search-complexity",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "travel",
+              "app.version": "10.28.0",
+              "feature_exposed": "true",
+              "feature.search_aggregation": "legacy",
+              "routing.policy": "search_aggregation.legacy",
+              "routing.reason": "stable_identity",
+              "routing.target": "stable"
+            },
+            "transport": null,
+            "data": {
+              "partial": false
+            },
+            "backend_errors": 0,
+            "first_backend_span_id": "fccee6418e4e13e7"
+          }
+        },
+        "hotel-supplier-outage": {
+          "session_id": "0FAF5A6BC58133B11F97325D5E30C15E",
+          "request": {
+            "key": "hotel_search",
+            "status": 200,
+            "trace_id": "65013edded8dd346051327246e80b441",
+            "client_span_id": "a15f06ea3511af0e",
+            "method": "POST",
+            "route": "/api/v3/hotels/search",
+            "url": "https://api.vantratravel.com/api/v3/hotels/search",
+            "traceparent": "00-65013edded8dd346051327246e80b441-a15f06ea3511af0e-01",
+            "start": 1793300106159.9539,
+            "end": 1793300106286.628,
+            "part_id": "A7AB5D6BEACA0171CE0EE3CC762A3DAC",
+            "incident": "hotel-supplier-outage",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "travel",
+              "app.version": "10.27.3",
+              "feature_exposed": "true",
+              "feature.search_aggregation": "legacy",
+              "routing.policy": "search_aggregation.legacy",
+              "routing.reason": "stable_identity",
+              "routing.target": "stable"
+            },
+            "transport": null,
+            "data": {
+              "cached": true,
+              "age_ms": 240000,
+              "indicative": true,
+              "revalidation_required": true
+            },
+            "backend_errors": 1,
+            "first_backend_span_id": "dbc496065f9a9912"
+          }
+        },
+        "payments-db-pool": {
+          "session_id": "9AB09D40AB4095FC03DB8681D4D4D4AA",
+          "request": {
+            "key": "create_booking",
+            "status": 502,
+            "trace_id": "4f4bac4ea3403ece6c9565941455b17a",
+            "client_span_id": "15104d9170aee0f5",
+            "method": "POST",
+            "route": "/api/v3/bookings",
+            "url": "https://api.vantratravel.com/api/v3/bookings",
+            "traceparent": "00-4f4bac4ea3403ece6c9565941455b17a-15104d9170aee0f5-01",
+            "start": 1793300399080.0427,
+            "end": 1793300402466.6746,
+            "part_id": "C2102562B34C9CCFF4524C9BD6D80663",
+            "incident": "payments-db-pool",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "travel",
+              "app.version": "10.28.0",
+              "feature_exposed": "true",
+              "feature.payment_orchestration": "legacy",
+              "routing.policy": "payment_orchestration.legacy",
+              "routing.reason": "weighted_deployment_route",
+              "routing.target": "payments-hot",
+              "operation.id": "198282c9ddd4dc59102cb78b",
+              "retry.attempt": 0,
+              "incident.occurrence_id": "payments-498138",
+              "incident.phase": "incident",
+              "db.client.connection.pool.name": "HikariPool-1"
+            },
+            "transport": null,
+            "data": {
+              "ref": "W4YLTB"
+            },
+            "backend_errors": 8,
+            "first_backend_span_id": "b651db986a68e09d",
+            "companion_trace_ids": [
+              "40e2335ee42bdac2e94cc98d73bc558e",
+              "21651649c40bbf46ca4097d8bedabbcc"
+            ]
+          }
+        },
+        "gds-pnr-timeouts": {
+          "session_id": "4B85193BAED62DDCADD4D15E5D7AC45D",
+          "request": {
+            "key": "create_booking",
+            "status": 504,
+            "trace_id": "fb13a321ddf14059e39fd94835ee3642",
+            "client_span_id": "661ea1f12a8079dc",
+            "method": "POST",
+            "route": "/api/v3/bookings",
+            "url": "https://api.vantratravel.com/api/v3/bookings",
+            "traceparent": "00-fb13a321ddf14059e39fd94835ee3642-661ea1f12a8079dc-01",
+            "start": 1793300722727.0164,
+            "end": 1793300728434.9917,
+            "part_id": "3FE17CDE4DDD704450F963F7E8F339B7",
+            "incident": "gds-pnr-timeouts",
+            "context": {
+              "release_ring": "stable",
+              "business_unit": "travel",
+              "app.version": "10.28.0",
+              "feature_exposed": "true",
+              "feature.payment_orchestration": "legacy",
+              "routing.policy": "payment_orchestration.legacy",
+              "routing.reason": "stable_identity",
+              "routing.target": "stable",
+              "operation.id": "2be7eb0b188dc9481de3f6e9",
+              "retry.attempt": 0
+            },
+            "transport": null,
+            "data": {
+              "ref": "Y6LE77"
+            },
+            "backend_errors": 8,
+            "first_backend_span_id": "2579bf24006e4abd"
+          }
+        }
+      },
+      "flow_evidence": {
+        "Flight selection": {
+          "starts": 3893,
+          "success_endpoints": 2806,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 162,
+          "durations_ms": {
+            "count": 2806,
+            "min": 4326.321408,
+            "max": 39676.314624,
+            "p50": 14081.08,
+            "p95": 25630.71
+          },
+          "starts_per_hour_at_10_total_even_profiles": 155.72
+        },
+        "Hotel selection": {
+          "starts": 973,
+          "success_endpoints": 973,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 0,
+          "durations_ms": {
+            "count": 973,
+            "min": 3365.031168,
+            "max": 12160.447232,
+            "p50": 6499.51,
+            "p95": 9301.34
+          },
+          "starts_per_hour_at_10_total_even_profiles": 38.92
+        },
+        "Booking completion": {
+          "starts": 1885,
+          "success_endpoints": 1014,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 296,
+          "durations_ms": {
+            "count": 1014,
+            "min": 7989.747456,
+            "max": 33254.33344,
+            "p50": 17001.39,
+            "p95": 26344.79
+          },
+          "starts_per_hour_at_10_total_even_profiles": 75.4
+        },
+        "Payment authorization": {
+          "starts": 1885,
+          "success_endpoints": 1014,
+          "duplicate_starts": 0,
+          "success_after_timeout": 0,
+          "incomplete_with_crash": 296,
+          "durations_ms": {
+            "count": 1014,
+            "min": 608.135936,
+            "max": 13261.8752,
+            "p50": 1728.16,
+            "p95": 9823.45
+          },
+          "starts_per_hour_at_10_total_even_profiles": 75.4
+        }
+      },
+      "largest_part_breadcrumb_count": 8,
+      "max_consecutive_breadcrumbs": 2,
+      "root_span_distribution": {
+        "count": 5000,
+        "min": 1,
+        "max": 6,
+        "p50": 2,
+        "p95": 6
+      },
+      "failed_root_span_distribution": {
+        "count": 5000,
+        "min": 0,
+        "max": 1,
+        "p50": 0,
+        "p95": 1
+      },
+      "cohorts": {
+        "assigned_device_identities": {
+          "stable": 3782,
+          "canary": 1218
+        },
+        "sessions": {
+          "stable": 3782,
+          "canary": 1218
+        },
+        "exposed_sessions": {
+          "stable": 3648,
+          "canary": 1218
+        }
+      },
+      "breadcrumb_distributions": {
+        "short": {
+          "count": 134,
+          "min": 1,
+          "max": 1,
+          "p50": 1,
+          "p95": 1
+        },
+        "engaged": {
+          "count": 2784,
+          "min": 1,
+          "max": 3,
+          "p50": 2,
+          "p95": 3
+        },
+        "priority": {
+          "count": 1589,
+          "min": 6,
+          "max": 8,
+          "p50": 7,
+          "p95": 8
+        },
+        "interrupted": {
+          "count": 493,
+          "min": 2,
+          "max": 6,
+          "p50": 5,
+          "p95": 6
+        }
+      }
+    }
+  },
+  "aggregate": {
+    "sessions": 15000,
+    "counts": {
+      "issue": 13618,
+      "client_issue": 10056,
+      "crash": 1512,
+      "blockage": 4435,
+      "handled": 3819,
+      "mobile_failed": 5111,
+      "attempts": 81394,
+      "failed_attempts": 5111,
+      "business_conflicts": 749,
+      "cancelled_attempts": 296,
+      "backend_degraded_200": 3738,
+      "slow": 3372,
+      "flow_eligible": 14589,
+      "flow_starts": 34606,
+      "priority_started": 5653,
+      "priority_completed": 3386,
+      "breadcrumbs": 67195,
+      "canary_exposed": 3744,
+      "canary_backend_error": 2984
+    },
+    "issue_pct": 90.787,
+    "crash_free_pct": 89.92,
+    "failed_attempt_pct": 6.279
+  },
+  "representative_phase": "incident; scheduled onset/recovery windows are controls, excluded from this calibration",
+  "flow_metrics_scope": "emitted breadcrumbs only; native completion/error/abandonment require definitions and fresh processed data"
+}
