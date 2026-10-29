@@ -2,72 +2,114 @@
   {
     "name": "ecommerce/payments-db-pool",
     "profile": "ecommerce",
-    "incident": "payments-db-pool"
+    "incident": "payments-db-pool",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "travel/payments-db-pool",
     "profile": "travel",
-    "incident": "payments-db-pool"
+    "incident": "payments-db-pool",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "ecommerce/payment-timeouts",
     "profile": "ecommerce",
-    "incident": "payment-timeouts"
+    "incident": "payment-timeouts",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "ecommerce/reviews-n-plus-one",
     "profile": "ecommerce",
-    "incident": "reviews-n-plus-one"
+    "incident": "reviews-n-plus-one",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "ecommerce/recs-latency",
     "profile": "ecommerce",
-    "incident": "recs-latency"
+    "incident": "recs-latency",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "ecommerce/inventory-sync",
     "profile": "ecommerce",
-    "incident": "inventory-sync"
+    "incident": "inventory-sync",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "banking/fraud-latency",
     "profile": "banking",
-    "incident": "fraud-latency"
+    "incident": "fraud-latency",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "banking/rails-outage",
     "profile": "banking",
-    "incident": "rails-outage"
+    "incident": "rails-outage",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "banking/core-banking-latency",
     "profile": "banking",
-    "incident": "core-banking-latency"
+    "incident": "core-banking-latency",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "banking/statements-slow",
     "profile": "banking",
-    "incident": "statements-slow"
+    "incident": "statements-slow",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "banking/account-read-fallback",
     "profile": "banking",
-    "incident": "account-read-fallback"
+    "incident": "account-read-fallback",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "travel/supplier-timeouts",
     "profile": "travel",
-    "incident": "supplier-timeouts"
+    "incident": "supplier-timeouts",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "travel/gds-pnr-timeouts",
     "profile": "travel",
-    "incident": "gds-pnr-timeouts"
+    "incident": "gds-pnr-timeouts",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "travel/hotel-supplier-outage",
     "profile": "travel",
-    "incident": "hotel-supplier-outage"
+    "incident": "hotel-supplier-outage",
+    "settings": {
+      "incident_phase": "incident"
+    }
   },
   {
     "name": "ecommerce/crash/0",
