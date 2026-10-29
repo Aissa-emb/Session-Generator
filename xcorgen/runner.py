@@ -21,7 +21,6 @@ from .personas import PersonaPool
 from .profiles import load
 from .util import uuid4, weighted
 from .android_session import AndroidSession, SessionEnded, shift_envelope
-from .calls import FORWARD_DELAY_MS
 from .web_session import WebSession, shift
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -247,17 +246,15 @@ def run_burst(gen, sender, count, spread_min, quiet=False):
             print(describe(s, journey, tenant))
     gen.save()
     all_deliveries.sort(key=lambda d: d["due"])
-    # Sessions go to Embrace first; backend traces follow once Embrace has had time to forward the client spans.
-    first = [d for d in all_deliveries if d["target"] == "embrace"]
-    for d in first:
+    # Backend traces go first so Chronosphere has them before Embrace forwards the client spans.
+    backend = [d for d in all_deliveries if d["target"] != "embrace"]
+    for d in backend:
         sender.submit(d)
-    later = [d for d in all_deliveries if d["target"] != "embrace"]
-    if later and not sender.dry and first:
-        print(f"Sent {len(first)} Embrace payloads; holding {len(later)} backend exports "
-              f"{FORWARD_DELAY_MS[0] // 1000}s so they reach Chronosphere with Embrace's forwarded spans.", flush=True)
-        time.sleep(FORWARD_DELAY_MS[0] / 1000)
-    for d in later:
-        sender.submit(d)
+    sender.pool.shutdown(wait=True)
+    sender.pool = ThreadPoolExecutor(max_workers=8)
+    for d in all_deliveries:
+        if d["target"] == "embrace":
+            sender.submit(d)
     return len(all_deliveries)
 
 

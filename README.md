@@ -147,7 +147,7 @@ To send backend spans to an OpenTelemetry Collector instead of straight to Chron
 
 ## Known limits
 
-- **Backend traces are sent on Embrace's schedule.** Embrace forwards the app's network spans only after a session part ends and is processed, which can be minutes after the request. Chronosphere drops spans that arrive long after the rest of their trace, so the generator holds each backend trace until its session part ends and sends it 70–130 s later, alongside Embrace's forwarding. A trace therefore appears in Chronosphere a few minutes after the request, complete with the app span as its root.
+- **Backend traces are sent on Embrace's schedule.** Embrace forwards the app's network spans only after a session part ends and is processed, which can be minutes after the request. Chronosphere drops spans that arrive long after the rest of their trace, and also drops them when they arrive before the backend spans of their trace. The generator therefore holds each backend trace until its session part ends and sends it a few seconds later, just ahead of Embrace's forwarding. A trace appears in Chronosphere once its session part has ended, complete with the app span as its root.
 
 - **Location** in Embrace comes from the IP address the payloads are sent from. All sessions from one machine show that machine's location. Run the generator from hosts in other regions for geographic spread.
 - iOS sessions are not generated.

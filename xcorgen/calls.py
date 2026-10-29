@@ -86,10 +86,12 @@ def simulate(session, key, params, start, rng=random):
     return call
 
 
-# Embrace forwards the client network span only after the session part ends and is processed. Backend spans
-# are held until then so both halves of a trace reach Chronosphere together; spans that arrive minutes after
-# the rest of their trace fall outside Chronosphere's trace assembly window and are dropped.
-FORWARD_DELAY_MS = (70_000, 130_000)
+# Embrace forwards the client network span only after the session part ends and is processed. Chronosphere
+# keeps that span only if the backend spans of its trace arrived first and recently: a forwarded span that
+# arrives before its backend spans, or minutes after them, is dropped (observed on demo-sandbox, 2026-10-29).
+# So backend traces are held until their session part ends and sent a few seconds after it, just ahead of
+# Embrace's forwarding.
+FORWARD_DELAY_MS = (3_000, 15_000)
 
 
 def release_backend(session, part_end, rng=random):
