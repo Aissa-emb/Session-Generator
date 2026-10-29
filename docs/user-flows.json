@@ -1,5 +1,5 @@
 {
-  "configuration_status": "not configured; dashboard access pending",
+  "configuration_status": "User will create the definitions from this catalog; generator is ready and running.",
   "form_units": "milliseconds",
   "max_timeout_ms": 300000,
   "shared_app_note": "Payment authorization has one shared anchor pair. Use one definition and business_unit filters for retail/travel; the catalog contains 12 profile views and 11 unique definitions.",

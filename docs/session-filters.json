@@ -550,6 +550,138 @@
           }
         }
       ]
+    },
+    {
+      "name": "ecommerce / Canary rollout",
+      "app_id": "5nrc2",
+      "profile": "ecommerce",
+      "session_properties": {
+        "business_unit": "retail",
+        "release_ring": "canary",
+        "feature_exposed": "true"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "retail"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "banking / Canary rollout",
+      "app_id": "5nrc2",
+      "profile": "banking",
+      "session_properties": {
+        "business_unit": "banking",
+        "release_ring": "canary",
+        "feature_exposed": "true"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "banking"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "travel / Canary rollout",
+      "app_id": "5nrc2",
+      "profile": "travel",
+      "session_properties": {
+        "business_unit": "travel",
+        "release_ring": "canary",
+        "feature_exposed": "true"
+      },
+      "combine": "AND",
+      "ui_category": "Session Property Key/Value",
+      "source_confirmed_api_terms": [
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "business_unit",
+            "property_values": [
+              "travel"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "release_ring",
+            "property_values": [
+              "canary"
+            ]
+          }
+        },
+        {
+          "field_op": "eq",
+          "key": "session_property",
+          "val": {
+            "property_key": "feature_exposed",
+            "property_values": [
+              "true"
+            ]
+          }
+        }
+      ]
     }
   ],
   "mobile_failure_only": {

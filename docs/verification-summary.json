@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-29",
+  "runtime_revision": "802478e18bec9d6fe3322906dba9548a0b8a7f7f",
+  "rate_per_minute": 10,
+  "live_counts": {
+    "sessions": 196,
+    "expected_requests": 901,
+    "retained": 901,
+    "linked": 901,
+    "context_mismatch_requests": 0,
+    "pre_server_transport_failures": 6
+  },
+  "fresh_revision_sessions_checked": 23,
+  "demo_index_rows": 64,
+  "random_canary_samples": {
+    "ecommerce": {
+      "seed": 7331,
+      "eligible_universe": 20,
+      "denominator": 20,
+      "numerators": {
+        "all_linked": 20,
+        "unverified": 0,
+        "backend_error": 11,
+        "backend_caused_http_failure": 2,
+        "http_200_backend_error": 9,
+        "latency_only": 0,
+        "redis_context_verified": 20
+      }
+    },
+    "banking": {
+      "seed": 7331,
+      "eligible_universe": 11,
+      "denominator": 11,
+      "numerators": {
+        "all_linked": 11,
+        "unverified": 0,
+        "backend_error": 10,
+        "backend_caused_http_failure": 5,
+        "http_200_backend_error": 5,
+        "latency_only": 0,
+        "redis_context_verified": 11
+      }
+    },
+    "travel": {
+      "seed": 7331,
+      "eligible_universe": 34,
+      "denominator": 20,
+      "numerators": {
+        "all_linked": 20,
+        "unverified": 0,
+        "backend_error": 19,
+        "backend_caused_http_failure": 4,
+        "http_200_backend_error": 15,
+        "latency_only": 0,
+        "redis_context_verified": 20
+      }
+    }
+  },
+  "sample_interpretation": "Small live spot checks vary from the 75\u201385% configured backend-error target; do not treat them as population-rate proof. The 5,000-session/profile local corpus validates the conditional target. Missing traces would stay in denominators.",
+  "validation": {
+    "unit_tests": 34,
+    "android_dry_run_sessions": 120,
+    "web_dry_run_sessions": 120,
+    "incident_dry_run_sessions": 120,
+    "gitleaks": "redacted working-tree and CI full-history scans passed",
+    "bandit": "passed; B311 excluded for synthetic sampling only",
+    "github_ci": "both security and payload checks passed"
+  },
+  "dashboard_status": "User will create User Flows. Filter picker, product navigation, native crash grouping and native flow metrics remain UI-unverified; in-app browser was signed out.",
+  "links_note": "Embrace URLs came from emb.dashboard_session on retained forwarded spans; exact trace IDs and all parent chains were verified through the Data API."
+}
