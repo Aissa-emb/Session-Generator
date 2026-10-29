@@ -1,12 +1,8 @@
 # XCOR demo data generator
 
-Generates realistic Android app sessions (or web sessions with `--platform web`) in Cortex XCOR RUM (Embrace) and full distributed backend traces in Cortex XCOR (Chronosphere), stitched together end to end:
+This project creates realistic demo sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. All of that activity is simulated by the generator; it does not run a real app or backend.
 
-- Every API call in a session carries a W3C `traceparent`.
-- The backend trace for that call uses the same trace ID, and its root span's parent is the app's network span.
-- Embrace's network span forwarding sends the app's network span to Chronosphere, where it becomes the root of the trace. The session timeline in Embrace then shows **Forwarded** and **View trace in Cortex XCOR** for each call.
-
-Every request enters through the shared platform: `api-gateway` (token validation, Redis rate limiting) and the line of business's experience API, with `customer-identity-service` and `customer-profile-service` behind it. Retail checkout and travel booking both authorize through `payment-authorization-service` (with `fraud-risk-scoring-service`), and order and booking events reach `customer-notification-service` over Kafka. Trace size follows the work performed; a simple login can legitimately have only 15 spans.
+The generator sends session data directly to Embrace using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Embrace's Network Spans Forwarding integration sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the Embrace session timeline.
 
 Three lines of business are included:
 
