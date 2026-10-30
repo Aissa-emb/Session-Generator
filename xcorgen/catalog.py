@@ -140,18 +140,16 @@ EVIDENCE = {
     "hotel-supplier-outage": {"client": {"breadcrumb": "cached_hotel_rates_displayed"}, "backend": {"error_ok_client": True}},
     "search-complexity": {"client": {"slow_ms": 4000}, "backend": {"slow_span": "fare_combinations.rank", "min_ms": 3900}},
 }
+from .backend_faults import VARIANTS as NEW_BACKEND_VARIANTS, EVIDENCE as NEW_BACKEND_EVIDENCE
+BACKEND_VARIANTS.update({k: dict(v, builder="scenario") for k, v in NEW_BACKEND_VARIANTS.items()})
+EVIDENCE.update(NEW_BACKEND_EVIDENCE)
 for _key, _v in BACKEND_VARIANTS.items():
     _v.setdefault("v1_incident", _key)
     _v["supported"] = True
     _v["evidence"] = EVIDENCE[_key]
 
 # Types with no V1 builder yet. Validation rejects them instead of promising data the engine cannot produce.
-PLANNED_BACKEND_TYPES = {
-    "cache_outage": "Cache outage with database fallback",
-    "rate_limited": "Gateway rate limiting (429)",
-    "kafka_consumer_lag": "Kafka consumer lag delaying asynchronous work",
-    "deploy_regression": "Errors on one service.version with a rollback time",
-}
+PLANNED_BACKEND_TYPES = {}
 BACKEND_TYPES = sorted({v["type"] for v in BACKEND_VARIANTS.values()} | set(PLANNED_BACKEND_TYPES))
 
 # Handled-error stories with no backend effect (V1 handled scenarios for banking and travel).

@@ -38,7 +38,7 @@ def baseline():
                         rate *= 1 - transport
                     if rate:
                         per_profile.setdefault((incident, story), {}).setdefault(ring, {})[lob] = rate
-    variant_for = {(k, v["story"]): name for name, v in catalog.BACKEND_VARIANTS.items() for k in [v["v1_incident"]]}
+    variant_for = {(k, v["story"]): name for name, v in catalog.BACKEND_VARIANTS.items() for k in [v.get("v1_incident")] if k}
     for (incident, story), by_ring in sorted(per_profile.items()):
         if incident in catalog.HANDLED_ONLY_INCIDENTS.values():
             continue
@@ -143,9 +143,14 @@ def catalog_presets(now_ms=None):
              "core-banking-latency": "Core banking latency", "account-read-fallback": "Account read fallback",
              "statements-slow": "Statement rendering latency", "supplier-timeouts": "Supplier timeouts",
              "gds-pnr-timeouts": "PNR creation timeouts", "hotel-supplier-outage": "Hotel supplier outage",
-             "search-complexity": "Complex search latency"}
+             "search-complexity": "Complex search latency",
+             "catalog-cache-outage": "Catalog cache fallback", "accounts-cache-outage": "Account cache fallback",
+             "gateway-rate-limited": "Gateway rate limiting", "fulfillment-consumer-lag": "Delayed fulfillment",
+             "catalog-deploy-regression": "Catalog serializer regression"}
     for variant, title in names.items():
         p[variant] = (title, "Backend", catalog.BACKEND_VARIANTS[variant]["summary"], _backend(variant))
+    p["catalog-deploy-regression"][3]["rollouts"] = [{"id": "catalog-canary", "kind": "service_version",
+        "subject": "product-catalog-service", "canary_share": .25, "rollback_at": _incident_start(now_ms, 30)}]
     outage = _backend("payments-db-pool", rate=.4)
     outage["incidents"] = [{"id": "payments-outage", "fault_ref": "payments-db-pool", "start": _incident_start(now_ms, 3),
                             "onset_minutes": 3, "peak_minutes": 20, "recovery_minutes": 5}]

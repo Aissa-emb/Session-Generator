@@ -92,6 +92,11 @@ def observe(platform, envelopes, traces):
 
 def _backend_hit(rule, n):
     spans = n["spans"]
+    if rule.get("cache_outage"):
+        return any(s["name"] == "GET" and s.get("status", {}).get("code") == 2 and
+                   any(a["key"] == "circuit_breaker.state" for a in s.get("attributes", [])) for s in spans)
+    if rule.get("consumer_lag"):
+        return any(s["kind"] == 5 and any(a["key"] == "messaging.kafka.consumer.lag" for a in s.get("attributes", [])) for s in spans)
     if "span_error" in rule:
         return any(s["name"] == rule["span_error"] and s.get("status", {}).get("code") == 2 for s in spans)
     if "error_contains" in rule:
@@ -126,6 +131,8 @@ def affected(fault, obs):
     d, t = fault.details, fault.type
     if fault.variant:
         endpoint = fault.meta["endpoints"].get(obs.get("lob"))
+        if fault.type == "cache_outage" and d.get("fallback") is False:
+            return any(n["endpoint"] == endpoint and n["status"] == 503 for n in obs["net"])
         ev = fault.meta["evidence"]
         client = ev.get("client", {})
         if "breadcrumb" in client and not any(n["spans"] for n in obs["net"] if n["endpoint"] == endpoint):
@@ -172,6 +179,11 @@ def eligible(fault, obs, by_id, results):
         return False
     if obs.get("lob") not in fault.lobs:
         return False
+    if fault.type == "deploy_regression" and obs.get("traces"):
+        version = fault.details.get("version", fault.meta["regression_version"])
+        if not any(s.get("_service_name") == fault.meta["service"] and s.get("_service_version") == version
+                   for n in obs["net"] for s in n["spans"]):
+            return False
     flt = fault.filters
     if obs["platform"] == "web":
         from .planner import web_pages
@@ -227,9 +239,11 @@ class Emitted:
         for d in deliveries:
             if d["target"] == "otlp" and d["kind"] == "traces":
                 for rs in d["payload"]["resourceSpans"]:
+                    resource = {a["key"]: next(iter(a["value"].values()), None) for a in rs["resource"]["attributes"]}
                     for ss in rs["scopeSpans"]:
                         for span in ss["spans"]:
-                            traces.setdefault(span["traceId"], []).append(span)
+                            traces.setdefault(span["traceId"], []).append(dict(span, _service_name=resource.get("service.name"),
+                                                                              _service_version=resource.get("service.version")))
         if target["platform"] == "web":
             from .web_observation import observe as observe_web
             obs = observe_web([d["payload"] for d in deliveries if d["target"] == "embrace"], traces)
@@ -337,9 +351,11 @@ def from_dry_run(directory, spec):
             web_payloads.append(doc["payload"])
         elif doc.get("target") == "otlp" and doc["kind"] == "traces":
             for rs in doc["payload"]["resourceSpans"]:
+                resource = {a["key"]: next(iter(a["value"].values()), None) for a in rs["resource"]["attributes"]}
                 for ss in rs["scopeSpans"]:
                     for span in ss["spans"]:
-                        traces.setdefault(span["traceId"], []).append(span)
+                        traces.setdefault(span["traceId"], []).append(dict(span, _service_name=resource.get("service.name"),
+                                                                          _service_version=resource.get("service.version")))
     from .web_observation import attrs, records, observe as observe_web
     web_sessions, part_owners = {}, {}
     for p in web_payloads:

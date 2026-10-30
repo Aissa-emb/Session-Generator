@@ -385,6 +385,14 @@ def validate(spec, now_ms=None, lint=True):
                     issues.append(_issue("error", f"{p}.endpoints", f"Variant {variant} lands on {', '.join(sorted(set(v['endpoints'].values())))}, not {', '.join(sorted(bad))}.", "variant"))
                 if set(f.get("platforms") or ["android"]) - platforms:
                     issues.append(_issue("error", f"{p}.platforms", "A listed platform has no target.", "no_target"))
+                d = f.get("details", {})
+                if "fallback" in d and not isinstance(d["fallback"], bool):
+                    issues.append(_issue("error", f"{p}.details.fallback", "Fallback must be true or false.", "details"))
+                for field, lo, hi in (("lag_seconds", 10, 240), ("lag_messages", 1, 10000000), ("retry_after_seconds", 1, 60)):
+                    if field in d and (not isinstance(d[field], (int, float)) or isinstance(d[field], bool) or not lo <= d[field] <= hi):
+                        issues.append(_issue("error", f"{p}.details.{field}", f"{field} must be between {lo} and {hi}.", "details"))
+                if "version" in d and (not isinstance(d["version"], str) or len(d["version"]) > 64):
+                    issues.append(_issue("error", f"{p}.details.version", "Version must be a string of at most 64 characters.", "details"))
             for dim, allowed in (("app_versions", versions), ("device_models", set(devices))):
                 bad = set(flt.get(dim) or []) - allowed
                 if bad:

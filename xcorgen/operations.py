@@ -26,6 +26,9 @@ def status(ctx):
     plan = req["plan"]
     experience, domain, route = ROUTES[ctx.session.profile.key]
     data = dict(plan.runtime.operations.get(plan.operation_id, {"state": "not_submitted"}))
+    if data.get("ready_at") and ctx.session.t >= data["ready_at"]:
+        data["state"] = "confirmed"
+        plan.runtime.operations[plan.operation_id] = dict(data)
     svc = ctx.svc[domain]
     cache = b.redis(svc, "GET", "idempotency:operation", "operation-state.platform.vantra.internal")
     cache.attrs.update({"cache.hit": True, "operation.state": data["state"], "idempotency.operation_id": plan.operation_id})

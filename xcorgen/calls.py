@@ -77,6 +77,9 @@ def simulate(session, key, params, start, rng=random):
             from .operations import replay
             root, status, data = replay(Ctx(session, params, outcome), prior, ep)
             replayed = True
+        elif reached and req and req.get("backend_fault"):
+            from .backend_faults import build
+            root, status, data = build(Ctx(session, params, outcome), ep, key, req["backend_fault"])
         elif reached and req and req.get("http_error"):
             from .generic_faults import http_error
             root, status, data = http_error(Ctx(session, params, outcome), ep, key, req["http_error"])
@@ -98,7 +101,8 @@ def simulate(session, key, params, start, rng=random):
     tls = rtt * rng.uniform(1.0, 1.4) if first else 0.0
     req_start = start + rng.uniform(0.3, 4) + dns + tcp + tls
     context = req["attributes"] if req else {}
-    tb = backend.build_trace(root, trace_id, span_id, req_start + rtt / 2, rng, context) if root else None
+    build_context = dict(context, _service_versions=req.get("service_versions", {})) if req else context
+    tb = backend.build_trace(root, trace_id, span_id, req_start + rtt / 2, rng, build_context) if root else None
     size = (rng.randint(*ep.size) if status < 400 else rng.randint(90, 420)) if root else 0
     resp_start = root.end + rtt / 2 if root else start + (1200 if transport == "dns" else 450)
     resp_end = resp_start + size * 8 / (p["mbps"] * 1000) + rng.uniform(0.2, 2.5)
@@ -118,7 +122,7 @@ def simulate(session, key, params, start, rng=random):
     call.transport = transport
     call.context = context
     if req and not replayed and key in ("place_order", "create_booking", "create_transfer") and server_status is not None:
-        state = "confirmed" if server_status < 400 else "pending" if server_status == 504 and key != "create_transfer" else "not_submitted"
+        state = data.get("state") or ("confirmed" if server_status < 400 else "pending" if server_status == 504 and key != "create_transfer" else "not_submitted")
         req["plan"].runtime.operations[req["plan"].operation_id] = dict(data, state=state)
         if len(req["plan"].runtime.operations) > 20000:
             req["plan"].runtime.operations.pop(next(iter(req["plan"].runtime.operations)))

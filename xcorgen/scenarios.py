@@ -134,6 +134,8 @@ class Plan:
         self.transport_used = False
         self.slow_startup = self.slow_root_span = None
         self.http_errors = {}
+        self.backend_fault = None
+        self.service_versions = {}
         self.crash_details = {}
         if assignment is not None:
             self._assigned(session, assignment)
@@ -201,6 +203,8 @@ class Plan:
         self.slow_root_span = a.get("slow_root_span")
         self.http_errors = dict(a.get("http_errors") or {})
         self.web_faults = list(a.get("web_faults") or [])
+        self.backend_fault = a.get("backend_fault")
+        self.service_versions = a.get("service_versions", {})
         self.fault_ids = list(a.get("fault_ids", []))
         if self.rollback and self.ring == "canary" and a.get("rollback_clears_canary"):
             self.primary, self.incident = "clean", None
@@ -246,6 +250,9 @@ class Plan:
         http_error = self.http_errors.pop(key, None) if not incident else None
         req = {"attributes": context, "plan": self, "key": key, "incident": incident, "outcome": outcome,
                "now": s.t, "params": params, "http_error": http_error}
+        f = self.backend_fault
+        req["backend_fault"] = f if f and key == f["endpoint"] and (f["type"] == "cache_outage" or self.attempts[key] == 1) else None
+        req["service_versions"] = self.service_versions
         self.contexts.append(dict(context))
         return req
 

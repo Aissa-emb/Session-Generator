@@ -243,6 +243,8 @@ class Planner:
     def eligible(self, f, skel, assigned):
         if skel["lob"] not in f.lobs:
             return False
+        if f.type == "deploy_regression" and skel.get("service_versions", {}).get(f.meta["service"]) != f.details.get("version", f.meta["regression_version"]):
+            return False
         if f.kind == "client" and f.raw.get("platform") not in ("any", skel["platform"]):
             return False
         if f.kind == "backend" and skel["platform"] not in (f.raw.get("platforms") or ["android", "web"]):
@@ -327,7 +329,19 @@ class Planner:
         if target["platform"] == "web":
             from .browser_session import pick_release
             version = (pick_release(target["web"], start_ms, self.rng),)
+        service_versions = {}
+        for f in self.faults:
+            if f.type != "deploy_regression":
+                continue
+            service, deployed = f.meta["service"], f.details.get("version", f.meta["regression_version"])
+            rollout = next((r for r in self.spec["rollouts"] if r["kind"] == "service_version" and r["subject"] in (service, deployed)), {})
+            active = (not rollout.get("start") or start_ms >= parse_time(rollout["start"])) and (not rollout.get("rollback_at") or start_ms < parse_time(rollout["rollback_at"]))
+            import hashlib
+            cohort = int(hashlib.sha256((persona["device_id"] + service + rollout.get("cohort_seed", "deploy")).encode()).hexdigest()[:8], 16) / 2**32
+            if active and cohort < rollout.get("canary_share", 1):
+                service_versions[service] = deployed
         return {"target": target["id"], "platform": target["platform"], "lob": lob, "profile": profile,
+                "service_versions": service_versions,
                 "persona": persona, "version": version, "app_version": version[0],
                 "os_version": persona.get("os_version"), "model": persona.get("model"),
                 "tier": DEVICE_TIERS.get(persona.get("model"), "mid"), "signed_in": persona.get("user_id") is not None,
@@ -390,7 +404,7 @@ class Planner:
         lob = skel["lob"]
         shape = skel["shape"]
         a = {"primary": "clean", "incident": None, "client_fault": None, "fault_ids": list(fault_ids),
-             "http_errors": {}}
+             "http_errors": {}, "service_versions": skel.get("service_versions", {})}
         handled_followup = 0.0
         for fid in fault_ids:
             f = self.by_id[fid]
@@ -405,6 +419,11 @@ class Planner:
                     steer(lob, shape, e)
             if f.kind == "backend":
                 a["primary"], a["incident"] = f.meta["story"], f.meta["v1_incident"]
+                if f.meta.get("builder") == "scenario":
+                    a["incident"] = None
+                    a["backend_fault"] = dict(f.raw, service=f.meta["service"], endpoint=endpoint, details=d)
+                    if f.type == "cache_outage" and d.get("fallback") is False:
+                        a["primary"] = "mobile"
                 handled_followup = d.get("handled_followup", handled_followup)
             elif f.type == "jvm_crash":
                 a["client_fault"] = "crash"

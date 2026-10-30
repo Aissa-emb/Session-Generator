@@ -66,6 +66,17 @@ def request(s, key, **params):
         mark(s, "connectivity_restored")
         params.pop("_transport", None)
         r = traced_attempt(s, key, params)
+    if r.status == 429:
+        s.log("warning", "Request rate exceeded; retrying after the server delay")
+        delay = max(1, min(60, r.data.get("retry_after_seconds", 3)))
+        s.wait(delay, delay)
+        r = traced_attempt(s, key, params)
+    if r.data.get("cache_fallback"):
+        s.log("warning", "Cache unavailable; database fallback served the request")
+    if r.data.get("processing_delayed") and key != "operation_status":
+        s.log("info", "Processing is pending; confirmation will follow")
+        s.wait(1, 2)
+        traced_attempt(s, "operation_status", {})
     return r
 
 

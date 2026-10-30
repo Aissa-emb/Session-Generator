@@ -254,3 +254,7 @@ python3 generate.py run spec/examples/android-web-end-to-end.json --dry-run out/
 The preset catalog includes web release failures, mobile product LCP, promo-banner CLS, chat-widget INP, origin latency, banking routes and payment rage clicks. `web_performance` sets p75 targets per page group, browser and device. Payload-derived reports include per-segment percentiles and stable exception groups; latency-based fault evidence is approximate because healthy and regressed distributions overlap. Small percentile samples are marked insufficient for tolerance checks. The local URL rollup preview models static segment classifications and sampled sibling cardinality; actual rollups also depend on the server's history.
 
 No live forwarding or dashboard acceptance is implied by a passing dry run or HTTP 200. Follow the owner-approved checks in `docs/v2/CODEX-HANDOFF.md` before live use.
+
+### Backend fault scenarios
+
+Backend presets include `catalog-cache-outage`, `accounts-cache-outage`, `gateway-rate-limited`, `fulfillment-consumer-lag`, and `catalog-deploy-regression`. Cache outages default to database fallback; `details.fallback=false` returns 503. Gateway 429 responses have one bounded Retry-After retry. Kafka lag is limited to 10–240 seconds and produces pending status polls. Service-version rollouts select stable canary cohorts and stop regressions at rollback.

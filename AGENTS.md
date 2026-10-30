@@ -178,3 +178,7 @@ Commit and push as **Aissa-emb** (`git config user.name "Aissa-emb"`, `git confi
 Source correction: WebVitalsInstrumentation's rounded TTFB breakdown uses `responseEnd - startTime`, whereas the metric uses `responseStart - startTime`; do not force those totals to be identical. LoafInstrumentation does not emit `emb.was_from_inp`; its IDs use `embracev2-`. Source and per-engine goldens take precedence over the original build prompt.
 
 Phase 2 local checks: 13 browser tests plus the 57 existing tests; all three 120-session V1 dry runs, baseline/verification specs, and Android+web dry runs pass payload checks. Live ingestion, forwarding, retention and dashboard acceptance remain owner-gated. Next work is handoff 4.2 (four backend faults), then durable backfill receipts/resume, server, UI, MCP/copilot, hosting and later items.
+
+### V2 backend fault builders
+
+Handoff 4.2 is implemented in `backend_faults.py`: cache fallback or fail-closed, gateway admission with one Retry-After retry, delayed Kafka processing with pending status reconciliation, and canary-specific serializer failures with rollback. Resource cache keys include service version; internal routing metadata never enters request evidence. Presets expose all variants. Six new tests cover quotas, failure structure, retry timing, asynchronous timing, rollout attribution and lag bounds.
