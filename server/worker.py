@@ -147,7 +147,7 @@ def live(store, job, version):
                     sender = ReceiptSender(store, dict(job, spec_version=latest['version']), latest['spec'], receipt)
                     senders.append(sender)
                     current = latest['version']
-                    store.update('runs', job['id'], spec_version=current, destination=latest['spec']['destinations']['mode'])
+                    store.update('runs', job['id'], spec_version=current, destination=latest['spec']['destinations']['mode'], trace_eligible_from=state.get('trace_eligible_from') or (now if latest['spec']['destinations']['mode']=='end_to_end' else None))
                     store.event(job['id'], 'spec_applied', spec_version=current)
                 runner.now_ms = now * 1000
                 target, session, _, deliveries, faults = runner.session(now * 1000)

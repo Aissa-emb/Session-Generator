@@ -102,7 +102,7 @@ async def turn(svc, spec_id, message, author='user', client=None):
 
 
 def apply(svc, id, confirm=False):
-    if not confirm:
+    if confirm is not True:
         raise ValueError('Applying a proposal requires confirm: true.')
     saved = svc.store.get('copilot_turns', id)
     if saved['state'] == 'applied':

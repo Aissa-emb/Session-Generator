@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from xcorgen import presets, spec as specs
 from xcorgen.security import SecurityError, TransportError
 from .service import Service
-from . import readiness, secrets, verification, copilot
+from . import readiness, secrets, verification, copilot, preparation
 from .mcp import build_server, caller
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -53,6 +53,10 @@ def create_app(service=None):
             if run['status'] in ('queued', 'running') and time.time() - run.get('heartbeat', run['created']) > 90:
                 svc.store.update('runs', run['id'], status='failed')
                 svc.store.event(run['id'], 'recovery_required', message='Worker heartbeat expired; review receipts before resuming.')
+        if svc.launch_jobs:
+            for record in svc.store.list('preparations'):
+                if record['status'] == 'running' and record.get('authorized'):
+                    preparation.launch(svc, record['id'])
         async with mcp_app.router.lifespan_context(mcp_app):
             yield
     app = FastAPI(title='Session Generator', version='2.0', lifespan=lifespan)
@@ -258,6 +262,29 @@ def create_app(service=None):
     @app.post('/api/runs/{id}/{action}')
     def control_run(id: str, action: str, request: Request):
         return svc.control(id, action, request.state.actor)
+
+    @app.post('/api/preparations/preview')
+    def preparation_plan(value: dict = Body()):
+        allowed = {'spec_id','history_hours','rate_per_minute','minutes_until_demo','duration_minutes','prepare_ahead','incident'}
+        if set(value) - allowed:
+            raise ValueError('Unknown preparation option.')
+        return preparation.plan(svc, **value)
+
+    @app.get('/api/preparations')
+    def preparation_list():
+        return svc.store.list('preparations')
+
+    @app.get('/api/preparations/{id}')
+    def preparation_status(id: str):
+        return svc.store.get('preparations', id)
+
+    @app.post('/api/preparations/{id}/start')
+    def preparation_start(id: str, request: Request, value: dict = Body()):
+        return preparation.start(svc, id, value.get('confirm',False), value.get('dry_run',False), request.state.actor)
+
+    @app.post('/api/preparations/{id}/cancel')
+    def preparation_cancel(id: str, request: Request):
+        return preparation.cancel(svc,id,request.state.actor)
 
     @app.get('/api/copilot/turns')
     def copilot_history(spec_id: str):

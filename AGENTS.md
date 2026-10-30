@@ -200,3 +200,7 @@ Handoff 4.5 provides the React 18/TypeScript/Vite application in `apps/web`. Gen
 ### V2 MCP and Copilot
 
 Handoff 4.6 uses MCP SDK 2's `MCPServer` (the former FastMCP name was removed). SDK model properties are snake_case (`input_schema`, `is_error`, `structured_content`), while protocol JSON remains camelCase. HTTP and stdio integration tests exercise the actual protocol. REST authentication supplies caller attribution through a context variable. Copilot exposes only read operations and a terminal proposal tool; do not give it mutating MCP tools. Recorded responses cover all seven requested examples, unsupported capabilities, key gating, confirmation and optimistic concurrency. No live Anthropic calls are part of tests.
+
+### V2 demo preparation
+
+Handoff 4.7 adds durable preparation plans and a checklist in the studio. Each stage reuses a deterministic spec ID and run idempotency key. Separate process and transition locks protect orchestration restart and cancellation. Readiness is destination-sensitive; only explicit dry runs bypass live readiness, visibly marked simulated. Live mode switches retain existing delivery ownership and record the first trace-eligible session time. Three integration tests execute bounded stages locally, check no trace exports for history, exercise restart/cancellation, gate readiness and schedule the live incident.

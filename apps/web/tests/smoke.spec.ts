@@ -38,3 +38,8 @@ test('copilot reviews a proposal before applying a new version',async({page,requ
  await expect(page.getByText('Proposed scenario change')).toBeVisible();await expect(page.getByLabel('Scenario name')).not.toHaveValue('Product journey');
  await page.getByRole('button',{name:'Apply',exact:true}).click();await expect(page.getByLabel('Scenario name')).toHaveValue('Product journey');
 });
+test('preparation plan stays local until its reviewed confirmation',async({page,request})=>{
+ await page.goto('/');await page.getByRole('button',{name:'Plan preparation',exact:true}).click();await page.getByLabel('History hours',{exact:true}).fill('0');await page.getByLabel('Live duration (minutes)',{exact:true}).fill('1');await page.getByRole('button',{name:'Review preparation plan'}).click();
+ await expect(page.getByText('Exact scenarios and projected evidence')).toBeVisible();await expect(page.getByRole('button',{name:'Start preparation',exact:true})).toBeDisabled();
+ const plans=await(await request.get('/api/preparations')).json();expect(plans[0].status).toBe('planned');await page.keyboard.press('Escape');
+});

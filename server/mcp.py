@@ -81,7 +81,7 @@ def build_server(svc):
 
     @mcp.tool(structured_output=True)
     def stop_run(run_id: str, confirm: bool = False) -> dict[str, Any]:
-        if not confirm:
+        if confirm is not True:
             raise ValueError('Stopping a run requires confirm: true.')
         return svc.control(run_id, 'stop', caller.get())
 
@@ -108,6 +108,22 @@ def build_server(svc):
     @mcp.tool(annotations=read, structured_output=True)
     async def verify_run(run_id: str) -> dict[str, Any]:
         return await verification.verify(svc.store, svc.store.get('runs', run_id))
+
+    @mcp.tool(structured_output=True)
+    def plan_preparation(spec_id: str, history_hours: float = 24, rate_per_minute: float = 6,
+                         minutes_until_demo: float = 10, duration_minutes: float = 120,
+                         prepare_ahead: bool = False, incident: dict | None = None) -> dict[str, Any]:
+        from . import preparation
+        return preparation.plan(svc,spec_id,history_hours,rate_per_minute,minutes_until_demo,duration_minutes,prepare_ahead,incident)
+
+    @mcp.tool(structured_output=True)
+    def start_preparation(preparation_id: str, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        from . import preparation
+        return preparation.start(svc,preparation_id,confirm,dry_run,caller.get())
+
+    @mcp.tool(annotations=read, structured_output=True)
+    def get_preparation(preparation_id: str) -> dict[str, Any]:
+        return svc.store.get('preparations',preparation_id)
 
     @mcp.resource('scenario://schema', mime_type='application/json')
     def schema() -> str:

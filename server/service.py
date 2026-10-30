@@ -27,7 +27,7 @@ class Service:
     def capabilities(self):
         return {'platforms': ['android', 'web'], 'faults': catalog.describe(), 'limits': limits.capabilities(),
                 'browser_matrix': web_capabilities.MATRIX, 'trace_caveat': limits.TRACE_CAVEAT,
-                'backfill_notes': limits.BACKFILL_NOTES, 'default_spec': specs.default_spec(),
+                'backfill_notes': limits.BACKFILL_NOTES, 'demo_preparation': {'steps':['readiness','session history','recent traces','live stream'], 'prepare_ahead_default_minutes':120, 'recommend_prepare_ahead_after_minutes':120}, 'default_spec': specs.default_spec(),
                 'web_target': specs.WEB_TARGET, 'schema': json.loads((ROOT / "spec/scenario.schema.json").read_text())}
 
     def validate(self, value):
@@ -108,7 +108,7 @@ class Service:
         return json.loads(proc.stdout)
 
     def start_run(self, spec_id, mode=None, destination=None, confirm=False, dry_run=False, author='user', idempotency_key=None):
-        if not confirm:
+        if confirm is not True:
             raise ValueError('Starting a run requires confirm: true after reviewing its scenario, destination and size.')
         if idempotency_key:
             if not isinstance(idempotency_key, str) or len(idempotency_key) > 100:
@@ -195,15 +195,15 @@ class Service:
             raise ValueError('A stream requires a live scenario.')
         if not isinstance(name, str) or not 1 <= len(name) <= 100:
             raise ValueError('Stream name must be 1–100 characters.')
-        run = self.start_run(spec_id, confirm=True, dry_run=dry_run, author=author) if confirm else None
+        run = self.start_run(spec_id, confirm=True, dry_run=dry_run, author=author) if confirm is True else None
         return self.store.put('streams', {'name': name, 'spec_id': spec_id, 'run_id': run['id'] if run else None,
             'targets': [t['id'] for t in saved['spec']['targets']], 'status': 'running' if run else 'paused',
-            'dry_run': dry_run, 'authorized': bool(confirm), 'author': author})
+            'dry_run': dry_run, 'authorized': confirm is True, 'author': author})
 
     def control_stream(self, id, action, confirm=False, author='user'):
         stream = self.store.get('streams', id)
         if action == 'resume':
-            if not (stream['authorized'] or confirm):
+            if not (stream['authorized'] or confirm is True):
                 raise ValueError('Starting this stream requires confirm: true.')
             run = self.store.get('runs', stream['run_id']) if stream['run_id'] else None
             if not run or run['status'] in ('completed', 'stopped'):
@@ -237,7 +237,7 @@ class Service:
                 'delivery_errors': sum(r['status'] != 'accepted' for r in receipts), 'run': current}
 
     def forwarding_probe(self, target_id, spec_id, confirm=False, dry_run=False, author='user'):
-        if not confirm:
+        if confirm is not True:
             raise ValueError('A forwarding probe sends telemetry and requires confirm: true.')
         target = self.store.get('targets', target_id)
         s = copy.deepcopy(self.store.get('scenario_specs', spec_id)['spec'])
