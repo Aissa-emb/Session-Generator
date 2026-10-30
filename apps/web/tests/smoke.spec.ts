@@ -29,3 +29,12 @@ test('laptop layout has no horizontal overflow and keeps copilot disabled withou
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
  await page.getByRole('button',{name:'Toggle Copilot'}).click();await page.getByRole('tab',{name:'Population & traffic'}).click();await expect(page.getByLabel('Traffic mode',{exact:true})).toBeVisible();
 });
+test('copilot reviews a proposal before applying a new version',async({page,request})=>{
+ const caps=await(await request.get('/api/capabilities')).json();const saved=await(await request.post('/api/specs',{data:caps.default_spec})).json();
+ await page.route('**/api/settings',route=>route.fulfill({json:{secrets:{anthropic:true},defaults:{},models:['claude-sonnet-5-5']}}));
+ await page.route('**/api/copilot/turns',async route=>{if(route.request().method()==='POST')await route.fulfill({json:{id:'recorded-proposal',summary:'Rename the scenario for the product journey.',patch:[{op:'replace',path:'/name',value:'Product journey'}]}});else await route.continue()});
+ await page.route('**/api/copilot/turns/recorded-proposal/apply',route=>route.fulfill({json:{...saved,version:2,spec:{...saved.spec,name:'Product journey'}}}));
+ await page.goto('/');await page.getByLabel('Saved scenarios',{exact:true}).selectOption(saved.id);await page.getByLabel('Message Copilot').fill('Rename this scenario Product journey');await page.getByRole('button',{name:'Send message'}).click();
+ await expect(page.getByText('Proposed scenario change')).toBeVisible();await expect(page.getByLabel('Scenario name')).not.toHaveValue('Product journey');
+ await page.getByRole('button',{name:'Apply',exact:true}).click();await expect(page.getByLabel('Scenario name')).toHaveValue('Product journey');
+});

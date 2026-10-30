@@ -13,7 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from xcorgen import presets, spec as specs
 from xcorgen.security import SecurityError, TransportError
 from .service import Service
-from . import readiness, secrets, verification
+from . import readiness, secrets, verification, copilot
+from .mcp import build_server, caller
+from mcp.server.transport_security import TransportSecuritySettings
 
 
 class PatchBody(BaseModel):
@@ -39,6 +41,11 @@ class SecretBody(BaseModel):
 
 def create_app(service=None):
     svc = service or Service()
+    allowed_hosts = ['localhost', 'localhost:*', '127.0.0.1', '127.0.0.1:*', '[::1]', '[::1]:*', 'testserver']
+    for host in filter(None, os.environ.get('SG_ALLOWED_HOSTS', '').split(',')):
+        allowed_hosts += [host, host + ':*']
+    mcp_app = build_server(svc).streamable_http_app(stateless_http=True, json_response=True, max_request_body_size=1024*1024,
+        transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts, allowed_origins=['http://localhost:*', 'http://127.0.0.1:*'] + ['https://' + h for h in allowed_hosts if '*' not in h]))
     @asynccontextmanager
     async def lifespan(app):
         # Surviving worker processes own their journals. Never launch a duplicate on restart.
@@ -46,9 +53,11 @@ def create_app(service=None):
             if run['status'] in ('queued', 'running') and time.time() - run.get('heartbeat', run['created']) > 90:
                 svc.store.update('runs', run['id'], status='failed')
                 svc.store.event(run['id'], 'recovery_required', message='Worker heartbeat expired; review receipts before resuming.')
-        yield
+        async with mcp_app.router.lifespan_context(mcp_app):
+            yield
     app = FastAPI(title='Session Generator', version='2.0', lifespan=lifespan)
     app.state.service = svc
+    app.router.routes.extend(mcp_app.routes)
 
     @app.middleware('http')
     async def guard(request, call_next):
@@ -80,7 +89,11 @@ def create_app(service=None):
                 if len(body) > 1024 * 1024:
                     return JSONResponse({'detail': 'Request exceeds the 1 MiB limit.'}, 413)
             request._body = bytes(body)
-        response = await call_next(request)
+        context_token = caller.set(request.state.actor)
+        try:
+            response = await call_next(request)
+        finally:
+            caller.reset(context_token)
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'same-origin'
         response.headers['Cache-Control'] = 'no-store' if request.url.path.startswith('/api') else 'no-cache'
@@ -245,6 +258,22 @@ def create_app(service=None):
     @app.post('/api/runs/{id}/{action}')
     def control_run(id: str, action: str, request: Request):
         return svc.control(id, action, request.state.actor)
+
+    @app.get('/api/copilot/turns')
+    def copilot_history(spec_id: str):
+        return svc.store.list_for('copilot_turns', 'spec_id', spec_id, limit=100)
+
+    @app.post('/api/copilot/turns')
+    async def copilot_turn(request: Request, value: dict = Body()):
+        return await asyncio.wait_for(copilot.turn(svc, value['spec_id'], value['message'], request.state.actor), timeout=180)
+
+    @app.post('/api/copilot/turns/{id}/apply')
+    def apply_proposal(id: str, value: dict = Body()):
+        return copilot.apply(svc, id, value.get('confirm', False))
+
+    @app.post('/api/copilot/turns/{id}/discard')
+    def discard_proposal(id: str):
+        return copilot.discard(svc, id)
 
     @app.get('/api/settings')
     def settings():

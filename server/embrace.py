@@ -25,13 +25,13 @@ async def query(token, calls):
                         outputs.append({'tool': name, 'state': 'needs_action', 'reason': 'Read tool unavailable'})
                         continue
                     try:
-                        jsonschema.validate(args, available[name].inputSchema)
+                        jsonschema.validate(args, available[name].input_schema)
                     except jsonschema.ValidationError:
-                        outputs.append({'tool': name, 'state': 'needs_action', 'reason': 'Tool schema changed; review the current input schema', 'schema': available[name].inputSchema})
+                        outputs.append({'tool': name, 'state': 'needs_action', 'reason': 'Tool schema changed; review the current input schema', 'schema': available[name].input_schema})
                         continue
                     response = await session.call_tool(name, args)
                     body = response.model_dump(mode='json')
                     if len(json.dumps(body)) > 2 * 1024 * 1024:
                         raise ValueError('Verification response exceeds the size limit.')
-                    outputs.append({'tool': name, 'arguments': args, 'state': 'error' if response.isError else 'observed', 'result': body})
+                    outputs.append({'tool': name, 'arguments': args, 'state': 'error' if response.is_error else 'observed', 'result': body})
     return outputs

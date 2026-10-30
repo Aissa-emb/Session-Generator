@@ -1,0 +1,219 @@
+[
+  {
+    "request": "Make one in three checkout sessions on 10.28.0 crash after the payment fails, Android 16 only.",
+    "patch": [
+      {
+        "op": "add",
+        "path": "/client_faults/-",
+        "value": {
+          "id": "checkout-502",
+          "type": "http_error",
+          "rate": 0.3333333333333333,
+          "filters": {
+            "lines_of_business": [
+              "retail"
+            ],
+            "app_versions": [
+              "10.28.0"
+            ],
+            "os_versions": [
+              "16"
+            ],
+            "endpoints": [
+              "place_order"
+            ]
+          },
+          "details": {
+            "endpoint": "place_order",
+            "status": 502
+          }
+        }
+      },
+      {
+        "op": "add",
+        "path": "/client_faults/-",
+        "value": {
+          "id": "checkout-crash",
+          "type": "jvm_crash",
+          "rate": 1,
+          "details": {
+            "with_fault": "checkout-502",
+            "endpoint": "place_order",
+            "on_failure_only": true,
+            "family": 0
+          }
+        }
+      }
+    ],
+    "summary": "One third of eligible Android 16 checkout sessions on 10.28.0 fail payment and then crash; the crash is coupled to that request."
+  },
+  {
+    "request": "Add a payments database pool outage from 2:00 to 2:20 pm Eastern yesterday that affects shop and travel, on Android and web, then recover.",
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/traffic",
+        "value": {
+          "mode": "backfill",
+          "count": 40,
+          "window": {
+            "last_minutes": 1440
+          }
+        }
+      },
+      {
+        "op": "add",
+        "path": "/backend_faults/-",
+        "value": {
+          "id": "payments-pool",
+          "type": "db_pool_exhaustion",
+          "variant": "payments-db-pool",
+          "rate": 0.8,
+          "lines_of_business": [
+            "retail",
+            "travel"
+          ]
+        }
+      },
+      {
+        "op": "add",
+        "path": "/incidents/-",
+        "value": {
+          "id": "payments-recovery",
+          "fault_ref": "payments-pool",
+          "start": "$INCIDENT_START",
+          "onset_minutes": 2,
+          "peak_minutes": 15,
+          "recovery_minutes": 3
+        }
+      }
+    ],
+    "summary": "At the supplied clock, yesterday 2 pm Eastern is older than 24 hours. This proposed alternative places the 20-minute outage within the rolling Last 24 hours window, across retail and travel on both platforms. Historical sessions have no trace links; review the proposed replacement time before applying."
+  },
+  {
+    "request": "Slow the hotel search root span to a p95 of 4 seconds for budget Android devices.",
+    "patch": [
+      {
+        "op": "add",
+        "path": "/client_faults/-",
+        "value": {
+          "id": "hotel-search-delay",
+          "type": "slow_root_span",
+          "rate": 1,
+          "filters": {
+            "device_tiers": [
+              "budget"
+            ],
+            "lines_of_business": [
+              "travel"
+            ]
+          },
+          "details": {
+            "span": "search_hotels",
+            "p50_ms": 1700,
+            "p95_ms": 4000
+          },
+          "platform": "android"
+        }
+      }
+    ],
+    "summary": "Budget Android travel sessions have a 4-second p95 hotel search root span."
+  },
+  {
+    "request": "Make LCP p75 on product pages 3.8 seconds for mobile Safari and keep desktop Chrome healthy.",
+    "patch": [
+      {
+        "op": "add",
+        "path": "/web_performance",
+        "value": [
+          {
+            "id": "mobile-product",
+            "page_groups": [
+              "Product"
+            ],
+            "device_types": [
+              "mobile"
+            ],
+            "browser_families": [
+              "safari"
+            ],
+            "targets": {
+              "lcp": 3800
+            }
+          },
+          {
+            "id": "desktop-product",
+            "page_groups": [
+              "Product"
+            ],
+            "device_types": [
+              "desktop"
+            ],
+            "browser_families": [
+              "chrome"
+            ],
+            "targets": {
+              "lcp": 1800
+            }
+          }
+        ]
+      }
+    ],
+    "summary": "Product-page LCP targets 3.8 seconds on mobile Safari and a healthy 1.8 seconds on desktop Chrome. Safari CLS and INP remain unsupported."
+  },
+  {
+    "request": "After the next web release, show chunk load failures on checkout for tabs opened before the deploy.",
+    "patch": [
+      {
+        "op": "add",
+        "path": "/client_faults/-",
+        "value": {
+          "id": "checkout-chunks",
+          "type": "chunk_load_failures",
+          "rate": 0.3,
+          "filters": {
+            "page_groups": [
+              "Checkout"
+            ]
+          },
+          "platform": "web"
+        }
+      }
+    ],
+    "summary": "Thirty percent of eligible checkout sessions on the older web release fail a lazy chunk. Current-release sessions remain clean; tab release identity is retained across navigation."
+  },
+  {
+    "request": "Raise INP on search to about 450 ms, caused by the chat widget script.",
+    "patch": [
+      {
+        "op": "add",
+        "path": "/client_faults/-",
+        "value": {
+          "id": "chat-input-delay",
+          "type": "interaction_latency",
+          "rate": 1,
+          "filters": {
+            "page_groups": [
+              "Search"
+            ],
+            "browser_families": [
+              "chrome",
+              "edge"
+            ]
+          },
+          "details": {
+            "p75_ms": 450,
+            "script": "chat_widget"
+          },
+          "platform": "web"
+        }
+      }
+    ],
+    "summary": "Search INP targets 450 ms in Chromium with chat-widget script attribution. Safari and Firefox do not report INP, so they are excluded."
+  },
+  {
+    "request": "What is this stream generating right now?",
+    "patch": [],
+    "summary": "The inspected local run is a sessions-only burst with four planned sessions and no backend trace exports. Delivery counters and verification evidence are separate; there is no active live stream in this workspace."
+  }
+]

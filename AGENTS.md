@@ -196,3 +196,7 @@ Embrace MCP source correction: `get_session_distribution` groups by a dimension,
 ### V2 scenario studio
 
 Handoff 4.5 provides the React 18/TypeScript/Vite application in `apps/web`. Generated Zod validation supplements server validation; Radix controls, TanStack Query, RHF, Framer Motion, Recharts and cmdk provide the requested interactions. Browser tests cover every screen, keyboard commands, capability restrictions, laptop overflow, and a complete confirmed dry run. Future live incident previews use a projected clock and cannot send telemetry. UI tests own a separate `.state/ui-tests` server on loopback port 8001.
+
+### V2 MCP and Copilot
+
+Handoff 4.6 uses MCP SDK 2's `MCPServer` (the former FastMCP name was removed). SDK model properties are snake_case (`input_schema`, `is_error`, `structured_content`), while protocol JSON remains camelCase. HTTP and stdio integration tests exercise the actual protocol. REST authentication supplies caller attribution through a context variable. Copilot exposes only read operations and a terminal proposal tool; do not give it mutating MCP tools. Recorded responses cover all seven requested examples, unsupported capabilities, key gating, confirmation and optimistic concurrency. No live Anthropic calls are part of tests.
