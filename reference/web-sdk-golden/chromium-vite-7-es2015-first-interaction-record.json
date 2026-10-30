@@ -1,0 +1,112 @@
+{
+  "timeUnixNano": "1792520727685800049",
+  "observedTimeUnixNano": "1792520727686000000",
+  "severityNumber": 9,
+  "body": {},
+  "eventName": "first-interaction",
+  "attributes": [
+    {
+      "key": "emb.type",
+      "value": {
+        "stringValue": "emb.otel_log"
+      }
+    },
+    {
+      "key": "first_interaction.interaction_type",
+      "value": {
+        "stringValue": "click"
+      }
+    },
+    {
+      "key": "first_interaction.element_type",
+      "value": {
+        "stringValue": "button"
+      }
+    },
+    {
+      "key": "first_interaction.element_selector",
+      "value": {
+        "stringValue": "#root>section>button"
+      }
+    },
+    {
+      "key": "first_interaction.time",
+      "value": {
+        "doubleValue": 146.90009784698486
+      }
+    },
+    {
+      "key": "first_interaction.x",
+      "value": {
+        "intValue": 409
+      }
+    },
+    {
+      "key": "first_interaction.y",
+      "value": {
+        "intValue": 418
+      }
+    },
+    {
+      "key": "log.record.uid",
+      "value": {
+        "stringValue": "79A30A3A3A18457A175EE04A87DAF979"
+      }
+    },
+    {
+      "key": "emb.user_session_id",
+      "value": {
+        "stringValue": "5EED062AA4C69CEE62F6BB9E9851F1DE"
+      }
+    },
+    {
+      "key": "emb.user_session_previous_id",
+      "value": {
+        "stringValue": ""
+      }
+    },
+    {
+      "key": "emb.session_part_id",
+      "value": {
+        "stringValue": "DDA5F19228010A2A9CBA911D85B14411"
+      }
+    },
+    {
+      "key": "browser.url.full",
+      "value": {
+        "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+      }
+    },
+    {
+      "key": "url.full",
+      "value": {
+        "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+      }
+    },
+    {
+      "key": "emb.is_tab_engaged",
+      "value": {
+        "boolValue": true
+      }
+    },
+    {
+      "key": "app.surface.id",
+      "value": {
+        "stringValue": "311877ADF9BECBE48D180F8A97684DD8"
+      }
+    },
+    {
+      "key": "app.surface.label",
+      "value": {
+        "stringValue": "React + TS + Vite"
+      }
+    },
+    {
+      "key": "emb.perf_clock_lag_ms",
+      "value": {
+        "intValue": 0
+      }
+    }
+  ],
+  "droppedAttributesCount": 0
+}

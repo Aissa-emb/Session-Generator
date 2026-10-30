@@ -13,31 +13,55 @@ import tempfile
 
 from .util import emb_id, weighted
 
-CHROME, EDGE, FIREFOX, SAFARI, SAMSUNG = "154.0.0.0", "154.0.0.0", "157.0", "26.1", "29.0"
-
-# (kind, ua, chromium, screens, weight)
-DEVICES = [
-    ("desktop", f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{CHROME} Safari/537.36",
-     True, ["1920x1080", "1536x864", "2560x1440", "1366x768", "1440x900"], 22),
-    ("desktop", f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{CHROME} Safari/537.36",
-     True, ["1512x982", "1728x1117", "1440x900", "2560x1440"], 13),
-    ("desktop", f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{SAFARI} Safari/605.1.15",
-     False, ["1512x982", "1728x1117", "1470x956"], 8),
-    ("desktop", f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{EDGE} Safari/537.36 Edg/{EDGE}",
-     True, ["1920x1080", "1536x864", "1280x720"], 8),
-    ("desktop", f"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:{FIREFOX}) Gecko/20100101 Firefox/{FIREFOX}",
-     False, ["1920x1080", "1536x864"], 3),
-    ("mobile", f"Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{SAFARI} Mobile/15E148 Safari/604.1",
-     False, ["402x874", "393x852", "430x932", "440x956", "390x844"], 26),
-    ("mobile", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
-     False, ["393x852", "390x844", "375x812"], 5),
-    ("mobile", f"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{CHROME} Mobile Safari/537.36",
-     True, ["412x915", "384x854", "360x800", "412x892"], 15),
-    ("mobile", f"Mozilla/5.0 (Linux; Android 15; SM-S931B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/{SAMSUNG} Chrome/136.0.0.0 Mobile Safari/537.36",
-     True, ["384x832", "412x915"], 4),
-    ("tablet", f"Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{SAFARI} Mobile/15E148 Safari/604.1",
-     False, ["820x1180", "1024x1366", "834x1194"], 3),
+# Browsers in the web population. family/version/engine drive the capability matrix
+# (web_capabilities.py); chromium is the Chromium version a Chromium-based browser ships.
+# Since iOS 26, Safari's user agent keeps "iPhone OS 18_6" and reports the Safari version only.
+_WIN, _MAC = "Windows NT 10.0; Win64; x64", "Macintosh; Intel Mac OS X 10_15_7"
+BROWSERS = [
+    # family, version, engine, chromium, os, device type, user agent, screens, weight
+    ("chrome", "154", "chromium", 154, "windows", "desktop",
+     f"Mozilla/5.0 ({_WIN}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     ["1920x1080", "1536x864", "2560x1440", "1366x768", "1440x900"], 19),
+    ("chrome", "153", "chromium", 153, "windows", "desktop",
+     f"Mozilla/5.0 ({_WIN}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+     ["1920x1080", "1536x864", "1366x768"], 4),
+    ("chrome", "154", "chromium", 154, "macos", "desktop",
+     f"Mozilla/5.0 ({_MAC}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     ["1512x982", "1728x1117", "1440x900", "2560x1440"], 12),
+    ("edge", "154", "chromium", 154, "windows", "desktop",
+     f"Mozilla/5.0 ({_WIN}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+     ["1920x1080", "1536x864", "1280x720"], 8),
+    ("firefox", "157", "gecko", None, "windows", "desktop",
+     f"Mozilla/5.0 ({_WIN}; rv:157.0) Gecko/20100101 Firefox/157.0", ["1920x1080", "1536x864"], 3),
+    ("firefox", "157", "gecko", None, "macos", "desktop",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:157.0) Gecko/20100101 Firefox/157.0", ["1512x982", "1440x900"], 1),
+    ("safari", "27.0", "webkit", None, "macos", "desktop",
+     f"Mozilla/5.0 ({_MAC}) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15",
+     ["1512x982", "1728x1117", "1470x956"], 6),
+    ("safari", "26.5", "webkit", None, "macos", "desktop",
+     f"Mozilla/5.0 ({_MAC}) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+     ["1512x982", "1440x900"], 2),
+    ("safari", "27.0", "webkit", None, "ios", "mobile",
+     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+     ["402x874", "393x852", "430x932", "440x956"], 18),
+    ("safari", "26.5", "webkit", None, "ios", "mobile",
+     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1",
+     ["393x852", "390x844", "430x932"], 6),
+    ("safari", "26.1", "webkit", None, "ios", "mobile",
+     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Mobile/15E148 Safari/604.1",
+     ["390x844", "375x812"], 3),
+    ("chrome", "154", "chromium", 154, "android", "mobile",
+     "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Mobile Safari/537.36",
+     ["412x915", "384x854", "360x800", "412x892"], 14),
+    ("samsung_internet", "29.0", "chromium", 136, "android", "mobile",
+     "Mozilla/5.0 (Linux; Android 15; SM-S931B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/29.0 Chrome/136.0.0.0 Mobile Safari/537.36",
+     ["384x832", "412x915"], 4),
+    ("safari", "27.0", "webkit", None, "ipados", "tablet",
+     "Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+     ["820x1180", "1024x1366", "834x1194"], 3),
 ]
+# V1 tuple view used by older code paths: (kind, ua, chromium, screens, weight).
+DEVICES = [(b[5], b[6], b[2] == "chromium", b[7], b[8]) for b in BROWSERS]
 
 # Android phones: (manufacturer, model as Build.MODEL reports it, OS versions, screen, SoC or None, storage GB, weight).
 # The backend maps model codes such as SM-S931U to market names.
@@ -83,9 +107,21 @@ KIND_BIAS = {
 CHROME_HEIGHT = {"desktop": (110, 160), "mobile": (150, 200), "tablet": (100, 140)}
 
 
-def _new_persona(profile_key, rng):
+def _new_persona(profile_key, rng, overrides=None):
     bias = KIND_BIAS.get(profile_key, {})
-    kind, ua, chromium, screens, _ = weighted([(d, d[4] * bias.get(d[0], 1.0)) for d in DEVICES], rng)
+    overrides = overrides or {}
+    family_mix, type_mix = overrides.get("browser_mix") or {}, overrides.get("device_type_mix") or {}
+
+    def weight(b):
+        w = b[8] * bias.get(b[5], 1.0)
+        if family_mix:
+            w *= family_mix.get(b[0], 0)
+        if type_mix:
+            w *= type_mix.get(b[5], 0)
+        return w
+    browser = weighted([(b, weight(b)) for b in BROWSERS], rng)
+    family, version, engine, chromium_version, os_name, kind, ua, screens, _ = browser
+    chromium = engine == "chromium"
     screen = rng.choice(screens)
     w, h = (int(x) for x in screen.split("x"))
     if kind == "desktop":
@@ -93,15 +129,19 @@ def _new_persona(profile_key, rng):
         vh = h - rng.randint(*CHROME_HEIGHT[kind])
     else:
         vw, vh = w, h - rng.randint(*CHROME_HEIGHT[kind])
-    conn = weighted([("fiber", 5), ("cable", 4), ("wifi", 6)] if kind == "desktop" else
-                    [("wifi", 5), ("5g", 4), ("4g", 5), ("4g-weak", 1)], rng)
+    conn_mix = overrides.get("connection_mix") or {}
+    options = [("fiber", 5), ("cable", 4), ("wifi", 6)] if kind == "desktop" else [("wifi", 5), ("5g", 4), ("4g", 5), ("4g-weak", 1)]
+    if conn_mix and any(conn_mix.get(c, 0) for c, _ in options):
+        options = [(c, conn_mix.get(c, 0)) for c, _ in options]
+    conn = weighted(options, rng)
     rtt = {"fiber": (12, 30), "cable": (20, 45), "wifi": (25, 70), "5g": (35, 80), "4g": (55, 130),
            "4g-weak": (140, 320)}[conn]
     mbps = {"fiber": (150, 600), "cable": (60, 250), "wifi": (30, 180), "5g": (40, 220), "4g": (8, 45),
             "4g-weak": (1.2, 4)}[conn]
     return {
         "device_id": emb_id(rng),
-        "kind": kind, "ua": ua, "chromium": chromium,
+        "kind": kind, "ua": ua, "chromium": chromium, "browser": family, "browser_version": version,
+        "engine": engine, "chromium_version": chromium_version, "os": os_name, "connection": conn,
         "screen": screen, "viewport": f"{vw}x{vh}",
         "effective_type": "3g" if conn == "4g-weak" else "4g",
         "device_memory": rng.choice([4, 8, 8, 16]) if kind == "desktop" else rng.choice([4, 6, 8]),
@@ -143,11 +183,12 @@ def _new_android_persona(profile_key, rng, overrides=None):
 
 class PersonaPool:
     def __init__(self, profile_key, state_dir, size=600, rng=random, platform="web", returning_share=None,
-                 android_overrides=None):
+                 android_overrides=None, web_overrides=None):
         self.profile_key, self.rng, self.platform = profile_key, rng, platform
         # Steady-state share of returning visitors; V1 settles at 45% returning.
         self.new_floor = 1 - returning_share if returning_share is not None else 0.55
         self.android_overrides = android_overrides
+        self.web_overrides = web_overrides
         self.path = os.path.join(state_dir, f"personas-{profile_key}{'' if platform == 'web' else '-' + platform}.json")
         self.size = size
         self.personas = []
@@ -169,7 +210,7 @@ class PersonaPool:
             if self.platform == "android":
                 p = _new_android_persona(self.profile_key, self.rng, self.android_overrides)
             else:
-                p = _new_persona(self.profile_key, self.rng)
+                p = _new_persona(self.profile_key, self.rng, self.web_overrides)
             make_user(p)
             self.personas.append(p)
         else:

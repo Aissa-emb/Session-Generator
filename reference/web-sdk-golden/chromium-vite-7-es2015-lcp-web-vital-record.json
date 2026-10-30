@@ -1,0 +1,136 @@
+{
+  "timeUnixNano": "1792520727557500000",
+  "observedTimeUnixNano": "1792520727700000000",
+  "severityNumber": 9,
+  "body": {
+    "stringValue": "{\"timeToFirstByte\":1.700000286102295,\"resourceLoadDelay\":0,\"resourceLoadDuration\":0,\"elementRenderDelay\":62.299999713897705,\"target\":\"#root>div\"}"
+  },
+  "eventName": "browser.web_vital",
+  "attributes": [
+    {
+      "key": "emb.type",
+      "value": {
+        "stringValue": "ux.web_vital"
+      }
+    },
+    {
+      "key": "browser.web_vital.name",
+      "value": {
+        "stringValue": "lcp"
+      }
+    },
+    {
+      "key": "browser.web_vital.value",
+      "value": {
+        "intValue": 64
+      }
+    },
+    {
+      "key": "browser.web_vital.delta",
+      "value": {
+        "intValue": 64
+      }
+    },
+    {
+      "key": "browser.web_vital.rating",
+      "value": {
+        "stringValue": "good"
+      }
+    },
+    {
+      "key": "browser.web_vital.id",
+      "value": {
+        "stringValue": "v6-1792520727536-2131917241410"
+      }
+    },
+    {
+      "key": "browser.web_vital.navigation_type",
+      "value": {
+        "stringValue": "navigate"
+      }
+    },
+    {
+      "key": "browser.web_vital.navigation_id",
+      "value": {
+        "intValue": 4893
+      }
+    },
+    {
+      "key": "emb.session_part_id",
+      "value": {
+        "stringValue": "DDA5F19228010A2A9CBA911D85B14411"
+      }
+    },
+    {
+      "key": "browser.url.full",
+      "value": {
+        "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+      }
+    },
+    {
+      "key": "app.surface.name",
+      "value": {}
+    },
+    {
+      "key": "app.surface.id",
+      "value": {
+        "stringValue": "311877ADF9BECBE48D180F8A97684DD8"
+      }
+    },
+    {
+      "key": "app.surface.label",
+      "value": {
+        "stringValue": "React + TS + Vite"
+      }
+    },
+    {
+      "key": "emb.web_vital.attribution.elementType",
+      "value": {
+        "stringValue": "div"
+      }
+    },
+    {
+      "key": "emb.web_vital.attribution.elementBoundingRect",
+      "value": {
+        "stringValue": "{\"x\":8,\"y\":8,\"width\":600,\"height\":400}"
+      }
+    },
+    {
+      "key": "log.record.uid",
+      "value": {
+        "stringValue": "7E79B26EF214747B3AD03EA2185884DB"
+      }
+    },
+    {
+      "key": "emb.user_session_id",
+      "value": {
+        "stringValue": "5EED062AA4C69CEE62F6BB9E9851F1DE"
+      }
+    },
+    {
+      "key": "emb.user_session_previous_id",
+      "value": {
+        "stringValue": ""
+      }
+    },
+    {
+      "key": "url.full",
+      "value": {
+        "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+      }
+    },
+    {
+      "key": "emb.is_tab_engaged",
+      "value": {
+        "boolValue": true
+      }
+    },
+    {
+      "key": "emb.perf_clock_lag_ms",
+      "value": {
+        "intValue": 0
+      }
+    }
+  ],
+  "droppedAttributesCount": 0
+}

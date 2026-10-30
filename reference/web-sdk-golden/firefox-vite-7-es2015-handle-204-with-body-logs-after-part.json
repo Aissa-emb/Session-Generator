@@ -1,0 +1,343 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "embrace-web-sdk"
+            }
+          },
+          {
+            "key": "app_version",
+            "value": {
+              "stringValue": "1.0.0"
+            }
+          },
+          {
+            "key": "app_framework",
+            "value": {
+              "intValue": 1
+            }
+          },
+          {
+            "key": "sdk_version",
+            "value": {
+              "stringValue": "2.31.0"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "2.31.0"
+            }
+          },
+          {
+            "key": "sdk_simple_version",
+            "value": {
+              "intValue": 1
+            }
+          },
+          {
+            "key": "sdk_platform",
+            "value": {
+              "stringValue": "web"
+            }
+          },
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "webjs"
+            }
+          },
+          {
+            "key": "emb.app_instance_id",
+            "value": {
+              "stringValue": "C5324F31896F942BA293E6D3D4E061D6"
+            }
+          },
+          {
+            "key": "user_agent.original",
+            "value": {
+              "stringValue": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0"
+            }
+          },
+          {
+            "key": "screen_resolution",
+            "value": {
+              "stringValue": "1920x1080"
+            }
+          },
+          {
+            "key": "viewport_resolution",
+            "value": {
+              "stringValue": "1280x720"
+            }
+          },
+          {
+            "key": "webdriver",
+            "value": {
+              "boolValue": true
+            }
+          },
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "embrace-web-sdk"
+            }
+          }
+        ],
+        "droppedAttributesCount": 0
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "MaxScrollDepthInstrumentation",
+            "version": "1.0.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1792592885377000000",
+              "observedTimeUnixNano": "1792592885377000000",
+              "severityNumber": 9,
+              "body": {},
+              "eventName": "max-scroll-depth",
+              "attributes": [
+                {
+                  "key": "emb.type",
+                  "value": {
+                    "stringValue": "emb.otel_log"
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.pixels",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.did_scroll",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.percent",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.document_height",
+                  "value": {
+                    "intValue": 720
+                  }
+                },
+                {
+                  "key": "log.record.uid",
+                  "value": {
+                    "stringValue": "6EA3CFA0EE099F1F0DEE24EEDB90E3EC"
+                  }
+                },
+                {
+                  "key": "emb.user_session_id",
+                  "value": {
+                    "stringValue": "F1190757E5047E691A73690507EA64BB"
+                  }
+                },
+                {
+                  "key": "emb.user_session_previous_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "emb.session_part_id",
+                  "value": {
+                    "stringValue": "BA365BFC08EF6882A1F5E98CDC489AD4"
+                  }
+                },
+                {
+                  "key": "browser.url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "emb.is_tab_engaged",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "app.surface.id",
+                  "value": {
+                    "stringValue": "256AB20668547008E972781DD7704733"
+                  }
+                },
+                {
+                  "key": "app.surface.label",
+                  "value": {
+                    "stringValue": "React + TS + Vite"
+                  }
+                },
+                {
+                  "key": "emb.perf_clock_lag_ms",
+                  "value": {
+                    "intValue": 1
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0
+            }
+          ]
+        },
+        {
+          "scope": {
+            "name": "DOMStateInstrumentation",
+            "version": "1.0.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1792592885377000000",
+              "observedTimeUnixNano": "1792592885377000000",
+              "severityNumber": 9,
+              "body": {},
+              "eventName": "dom-state",
+              "attributes": [
+                {
+                  "key": "emb.type",
+                  "value": {
+                    "stringValue": "emb.otel_log"
+                  }
+                },
+                {
+                  "key": "dom_state.element_count",
+                  "value": {
+                    "intValue": 13
+                  }
+                },
+                {
+                  "key": "dom_state.average_depth",
+                  "value": {
+                    "doubleValue": 3.4615384615384617
+                  }
+                },
+                {
+                  "key": "dom_state.document_height",
+                  "value": {
+                    "intValue": 720
+                  }
+                },
+                {
+                  "key": "dom_state.document_width",
+                  "value": {
+                    "intValue": 1280
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.count",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.viewport_height",
+                  "value": {
+                    "intValue": 720
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.viewport_width",
+                  "value": {
+                    "intValue": 1280
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.timestamp",
+                  "value": {
+                    "intValue": 1792592884400
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.capture_time",
+                  "value": {
+                    "intValue": 93
+                  }
+                },
+                {
+                  "key": "log.record.uid",
+                  "value": {
+                    "stringValue": "09B6BA1E6D8640E8FCB50DD1296264A1"
+                  }
+                },
+                {
+                  "key": "emb.user_session_id",
+                  "value": {
+                    "stringValue": "F1190757E5047E691A73690507EA64BB"
+                  }
+                },
+                {
+                  "key": "emb.user_session_previous_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "emb.session_part_id",
+                  "value": {
+                    "stringValue": "BA365BFC08EF6882A1F5E98CDC489AD4"
+                  }
+                },
+                {
+                  "key": "browser.url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "emb.is_tab_engaged",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "app.surface.id",
+                  "value": {
+                    "stringValue": "256AB20668547008E972781DD7704733"
+                  }
+                },
+                {
+                  "key": "app.surface.label",
+                  "value": {
+                    "stringValue": "React + TS + Vite"
+                  }
+                },
+                {
+                  "key": "emb.perf_clock_lag_ms",
+                  "value": {
+                    "intValue": 0
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
