@@ -63,7 +63,7 @@ def build(ctx, ep, key, fault):
         table, db = ("products", "catalog") if key == "get_product" else ("accounts", "accounts")
         children = [cache]
         if fallback:
-            children.append(b.sql(svc, "SELECT", table, f"SELECT * FROM {table} WHERE id = ?", db,
+            children.append(b.sql(svc, "SELECT", table, f"SELECT * FROM {table} WHERE id = ?", db,  # nosec B608 -- telemetry text; table is a fixed internal constant
                                   platform.RDS.format(db + "-prod"), ms=(180, 600), rows=1))
         status = 200 if fallback else 503
         route = "/v1/products/{id}" if key == "get_product" else "/v2/customers/{id}/accounts"

@@ -264,3 +264,19 @@ Backend presets include `catalog-cache-outage`, `accounts-cache-outage`, `gatewa
 Every V2 burst/backfill stores a private SQLite journal alongside its manifest. Resume with `python3 generate.py run spec.json --resume RUN_ID` (add the original `--dry-run DIR` for a local run). The original random states, visitor pools, timestamp and spec digest regenerate the exact plan. Delivered payloads are skipped, including partially delivered sessions; a session receipt is appended only after its deliveries finish. The spec and dry/live destination must match. Delivery defaults to 20 payloads/second, stops after 20 failures, and removes expired trace context at send time.
 
 An interrupted POST or lost acknowledgement can leave acceptance uncertain. Resume then blocks instead of risking duplicate sessions. HTTP acceptance remains distinct from platform verification. Keep the journal and inspect the known IDs through the platform before resolving an uncertain delivery.
+
+### Local control server
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r server/requirements.txt
+.venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8000
+```
+
+The API reference is at `http://127.0.0.1:8000/docs`. SQLite state lives in `.state/server` (`SG_DATA_DIR` overrides it). The API stores immutable scenario versions, validates JSON Patch edits, previews without network access, runs isolated jobs, and records delivery receipts and SSE events. Start actions require `confirm: true`; use `dry_run: true` for local payload files. Live edits apply at the next session; pause drains pending deliveries and stop flushes them. Bounded resume uses the original plan and spec version. An OS lock prevents duplicate workers.
+
+Connections include readiness evidence and Markdown/JSON setup kits. Forwarding probes require confirmation and a five-minute settling period. Verification queries every known trace ID in batches of eight and counts missing IDs in retention/completeness denominators. An Embrace service account token enables read-only MCP verification; without it the API returns the exact operator calls. `POST /api/runs/{id}/observations` compares observed hourly user-session counts and segmented p75 values with the sent cohort. Use rolling ranges and exclude unrelated app traffic.
+
+Secrets are write-only: macOS Keychain locally, `SG_<NAME>_TOKEN` or `SG_<NAME>_TOKEN_FILE` in hosted environments (`CHRONOSPHERE`, `EMBRACE_API`, `ANTHROPIC`, `SYMBOL_UPLOAD`). On non-macOS hosts, Settings writes require `SG_SECRET_DIR` pointing to a private mounted directory. Remote API access requires a bearer token and an explicit `SG_ALLOWED_HOSTS` hostname. Set `SG_REQUIRE_AUTH=1` to require a token locally too. Never expose the port without TLS at the reverse proxy.
+
+Server checks: `.venv/bin/python -m unittest discover -s tests/server -v` and `.venv/bin/python tools/generate_models.py --check`.

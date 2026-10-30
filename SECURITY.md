@@ -39,3 +39,9 @@ Web targets default to omitting `Origin`. The `allowed` policy sends the configu
 Backend fault controls accept bounded retry and Kafka-delay values. Service-version routing metadata is internal and is excluded from emitted attributes. Fault construction performs no network access.
 
 Run journals and manifests are owner-only, reject symbolic links, and contain no credentials. Resume checks the normalized spec digest and dry/live mode. Network ambiguity and OTLP partial success block automatic resends; exactly-once remote ingestion cannot be promised without a transactional ingest API. Strict journaled delivery disables transport retries.
+
+### Control-plane security
+
+The server defaults to loopback, checks Host and Origin to prevent DNS rebinding/CSRF, bounds request bodies to 1 MiB and requires hashed bearer tokens for remote API and MCP access. Set allowed public hostnames explicitly and terminate TLS before exposing a hosted deployment. Token plaintext is returned once at creation; hashes and secret values are excluded from listing endpoints. Validation errors omit submitted input values. Secrets use Keychain APIs or private mounted files, never shell arguments. Job subprocess arguments contain only a run ID; scenario data reaches the preview worker over stdin. Provider response bodies and unexpected exceptions are suppressed. Read-only Embrace MCP calls are allow-listed and schema-validated.
+
+API jobs use exclusive OS locks and SQLite transactions; stale workers are marked for recovery rather than automatically duplicated. Local ingest tests create a temporary certificate and trust it explicitly, without disabling certificate verification.

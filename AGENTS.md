@@ -186,3 +186,9 @@ Handoff 4.2 is implemented in `backend_faults.py`: cache fallback or fail-closed
 ### Durable bounded runs
 
 Handoff 4.3 uses `journal.py` (stdlib SQLite, FULL synchronous commits). A frozen RNG/pool/clock snapshot regenerates the same IDs, allocations and payload hashes. Intent is committed before each POST; accepted deliveries are never retried, and complete-session receipts follow delivery. In-flight, ambiguous and partially accepted exports block automatic resume. Retry-free strict receipt mode prevents hidden duplicate POSTs. At live send time stale backend exports expire and stale app payloads lose trace context. Five interruption/security tests exercise resume. Live stream persistence is provided by the server phase.
+
+### V2 control plane
+
+Handoff 4.4 now has `server/` with generated Pydantic v2 contracts, SQLAlchemy/SQLite persistence, versioned specs, isolated workers, receipt capture, SSE, run/stream controls, previews, readiness kits, write-only secrets and verification. Job processes use an OS lock and re-read the latest live spec before starting a session. Tests exercise API workflows and certificate-verified loopback ingest. `tests/server` intentionally runs separately so stdlib engine tests do not require server dependencies.
+
+Embrace MCP source correction: `get_session_distribution` groups by a dimension, not hour. Web-vital tools use `name` (uppercase) and `dimension`, not `metric`/`group_by`. The server discovers and validates remote tool schemas; hourly platform exports can be attached through the observations endpoint for comparison with the sent cohort. API acceptance never establishes dashboard visibility.
