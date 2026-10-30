@@ -27,6 +27,6 @@ bandit --ini .bandit -r xcorgen generate.py tools
 
 GitHub Actions scans full history and runs security regression and payload validation checks on pushes and pull requests. The checkout action is pinned to a commit, Gitleaks is pinned by version and SHA-256, and the job receives read-only repository permission without persisted checkout credentials. GitHub's built-in secret scanning may require a separate plan/setting and is not implied by this workflow.
 
-The Gitleaks exception covers only the literal `emb.w3c_traceparent` attribute name in three captured SDK files. It does not exempt credential values or other files. Bandit's B311 check is disabled because seeded pseudo-random values are used only for simulation; the deterministic MD5 SDK build label is explicitly marked as non-security use.
+The Gitleaks exception covers only the literal `emb.w3c_traceparent` attribute name in three captured SDK files and the scrubbed 2.29 web session sample. It does not exempt credential values or other files. Bandit's B311 check is disabled because seeded pseudo-random values are used only for simulation; the deterministic MD5 SDK build label is explicitly marked as non-security use.
 
 A clean scan is evidence for these checks, not a guarantee that the code, host, dependencies, or connected services cannot be compromised. Keep Python and the operating system patched, and repeat the checks when code or deployment settings change.

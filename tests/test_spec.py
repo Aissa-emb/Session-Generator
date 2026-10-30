@@ -351,3 +351,17 @@ class LinterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReferenceTests(unittest.TestCase):
+    def test_scrubbed_web_sample_has_no_personal_data(self):
+        import re
+        import sys
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        from scrub_web_sample import verify, decoded_contexts, EMAIL
+        path = os.path.join(ROOT, "reference", "web-sdk-2.29-sample", "web_2_29_0_sample.scrubbed.jsonl")
+        text = open(path).read()
+        self.assertEqual(verify(text, set()), [])
+        self.assertTrue(all('"anonymous":true' in c for c in decoded_contexts(text)))
+        self.assertFalse([e for e in EMAIL.findall(text) if not re.fullmatch(r"[\w.-]+@\d[\d.]*", e)])
+        self.assertEqual(len(text.splitlines()), 4)
