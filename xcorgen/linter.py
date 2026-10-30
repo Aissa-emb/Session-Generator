@@ -161,6 +161,9 @@ def lint_payloads(deliveries, max_issues=50):
                     failed = code is None or int(code) >= 400
                     if (span["status"] == "Error") != failed:
                         add("error", span["name"], "Network span status does not match its HTTP status.", "status")
+        elif d["target"] == "embrace":
+            from .web_contract import check
+            check(payload, lambda message: add("error", "$.embrace." + d["kind"], message, "web_contract"))
         elif d["target"] == "otlp" and d["kind"] == "traces":
             for rs in payload["resourceSpans"]:
                 res = _vals(rs["resource"]["attributes"])

@@ -68,7 +68,6 @@ class ValidationTests(unittest.TestCase):
         cases = {
             "rate": lambda s: s.update(client_faults=[{"id": "c", "type": "jvm_crash", "rate": 1.5}]),
             "unknown field": lambda s: s.update(colour="green"),
-            "web target": lambda s: s["targets"].append(copy.deepcopy(specs.WEB_TARGET)),
             "chronosphere": lambda s: s.update(destinations={"mode": "end_to_end"}),
             "backfill horizon": lambda s: s.update(traffic={"mode": "backfill", "count": 10,
                                                            "window": {"last_minutes": 25 * 60}}),

@@ -64,4 +64,6 @@ CHROMIUM_FAMILIES = ("chrome", "edge", "samsung_internet")
 def unsupported(metric, families):
     """Browser families in `families` that never report `metric` (cls, inp, tbd, soft navigation)."""
     key = {"tbd": "loaf"}.get(metric, metric)
+    if key in ("ttfb", "fcp", "lcp"):
+        return []
     return [f for f in families if not MATRIX[f].get(key)]

@@ -32,6 +32,8 @@ TRACE_KEYS = ("emb.w3c_traceparent", "emb.forward_telemetry")
 
 def app_overrides(target, spec):
     """Android app definition for each line of business, from the target."""
+    if target["platform"] == "web":
+        return {catalog.PROFILE_FOR[lob]: {"api_host": host} for lob, host in target["api_domains"].items()}
     a = target["android"]
     name = target.get("app_name") or "Vantra"
     versions = []
@@ -93,8 +95,9 @@ class SpecRun:
                             backend_logs=self.spec["destinations"].get("backend_logs", False), persist=persist,
                             platform=target["platform"], shared=True, app_overrides=app_overrides(target, self.spec),
                             pool_options={"returning_share": pop["returning_share"],
-                                          "android_overrides": pop.get("android")}, runtime=runtime,
-                            state_dir=state_dir)
+                                          "android_overrides": pop.get("android"), "web_overrides": pop.get("web")}, runtime=runtime,
+                            state_dir=state_dir, web_options={"web": target["web"], "performance": self.spec["web_performance"],
+                                "population": pop.get("web", {}), "app_name": target["app_name"]} if target["platform"] == "web" else None)
             gen.signed_in_share = pop["signed_in_share"]
             gen.membership_weights = list(pop["session_properties"]["membership_tier"].items())
             gen.verification_queue = [self._case(c) for c in self.spec["verification_cases"]
@@ -146,12 +149,13 @@ class SpecRun:
             trace_ids = sorted({r["trace_id"] for r in s.plan.evidence}) if s.traces else []
             append_manifest(self.manifest, {
                 "run_id": self.run_id, "target": target["id"], "app_id": s.app_id, "session_id": s.user_session_id,
-                "device_id": s.persona["device_id"], "start_ms": s.start_ms, "end_ms": s.end_ms,
+                "device_id": getattr(s, "device_id", s.persona["device_id"]), "start_ms": s.start_ms, "end_ms": s.end_ms,
                 "planned_start_ms": getattr(s, "planned_start_ms", s.start_ms),
                 "line_of_business": s.properties.get("business_unit"), "faults": fault_ids,
                 "verification_case": s.verification_case, "traces": bool(s.traces), "trace_ids": trace_ids,
                 "part_ids": sorted({_part_id(d) for d in deliveries
-                                    if d.get("fmt") == "envelope" and d["kind"] == "spans"} - {None})})
+                                    if d.get("fmt") == "envelope" and d["kind"] == "spans"} - {None})
+                            + [p.id for p in getattr(s, "parts", [])]})
 
     def open_manifest(self, directory=None):
         directory = directory or os.path.join(ROOT, ".runs", self.run_id)

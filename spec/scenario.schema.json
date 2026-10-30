@@ -105,7 +105,7 @@
         "sdk_upload_spans": {"type": "boolean", "description": "Whether the SDK's own uploads to a-<appId>.data.emb-api.com appear as network spans (SDK default: true)."},
         "origin_header": {
           "type": "object", "additionalProperties": false, "required": ["policy"],
-          "properties": {"policy": {"enum": ["none", "allowed"]}, "value": {"$ref": "#/$defs/origin"}}
+          "properties": {"policy": {"enum": ["none", "allowed", "site"]}, "value": {"$ref": "#/$defs/origin"}}
         },
         "propagation_allow_list": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/hostname"}}
       }
@@ -152,7 +152,8 @@
           "os_version_mix": {"$ref": "#/$defs/weights"}}},
         "web": {"type": "object", "additionalProperties": false, "properties": {
           "browser_mix": {"$ref": "#/$defs/weights"}, "device_type_mix": {"$ref": "#/$defs/weights"},
-          "connection_mix": {"$ref": "#/$defs/weights"}}}
+          "connection_mix": {"$ref": "#/$defs/weights"}, "bfcache_share": {"$ref": "#/$defs/share"},
+          "third_party_bloat": {"type": "number", "minimum": 0, "maximum": 10}}}
       }
     },
     "traffic": {

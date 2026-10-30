@@ -26,6 +26,24 @@ ROOT_ENDPOINT = {}
 for _key, _name in ROOT_OPERATIONS.items():
     ROOT_ENDPOINT.setdefault(_name, _key)
 
+WEB_PAGE_ENDPOINTS = {
+    "retail": {"home": "home", "search": "search", "product": "get_product", "cart": "get_cart",
+               "signin": "login", "checkout": "place_order", "confirmation": "get_order", "category": "list_products"},
+    "banking": {"signin": "login", "mfa": "mfa_verify", "dashboard": "accounts", "account": "transactions",
+                "transfer": "payees", "transfer_review": "create_transfer", "transfer_done": "create_transfer",
+                "statements": "statement", "cards": "lock_card", "billpay": "pay_bill"},
+    "travel": {"home": "locations", "flights": "flight_search", "hotels": "hotel_search", "offer": "offer",
+               "checkout": "create_booking", "confirmation": "create_booking", "trips": "trips"},
+}
+
+
+def web_pages(fault, lob):
+    from .web_sites import SITES
+    flt, detail = fault.filters, fault.details
+    return [p for p in SITES[lob].values() if (not flt.get("page_groups") or p.group in flt["page_groups"])
+            and (not flt.get("routes") or p.route in flt["routes"])
+            and (not detail.get("page") or detail["page"] in (p.key, p.group, p.route))]
+
 
 def natural_shape(lob, depth, rng):
     """The journey a session follows when no fault steers it (V1 branch probabilities)."""
@@ -98,6 +116,7 @@ class Fault:
 
     def __init__(self, raw, kind, spec):
         self.raw, self.kind = raw, kind
+        self.spec = spec
         self.id, self.type = raw["id"], raw["type"]
         self.filters = raw.get("filters", {})
         self.details = raw.get("details", {})
@@ -139,6 +158,10 @@ class Fault:
         if self.variant:
             return self.meta["endpoints"][lob]
         d = self.details
+        if self.raw.get("platform") == "web" and (self.filters.get("page_groups") or self.filters.get("routes") or d.get("page")):
+            pages = web_pages(self, lob)
+            if pages:
+                return WEB_PAGE_ENDPOINTS[lob].get(pages[0].key)
         if self.type == "jvm_crash":
             if d.get("endpoint"):
                 return d["endpoint"]
@@ -230,6 +253,28 @@ class Planner:
                   ("release_rings", skel["ring"]))
         if any(flt.get(dim) and value not in flt[dim] for dim, value in checks):
             return False
+        if skel["platform"] == "web":
+            from .web_capabilities import capabilities
+            from .browser_session import releases
+            caps = capabilities(skel["persona"])
+            metric = {"layout_instability": "cls", "interaction_latency": "inp", "soft_navigation_slowness": "native_soft_navigation"}.get(f.type)
+            if metric and not caps[metric]:
+                return False
+            if not web_pages(f, skel["lob"]):
+                return False
+            target = next(t for t in self.spec["targets"] if t["id"] == skel["target"])
+            if f.type == "soft_navigation_slowness" and target["web"]["estate"][skel["lob"]]["archetype"] == "multi_page":
+                return False
+            if f.type == "chunk_load_failures":
+                deployed = [r for r in releases(target["web"], skel["start_ms"]) if not r.get("deployed") or parse_time(r["deployed"]) <= skel["start_ms"]]
+                newest = max(deployed, key=lambda r: r.get("deployed", ""))["version"]
+                if skel["app_version"] == newest:
+                    return False
+            for dim, key in (("web_releases", "app_version"), ("browser_families", "browser"),
+                             ("browser_versions", "browser_version"), ("device_types", "kind"), ("connections", "connection")):
+                value = skel["app_version"] if key == "app_version" else skel["persona"].get(key)
+                if flt.get(dim) and value not in flt[dim]:
+                    return False
         if flt.get("signed_in") is not None and flt["signed_in"] != skel["signed_in"]:
             return False
         if f.with_fault and f.with_fault not in assigned:
@@ -279,6 +324,9 @@ class Planner:
         settings = self.settings(start_ms)
         app = gen.app_overrides.get(profile.key, {})
         version = pick_version(app.get("versions") or profile.android["versions"], persona, self.rng)
+        if target["platform"] == "web":
+            from .browser_session import pick_release
+            version = (pick_release(target["web"], start_ms, self.rng),)
         return {"target": target["id"], "platform": target["platform"], "lob": lob, "profile": profile,
                 "persona": persona, "version": version, "app_version": version[0],
                 "os_version": persona.get("os_version"), "model": persona.get("model"),
@@ -385,6 +433,11 @@ class Planner:
                 a["slow_root_span"] = {"span": d["span"], "p50_ms": d["p50_ms"], "p95_ms": d["p95_ms"]}
             elif f.type == "http_error":
                 a["http_errors"][d["endpoint"]] = {k: d[k] for k in ("status", "service") if k in d}
+            elif skel["platform"] == "web":
+                a.setdefault("web_faults", []).append(f.raw)
+                if f.type in ("chunk_load_failures", "soft_navigation_slowness"):
+                    shape["short"] = False
+                    shape["priority"] = True
         if fault_ids:
             shape["short"] = shape["short"] and all(self.by_id[x].endpoint(lob, skel, self.rng) == "lock_card"
                                                     for x in fault_ids)

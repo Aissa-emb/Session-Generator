@@ -23,6 +23,8 @@ import sys
 from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+from xcorgen.web_contract import COMMON, LOG_COMMON as WEB_LOG_COMMON, EXTRA, compatible, check as check_web
 REF = os.path.join(ROOT, "reference", "web-sdk-2.31.0-capture")
 TP = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-01$")
 
@@ -159,8 +161,17 @@ def kind_of(item):
 
 def reference_schema():
     schema = defaultdict(dict)
-    for fn in glob.glob(os.path.join(REF, "*.json")):
-        body = json.load(open(fn))["body"]
+    paths = glob.glob(os.path.join(REF, "*.json")) + glob.glob(os.path.join(ROOT, "reference", "web-sdk-golden", "*.json"))
+    paths += glob.glob(os.path.join(ROOT, "reference", "web-sdk-2.29-sample", "*.json"))
+    documents = [json.load(open(fn)) for fn in paths]
+    for fn in glob.glob(os.path.join(ROOT, "reference", "web-sdk-2.29-sample", "*.jsonl")):
+        documents.extend(json.loads(line) for line in open(fn) if line.strip())
+    for doc in documents:
+        if not isinstance(doc, dict):
+            continue
+        body = doc.get("body", doc.get("payload", doc))
+        if not isinstance(body, dict):
+            continue
         for rs in body.get("resourceSpans", []) + body.get("resourceLogs", []):
             for a in rs["resource"]["attributes"]:
                 schema["resource"][a["key"]] = vtype(a["value"])
@@ -202,6 +213,11 @@ def main(d):
             check_envelope(doc, problem, browser_spans, devices)
             continue
         if doc["target"] == "embrace":
+            # V2 uses the current SDK lifecycle; V1's historical adapter remains checked by its capture.
+            resource = (p.get("resourceSpans") or p.get("resourceLogs"))[0]["resource"]
+            app_version = next((a["value"].get("stringValue", "") for a in resource["attributes"] if a["key"] == "app_version"), "")
+            if app_version.startswith("2026."):
+                check_web(p, problem)
             res = p.get("resourceSpans") or p.get("resourceLogs")
             if len(res) != 1:
                 problem("embrace payload must have exactly one resource")
@@ -211,25 +227,31 @@ def main(d):
                 ref = schema["resource"].get(a["key"])
                 if ref is None:
                     problem(f"resource key not in capture: {a['key']}")
-                elif ref != vtype(a["value"]):
+                elif not compatible(vtype(a["value"]), ref):
                     problem(f"resource {a['key']}: {vtype(a['value'])} vs {ref}")
             groups = [("span", ss["scope"]["name"], ss["spans"]) for ss in res[0].get("scopeSpans", [])] + \
                      [("log", sl["scope"]["name"], sl["logRecords"]) for sl in res[0].get("scopeLogs", [])]
             for what, scope, items in groups:
                 for it in items:
                     k = (what, scope, kind_of(it))
-                    if k[2] not in ("ux.surface", "perf") and k not in schema:
+                    if k[2] not in ("ux.surface", "perf") and k not in schema and scope not in EXTRA and scope != "@opentelemetry/instrumentation-xml-http-request":
                         # Surface span names are routes and perf spans are custom; others must exist in the capture.
                         problem(f"{what} type not in capture: {k}")
                         continue
-                    ref = schema.get(k) or schema.get(next((x for x in schema if x[:2] == k[:2]), None), {})
+                    ref = dict(schema.get(k) or schema.get(next((x for x in schema if x[:2] == k[:2]), None), {}))
+                    if scope == "@opentelemetry/instrumentation-xml-http-request":
+                        ref.update(schema.get(("span", "@opentelemetry/instrumentation-fetch", "perf.network_request"), {}))
+                    ref.update(COMMON)
+                    if what == "log":
+                        ref.update(WEB_LOG_COMMON)
+                    ref.update(EXTRA.get(scope, {}))
                     for a in it.get("attributes", []):
                         r = ref.get(a["key"])
                         if r is None and k[2] == "perf":
                             r = CUSTOM_TASK_ATTRIBUTES.get(a["key"])
                         if r is None and not CUSTOM_OK.match(a["key"]):
                             problem(f"{k[1]}/{k[2]}: key not in capture: {a['key']}")
-                        elif r is not None and r != vtype(a["value"]) and r != "empty":
+                        elif r is not None and not compatible(vtype(a["value"]), r) and r != "empty":
                             problem(f"{k[1]}/{k[2]}: {a['key']} is {vtype(a['value'])}, capture has {r}")
                     for e in it.get("events", []):
                         er = schema.get(("event", e["name"]))

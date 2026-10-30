@@ -199,7 +199,7 @@ class Sender:
 class Generator:
     def __init__(self, profile_keys, cfg, incident=None, emit_client_spans=False, backend_logs=False, persist=True,
                  platform="android", shared=None, app_overrides=None, pool_options=None, runtime=None,
-                 state_dir=None):
+                 state_dir=None, web_options=None):
         """shared=True forces super-app mode (one app, lines of business by business_unit), as V2 targets are.
 
         app_overrides: {profile key: dict merged into the Android app definition}. pool_options:
@@ -210,6 +210,10 @@ class Generator:
         self.cfg, self.incident, self.emit_client_spans = cfg, incident, emit_client_spans
         self.backend_logs, self.persist, self.platform = backend_logs, persist, platform
         self.session_cls = AndroidSession if platform == "android" else WebSession
+        self.web_options = web_options
+        if platform == "web" and web_options is not None:
+            from .browser_session import BrowserSession
+            self.session_cls = BrowserSession
         self.runtime = runtime or Runtime()
         self.app_overrides = app_overrides or {}
         self.settings = cfg.get("generation", {})
@@ -278,6 +282,11 @@ class Generator:
                 kwargs["app"] = self.app_overrides[profile.key]
             if skeleton and skeleton.get("version"):
                 kwargs["version"] = skeleton["version"]
+        elif self.web_options is not None:
+            kwargs.update(self.web_options)
+            kwargs["api_host"] = self.app_overrides[profile.key]["api_host"]
+            if skeleton:
+                kwargs["release"] = skeleton["app_version"]
         s = self.session_cls(profile, persona, app_id_for(self.cfg, profile.key), start_ms, incident,
                              self.emit_client_spans, **kwargs)
         if skeleton is not None:

@@ -159,13 +159,38 @@ def affected(fault, obs):
         return any(ms >= d["p50_ms"] * .5 for ms in obs["roots"].get(d["span"], []))
     if t == "http_error":
         return any(n["endpoint"] == d["endpoint"] and n["status"] == d["status"] for n in obs["net"])
+    if obs["platform"] == "web":
+        from .web_observation import affected as web_affected
+        return web_affected(fault, obs)
     return False
 
 
 def eligible(fault, obs, by_id, results):
+    if fault.kind == "client" and fault.raw.get("platform") not in ("any", obs["platform"]):
+        return False
+    if fault.kind == "backend" and obs["platform"] not in fault.raw.get("platforms", ["android", "web"]):
+        return False
     if obs.get("lob") not in fault.lobs:
         return False
     flt = fault.filters
+    if obs["platform"] == "web":
+        from .planner import web_pages
+        if not web_pages(fault, obs["lob"]):
+            return False
+        for dim, key in (("web_releases", "app_version"), ("browser_families", "browser"), ("device_types", "device_type")):
+            if flt.get(dim) and obs.get(key) not in flt[dim]:
+                return False
+        if flt.get("browser_versions") and not any(obs["browser_version"] == v or obs["browser_version"].startswith(v + ".") for v in flt["browser_versions"]):
+            return False
+        if fault.type in ("layout_instability", "interaction_latency", "soft_navigation_slowness") and obs["browser"] not in ("chrome", "edge", "samsung_internet"):
+            return False
+        if fault.type == "chunk_load_failures":
+            from .browser_session import releases
+            from .spec import parse_time
+            target = next(t for t in fault.spec["targets"] if t["platform"] == "web")
+            rs = [r for r in releases(target["web"], obs["start_ms"]) if not r.get("deployed") or parse_time(r["deployed"]) <= obs["start_ms"]]
+            if obs["app_version"] == max(rs, key=lambda r: r.get("deployed", ""))["version"]:
+                return False
     for dim, key in (("app_versions", "app_version"), ("os_versions", "os_version"), ("device_models", "model"),
                      ("device_tiers", "tier"), ("release_rings", "ring")):
         if flt.get(dim) and obs.get(key) not in flt[dim]:
@@ -205,7 +230,11 @@ class Emitted:
                     for ss in rs["scopeSpans"]:
                         for span in ss["spans"]:
                             traces.setdefault(span["traceId"], []).append(span)
-        obs = observe(target["platform"], envelopes, traces)
+        if target["platform"] == "web":
+            from .web_observation import observe as observe_web
+            obs = observe_web([d["payload"] for d in deliveries if d["target"] == "embrace"], traces)
+        else:
+            obs = observe(target["platform"], envelopes, traces)
         obs["verification_case"] = getattr(session, "verification_case", None)
         # The spec's rate applies at the session's planned time (it differs only for sessions moved back
         # so they had finished by send time).
@@ -232,7 +261,8 @@ class Emitted:
                 ev = (f.meta.get("evidence") or {}) if f.variant else {}
                 latency_only = "slow_ms" in ev.get("client", {}) and not (
                     "backend" in ev and any(o["traces"] for o in elig))
-                if latency_only:
+                if latency_only or f.type in ("lcp_regression", "layout_instability", "interaction_latency", "poor_web_vitals",
+                                              "slow_server_response", "soft_navigation_slowness", "long_task", "third_party_blocking"):
                     # Without backend traces a slow request is the only evidence, and natural latency overlaps it.
                     row["evidence"] = "client latency"
                     row["within_tolerance"] = abs(row["delta_pp"]) <= 2
@@ -247,8 +277,29 @@ class Emitted:
                            emitted_p50_ms=round(percentile(spans, .5) or 0), emitted_p95_ms=round(percentile(spans, .95) or 0))
             rows.append(row)
         sessions = len(population)
+        segments = {}
+        exceptions = {}
+        for o in population:
+            for v in o.get("vitals", []):
+                key = (o["lob"], o["browser"], o["device_type"], v["page_group"], v["name"])
+                segments.setdefault(key, []).append(v["value"])
+            for e in o.get("exceptions", []):
+                key = (o["app_version"], e["name"], e["message"], e["stack"], e["handling"])
+                exceptions[key] = exceptions.get(key, 0) + 1
+        vitals = [dict(zip(("line_of_business", "browser_family", "device_type", "page_group", "metric"), k),
+                       count=len(v), p50=percentile(v, .5), p75=percentile(v, .75), p95=percentile(v, .95))
+                  for k, v in segments.items()]
+        from .web_vitals import targets
+        for v in vitals:
+            desired, _ = targets(self.spec["web_performance"], v["page_group"], v["device_type"], v["browser_family"])
+            v["requested_p75"] = desired.get(v["metric"])
+            if v["requested_p75"]:
+                v["delta_pct"] = round(100 * (v["p75"] / v["requested_p75"] - 1), 2)
+                v["within_tolerance"] = abs(v["delta_pct"]) <= 10 if v["count"] >= 30 else None
         return {"sessions": sessions, "verification_sessions": len(self.observations) - sessions,
-                "sessions_with_traces": sum(o["traces"] for o in population), "faults": rows}
+                "sessions_with_traces": sum(o["traces"] for o in population), "faults": rows, "web_vitals": vitals,
+                "exception_groups": [dict(zip(("release", "name", "message", "stack", "handling"), k), count=n)
+                                     for k, n in exceptions.items()]}
 
     def table(self):
         s = self.summary()
@@ -271,7 +322,7 @@ class Emitted:
 def from_dry_run(directory, spec):
     """Rebuild per-session observations from a dry-run directory."""
     report = Emitted(spec)
-    by_session, traces, trace_owner = {}, {}, {}
+    by_session, traces, web_payloads = {}, {}, []
     for fn in sorted(glob.glob(os.path.join(directory, "*.json"))):
         doc = json.load(open(fn))
         if doc.get("fmt") == "envelope":
@@ -282,11 +333,25 @@ def from_dry_run(directory, spec):
                 if sid:
                     break
             by_session.setdefault(sid, []).append(env)
-        elif doc["target"] == "otlp" and doc["kind"] == "traces":
+        elif doc.get("target") == "embrace":
+            web_payloads.append(doc["payload"])
+        elif doc.get("target") == "otlp" and doc["kind"] == "traces":
             for rs in doc["payload"]["resourceSpans"]:
                 for ss in rs["scopeSpans"]:
                     for span in ss["spans"]:
                         traces.setdefault(span["traceId"], []).append(span)
+    from .web_observation import attrs, records, observe as observe_web
+    web_sessions, part_owners = {}, {}
+    for p in web_payloads:
+        for item in records(p, "spans"):
+            a = attrs(item)
+            if a.get("emb.type") == "ux.session_part":
+                part_owners[a["emb.session_part_id"]] = a["emb.user_session_id"]
+    for p in web_payloads:
+        sid = next((attrs(i).get("emb.user_session_id") for i in list(records(p, "spans")) + list(records(p, "logs"))
+                    if attrs(i).get("emb.user_session_id")), None)
+        if sid:
+            web_sessions.setdefault(sid, []).append(p)
     cases, planned = set(), {}
     manifest = os.path.join(directory, "manifest.jsonl")
     if os.path.exists(manifest):
@@ -298,6 +363,11 @@ def from_dry_run(directory, spec):
                 planned[rec["session_id"]] = rec["planned_start_ms"]
     for sid, envelopes in by_session.items():
         obs = observe("android", envelopes, traces)
+        obs["verification_case"] = sid if sid in cases else None
+        obs["planned_start_ms"] = planned.get(sid, obs.get("start_ms"))
+        report.observations.append(obs)
+    for sid, payloads in web_sessions.items():
+        obs = observe_web(payloads, traces)
         obs["verification_case"] = sid if sid in cases else None
         obs["planned_start_ms"] = planned.get(sid, obs.get("start_ms"))
         report.observations.append(obs)

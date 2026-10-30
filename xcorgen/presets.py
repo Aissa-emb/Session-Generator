@@ -164,6 +164,29 @@ def catalog_presets(now_ms=None):
     p["search-degradation"] = ("Search degradation from a slow supplier", "Stories",
         "An airline adapter times out and search returns partial results; complex searches slow down.",
         merge(_backend("supplier-timeouts", rate=.35), _backend("search-complexity", rate=.2)))
+    from .spec import WEB_TARGET
+    web = {"targets": [copy.deepcopy(WEB_TARGET)], "population": {"platform_mix": {"vantra-web": 1}}}
+    web_faults = [
+        ("web-checkout-typeerror", "Checkout TypeError after release", "js_exception", {"family": "property_undefined"}, {"page_groups": ["Checkout"]}),
+        ("web-chunk-load", "Chunk load failures after deploy", "chunk_load_failures", {}, {}),
+        ("web-mobile-product", "Slow product pages on mobile", "lcp_regression", {"cause": "hero_image", "p75_ms": 4800}, {"page_groups": ["Product"], "device_types": ["mobile"]}),
+        ("web-promo-shift", "Promo banner layout shift", "layout_instability", {"p75": .3}, {"page_groups": ["Home"], "browser_families": ["chrome", "edge", "samsung_internet"]}),
+        ("web-chat-latency", "Search interactions delayed by chat", "interaction_latency", {"p75_ms": 650, "script": "chat_widget"}, {"page_groups": ["Search"], "browser_families": ["chrome", "edge", "samsung_internet"]}),
+        ("web-slow-origin", "Slow origin responses", "slow_server_response", {"p75_ms": 2400}, {}),
+        ("web-banking-route", "Slow account route", "soft_navigation_slowness", {"p75_ms": 5000}, {"routes": ["/accounts/:accountId"], "browser_families": ["chrome", "edge"]}),
+        ("web-payment-rage", "Repeated payment clicks", "rage_clicks", {}, {"page_groups": ["Checkout"]}),
+    ]
+    for key, title, kind, details, filters in web_faults:
+        fragment = merge(web, {"client_faults": [{"id": key, "type": kind, "platform": "web", "rate": .3,
+                          "details": details, "filters": filters}]})
+        p[key] = (title, "Web", f"{title} in 30% of eligible sessions; browser capabilities and page filters apply.", fragment)
+    p["web-release-breaks-checkout"] = ("Web release breaks checkout", "Stories", "Checkout TypeErrors and failed lazy imports after deployment.",
+        merge(p["web-checkout-typeerror"][3], p["web-chunk-load"][3]))
+    shared = merge(outage, {"targets": [copy.deepcopy(WEB_TARGET)],
+                          "population": {"platform_mix": {"vantra-android": 1, "vantra-web": 1}}})
+    for f in shared["backend_faults"]:
+        f["platforms"] = ["android", "web"]
+    p["shared-payments-app-and-web"] = ("Shared payments outage in app and web", "Stories", "One payments dependency fails checkouts on Android and the website.", shared)
     return p
 
 

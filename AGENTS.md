@@ -169,3 +169,12 @@ Commit and push as **Aissa-emb** (`git config user.name "Aissa-emb"`, `git confi
 - Python's `http.server` hangs on macOS doing a reverse DNS lookup in `server_bind`; local test servers must override it.
 - zsh does not word-split `$var`; use `${=var}` or arrays in shell loops.
 - The Chronosphere query API returns at most ~10 traces per call; page by time window and operation.
+
+
+### V2 browser implementation (2026-10-30)
+
+`BrowserSession` now drives both V2 web targets and the legacy `--platform web` path. `web_session.py` only preserves the import and timestamp-shift API. The adapter uses the Vantra estate, origin-scoped identities, browser capability gates, hard/soft/bfcache lifecycles, real JS exception families, resource timing, vitals, LoAF, DOM state, and explicitly controlled Origin headers. Scenario allocation and payload-derived reporting handle web targets. The web examples and browser contract tests run in CI.
+
+Source correction: WebVitalsInstrumentation's rounded TTFB breakdown uses `responseEnd - startTime`, whereas the metric uses `responseStart - startTime`; do not force those totals to be identical. LoafInstrumentation does not emit `emb.was_from_inp`; its IDs use `embracev2-`. Source and per-engine goldens take precedence over the original build prompt.
+
+Phase 2 local checks: 13 browser tests plus the 57 existing tests; all three 120-session V1 dry runs, baseline/verification specs, and Android+web dry runs pass payload checks. Live ingestion, forwarding, retention and dashboard acceptance remain owner-gated. Next work is handoff 4.2 (four backend faults), then durable backfill receipts/resume, server, UI, MCP/copilot, hosting and later items.

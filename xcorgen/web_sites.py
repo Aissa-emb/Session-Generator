@@ -13,7 +13,6 @@ client-side route change (client). Retail is multi-page, banking a
 single-page app and travel a hybrid on one origin: landing and search pages
 are server-rendered, the booking flow is client-routed.
 """
-import base64
 import hashlib
 import re
 
@@ -32,7 +31,7 @@ def hex_id(*parts, n=16):
 
 def content_hash(*parts):
     """Vite-style 8-character content hash, stable within a release."""
-    return base64.urlsafe_b64encode(hashlib.sha256(":".join(parts).encode()).digest())[:8].decode().replace("-", "x").replace("_", "Q")
+    return hashlib.sha256(":".join(parts).encode()).hexdigest()[:8]
 
 
 def product(sku):
@@ -189,10 +188,18 @@ def first_party(cdn, lob, release, page):
            (f"{base}/vendor-{h('vendor.js')}.js", "script", 158_000, 3.1, False),
            (f"{base}/{page.chunk}-{h(page.chunk)}.js", "script", 22_000, 3.4, False),
            (f"{cdn}/fonts/vantra-sans-var.woff2", "css", 46_000, 1.0, False)]
+    if lob == "banking":
+        out = [(f"{cdn}/money/static/css/main.{h('entry.css')}.css", "link", 31000, 5.1, True),
+               (bundle_url(cdn, lob, release, "main"), "script", 64000, 3.3, False),
+               (bundle_url(cdn, lob, release, "vendor"), "script", 158000, 3.1, False),
+               (bundle_url(cdn, lob, release, page.chunk), "script", 22000, 3.4, False), out[-1]]
     return out
 
 
 def bundle_url(cdn, lob, release, chunk):
+    if lob == "banking":
+        name = "main" if chunk == "main" else str(int(hex_id(chunk, n=4), 16) % 900 + 100)
+        return f"{cdn}/money/static/js/{name}.{content_hash('money', release, chunk)}{'' if name == 'main' else '.chunk'}.js"
     return f"{cdn}/assets/{APP_SHELL[lob]}/{chunk}-{content_hash(APP_SHELL[lob], release, chunk if chunk.endswith('.js') else chunk)}.js"
 
 

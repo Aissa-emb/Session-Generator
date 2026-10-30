@@ -20,19 +20,19 @@ CLIENT_FAULTS = {
                              "summary": "Main-thread blockage captured as perf.thread_blockage with samples (Cortex XCOR RUM's ANR signal)."},
     "handled_exception": {"platforms": ("android",), "supported": ("android",),
                           "summary": "Handled exception (sys.exception, handling=handled) with a Kotlin stack."},
-    "network_failure": {"platforms": ("android",), "supported": ("android",),
+    "network_failure": {"platforms": ("android", "web"), "supported": ("android", "web"),
                         "summary": "Request fails without an HTTP response (timeout, reset, DNS, offline, TLS); a retry usually succeeds."},
     "slow_startup": {"platforms": ("android",), "supported": ("android",),
                      "summary": "Cold start over 4 s, with the time in application init, SDK init or first render."},
-    "http_error": {"platforms": ("android", "web"), "supported": ("android",),
+    "http_error": {"platforms": ("android", "web"), "supported": ("android", "web"),
                    "summary": "A backend returns a 4xx or 5xx on a named endpoint, with a matching backend trace."},
-    "slow_root_span": {"platforms": ("android", "web"), "supported": ("android",),
+    "slow_root_span": {"platforms": ("android", "web"), "supported": ("android", "web"),
                        "summary": "A named business root span reaches a target p50 and p95 duration."},
 }
 for _web in ("js_exception", "chunk_load_failures", "poor_web_vitals", "lcp_regression", "layout_instability",
              "interaction_latency", "slow_server_response", "soft_navigation_slowness", "rage_clicks",
              "page_abandonment"):
-    CLIENT_FAULTS[_web] = {"platforms": ("web",), "supported": (), "fatal": _web == "page_abandonment",
+    CLIENT_FAULTS[_web] = {"platforms": ("web",), "supported": ("web",), "fatal": _web == "page_abandonment",
                            "summary": "Web fault (section 7.6); produced by the web generator."}
 
 NETWORK_FAILURES = {

@@ -200,6 +200,7 @@ class Plan:
         self.slow_startup = a.get("slow_startup")
         self.slow_root_span = a.get("slow_root_span")
         self.http_errors = dict(a.get("http_errors") or {})
+        self.web_faults = list(a.get("web_faults") or [])
         self.fault_ids = list(a.get("fault_ids", []))
         if self.rollback and self.ring == "canary" and a.get("rollback_clears_canary"):
             self.primary, self.incident = "clean", None

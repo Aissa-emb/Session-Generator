@@ -85,6 +85,8 @@ def simulate(session, key, params, start, rng=random):
     finally:
         REQUEST.reset(token)
     server_status = status
+    if root and params.get("_origin_latency"):
+        root.min_ms = max(root.min_ms or 0, params["_origin_latency"])
 
     trace_id, span_id = hex_id(16, rng), hex_id(8, rng)
     host = session.api_host

@@ -110,6 +110,8 @@ def blockage(s):
         s._span("emb-thread-blockage", start, start + duration,
                 {"emb.type": "perf.thread_blockage", "interval_code": 0,
                  "last_known_time_unix_nano": nanos(start + duration)}, events=events)
+    elif hasattr(s, "long_task"):
+        s.long_task(duration)
     else:
         # A browser main-thread task is not an Android ANR.
         with s.flow("render_result_list"):

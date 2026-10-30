@@ -48,3 +48,9 @@ jobs:
           python3 generate.py lint out/spec
           python3 generate.py run spec/examples/verification-plan.json --dry-run out/verify --quiet
           python3 tools/check_output.py out/verify
+          python3 generate.py run spec/examples/web-burst.json --dry-run out/web-spec --quiet --seed 7331
+          python3 tools/check_output.py out/web-spec
+          python3 generate.py lint out/web-spec
+          python3 generate.py run spec/examples/android-web-end-to-end.json --dry-run out/both --quiet --seed 7331
+          python3 tools/check_output.py out/both
+          python3 generate.py lint out/both

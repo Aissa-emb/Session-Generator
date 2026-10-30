@@ -237,3 +237,20 @@ python3 tools/check_output.py out/
 | `reference/` | Payloads captured from the real Web SDK |
 
 The current sparse-timeline/failure-intensity deployment is documented in `docs/session-tuning-verification.json`. Its fresh runtime cohort is separate from the earlier full incident audit in `docs/verification-summary.json`; percentages from that earlier snapshot have been superseded.
+
+
+### V2 browser scenarios
+
+Web targets use the Vantra estate: retail multi-page at `www.vantra.com`, banking single-page at `app.vantra.com`, and hybrid travel at `www.vantra.com/travel`. The same adapter serves the legacy web CLI. Capabilities are enforced per engine: Safari/Firefox omit unsupported CLS, INP, LoAF and Chromium resource fields. Releases determine stable bundle URLs and exception stacks.
+
+```sh
+python3 generate.py run spec/examples/web-burst.json --dry-run out/web-spec --quiet --seed 7331
+python3 tools/check_output.py out/web-spec
+python3 generate.py report out/web-spec spec/examples/web-burst.json
+python3 generate.py lint out/web-spec
+python3 generate.py run spec/examples/android-web-end-to-end.json --dry-run out/both --quiet --seed 7331
+```
+
+The preset catalog includes web release failures, mobile product LCP, promo-banner CLS, chat-widget INP, origin latency, banking routes and payment rage clicks. `web_performance` sets p75 targets per page group, browser and device. Payload-derived reports include per-segment percentiles and stable exception groups; latency-based fault evidence is approximate because healthy and regressed distributions overlap. Small percentile samples are marked insufficient for tolerance checks. The local URL rollup preview models static segment classifications and sampled sibling cardinality; actual rollups also depend on the server's history.
+
+No live forwarding or dashboard acceptance is implied by a passing dry run or HTTP 200. Follow the owner-approved checks in `docs/v2/CODEX-HANDOFF.md` before live use.

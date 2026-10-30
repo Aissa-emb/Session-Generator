@@ -295,8 +295,6 @@ def validate(spec, now_ms=None, lint=True):
             if abs(shares - 1) > .01:
                 issues.append(_issue("error", f"{p}.android.versions", f"Version adoption shares sum to {shares:.2f}; they must sum to 1.", "shares"))
         if t["platform"] == "web":
-            issues.append(_issue("error", p, "The web generator (multi-page, single-page and hybrid sites) is not built yet; "
-                                             "web targets are rejected so no V1 web payload reaches the web app.", "unsupported_platform"))
             o = t["web"].get("origin_header", {})
             if o.get("policy") == "allowed" and not o.get("value"):
                 issues.append(_issue("error", f"{p}.web.origin_header", "An allowed Origin policy needs the allowed origin.", "origin"))
@@ -475,6 +473,8 @@ def validate(spec, now_ms=None, lint=True):
             issues.append(_issue("error", f"$.verification_cases[{i}].backend_fault", "Unknown backend fault variant.", "variant"))
         elif case.get("backend_fault") and case["line_of_business"] not in catalog.BACKEND_VARIANTS[case["backend_fault"]]["endpoints"]:
             issues.append(_issue("error", f"$.verification_cases[{i}]", "That variant does not affect this line of business.", "variant"))
+    from .web_validation import validate as validate_web
+    issues += validate_web(s, _issue, now_ms)
     if lint:
         from .linter import lint_spec
         issues += lint_spec(s)
