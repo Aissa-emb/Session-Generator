@@ -300,3 +300,7 @@ In Scenario studio choose **Plan preparation**, select the destination, history 
 **Prepare ahead** starts end-to-end live traffic immediately with a default two-hour duration. It is recommended when the demo is over two hours away; increase duration to cover your demo. An optional incident begins three minutes after the supplied demo start. Mode changes saved on a live scenario apply at the next session start; existing sessions retain their original destination. Preparation stages keep run IDs and idempotency keys across orchestration restarts. Cancellation stops their managed jobs. Failed or uncertain delivery requires receipt review, never an automatic resend.
 
 REST: `POST /api/preparations/preview`, then `POST /api/preparations/{id}/start` with explicit `confirm: true`; inspect `GET /api/preparations/{id}` or cancel with `/cancel`. Equivalent MCP tools are `plan_preparation`, `start_preparation`, and `get_preparation`.
+
+### Container hosting
+
+`docker compose up --build -d` starts the non-root control server with persistent state and loopback-only access. Bootstrap an access token with `docker compose exec generator python -m server.admin create-token --name 'Workspace owner'`. Follow [HOSTING.md](docs/v2/HOSTING.md) for private VM access, mounted secrets, stream restart behavior, multiple regions and the owner-approved LaunchAgent cut-over. CI builds the image and exercises the actual authenticated HTTP API, dry-run receipts and stream controls in a container with networking disabled.

@@ -51,14 +51,35 @@ def create_app(service=None):
         # Surviving worker processes own their journals. Never launch a duplicate on restart.
         for run in svc.store.list('runs'):
             if run['status'] in ('queued', 'running') and time.time() - run.get('heartbeat', run['created']) > 90:
-                svc.store.update('runs', run['id'], status='failed')
+                svc.store.update('runs', run['id'], status='failed', recovery_required=True)
                 svc.store.event(run['id'], 'recovery_required', message='Worker heartbeat expired; review receipts before resuming.')
         if svc.launch_jobs:
             for record in svc.store.list('preparations'):
                 if record['status'] == 'running' and record.get('authorized'):
                     preparation.launch(svc, record['id'])
+        if svc.launch_jobs:
+            for stream in svc.store.list('streams'):
+                if stream['status']=='running' and stream.get('authorized') and stream.get('run_id'):
+                    run=svc.store.get('runs',stream['run_id'])
+                    if run['status'] in ('running','queued','paused') or (run['status']=='failed' and run.get('recovery_required') and run.get('desired_status')=='running'):
+                        svc.store.update('runs',run['id'],desired_status='running',recovery_required=False)
+                        svc.launch(run['id'])
+        from .audit import emit
+        emit('server_started',runner_region=os.environ.get('SG_RUNNER_REGION','local'))
         async with mcp_app.router.lifespan_context(mcp_app):
-            yield
+            try:
+                yield
+            finally:
+                if svc.launch_jobs:
+                    for stream in svc.store.list('streams'):
+                        if stream['status']=='running' and stream.get('run_id'):
+                            run=svc.store.get('runs',stream['run_id'])
+                            if run['status'] in ('running','queued'):
+                                svc.store.update('runs',run['id'],desired_status='paused')
+                    deadline=time.monotonic()+65
+                    while any(p.poll() is None for p in svc.processes.values()) and time.monotonic()<deadline:
+                        await asyncio.sleep(.2)
+                emit('server_stopped')
     app = FastAPI(title='Session Generator', version='2.0', lifespan=lifespan)
     app.state.service = svc
     app.router.routes.extend(mcp_app.routes)

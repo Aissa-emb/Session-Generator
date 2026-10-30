@@ -204,3 +204,7 @@ Handoff 4.6 uses MCP SDK 2's `MCPServer` (the former FastMCP name was removed). 
 ### V2 demo preparation
 
 Handoff 4.7 adds durable preparation plans and a checklist in the studio. Each stage reuses a deterministic spec ID and run idempotency key. Separate process and transition locks protect orchestration restart and cancellation. Readiness is destination-sensitive; only explicit dry runs bypass live readiness, visibly marked simulated. Live mode switches retain existing delivery ownership and record the first trace-eligible session time. Three integration tests execute bounded stages locally, check no trace exports for history, exercise restart/cancellation, gate readiness and schedule the live incident.
+
+### V2 hosted streams
+
+Handoff 4.8 adds a multi-stage, non-root Docker image, hardened local Compose configuration, local-only token bootstrap and network-disabled container acceptance. Authorized active streams recover after restart; paused/stopped streams do not. Graceful shutdown drains then pauses managed streams. Operational logs use an explicit field allowlist. The live worker preserves cumulative counters across process restart. `HOSTING.md` documents private deployment, actual egress-based geography and an owner-approved cut-over; the existing LaunchAgent remains untouched.

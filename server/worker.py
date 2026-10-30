@@ -103,6 +103,7 @@ def live(store, job, version):
     heap, sequence, senders, pending = [], itertools.count(), [], {}
     lock = threading.Lock()
     counters = {'sessions': 0, 'payloads': 0, 'accepted': 0, 'rejected': 0, 'errors': 0, 'platforms': {}}
+    counters.update(copy.deepcopy(job.get('counters') or {}))
     current, runner, sender = None, None, None
     next_start = time.time()
     started_at = job.get('started') or next_start

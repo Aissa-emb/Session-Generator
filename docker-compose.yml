@@ -1,0 +1,22 @@
+services:
+  generator:
+    build: .
+    image: session-generator:v2
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      SG_REQUIRE_AUTH: "1"
+      SG_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      SG_RUNNER_REGION: "local"
+    volumes:
+      - generator-state:/var/lib/session-generator
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 90s
+volumes:
+  generator-state:

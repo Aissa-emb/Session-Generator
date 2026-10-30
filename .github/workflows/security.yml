@@ -74,3 +74,14 @@ jobs:
           npm test
       - name: Static security analysis
         run: .venv/bin/bandit --ini .bandit -r xcorgen generate.py tools server
+
+      - name: Non-root isolated container acceptance
+        run: |
+          docker build -t session-generator:ci .
+          docker run -d --name session-generator-check --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m --tmpfs /var/lib/session-generator:rw,uid=10001,gid=10001,mode=700,size=512m --cap-drop ALL --security-opt no-new-privileges session-generator:ci
+          trap 'docker rm -f session-generator-check' EXIT
+          for attempt in {1..30}; do
+            if docker exec session-generator-check python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then break; fi
+            sleep 1
+          done
+          docker exec session-generator-check python -m tools.container_smoke

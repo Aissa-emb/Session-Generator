@@ -121,6 +121,8 @@ class Store:
         return data
 
     def event(self, run_id, type, **data):
+        from .audit import emit
+        emit(type, run_id=run_id, **data)
         body = {'type': type, **data}
         with self.engine.begin() as conn:
             result = conn.execute(events.insert().values(run_id=run_id, created=time.time(), data=body))

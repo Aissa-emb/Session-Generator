@@ -160,7 +160,7 @@ class Service:
             return
         env = dict(os.environ, SG_DATA_DIR=str(self.store.directory))
         self.processes[id] = subprocess.Popen([sys.executable, '-m', 'server.worker', id], cwd=ROOT,
-            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # nosec B603: trusted worker and validated identifier
+            env=env)  # nosec B603: trusted worker and validated identifier
 
     def control(self, id, action, author='user'):
         if action not in ('stop', 'pause', 'resume'):
