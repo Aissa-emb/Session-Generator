@@ -57,8 +57,10 @@ class PreparationTests(unittest.TestCase):
         p=preparation.plan(self.svc,saved['id'],prepare_ahead=True,minutes_until_demo=150)
         self.assertEqual(len(p['stages']),1);self.assertEqual(p['stages'][0]['spec']['traffic']['duration_minutes'],120)
         self.assertIsNotNone(p['recommendation']);self.assertEqual(p['trace_caveat'],limits.TRACE_CAVEAT)
+        before = time.time() * 1000
         p=preparation.plan(self.svc,saved['id'],history_hours=0,minutes_until_demo=10,incident={'id':'launch','fault_ref':'crash','peak_minutes':5})
         start=spec.parse_time(p['stages'][-1]['spec']['incidents'][-1]['start'])
-        self.assertAlmostEqual((start-time.time()*1000)/60000,13,delta=.1)
+        self.assertGreaterEqual(start, before + 13 * 60000 - 1000)
+        self.assertLessEqual(start, time.time() * 1000 + 13 * 60000)
         with self.assertRaises(ValueError):preparation.plan(self.svc,saved['id'],history_hours=25)
         with self.assertRaises(ValueError):preparation.plan(self.svc,saved['id'],rate_per_minute=600)
