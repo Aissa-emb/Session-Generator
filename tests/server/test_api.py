@@ -71,6 +71,15 @@ class APITests(unittest.TestCase):
         self.assertEqual(verified['embrace']['state'], 'needs_action')
         self.assertEqual(verified['chronosphere']['state'], 'sessions_only')
 
+    def test_preview_includes_future_live_incident(self):
+        s = spec.default_spec()
+        s['traffic'] = {'mode': 'live', 'rate_per_minute': 4}
+        s['client_faults'] = [{'id': 'crash', 'type': 'jvm_crash', 'rate': .2}]
+        s['incidents'] = [{'id': 'evening', 'fault_ref': 'crash', 'start': spec.iso(time.time()*1000+180000), 'peak_minutes': 10}]
+        result = self.client.post('/api/preview', json=s)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertGreater(spec.parse_time(result.json()['preview_clock']), time.time()*1000)
+
     def test_tokens_are_hashed_revocable_and_not_listed_in_clear(self):
         result = self.client.post('/api/settings/tokens', json={'name': 'Desktop'}).json()
         token = result['token']

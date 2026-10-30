@@ -61,5 +61,16 @@ jobs:
           .venv/bin/python tools/generate_models.py --check
       - name: API, job and receiver integration tests
         run: .venv/bin/python -m unittest discover -s tests/server -v
+      - name: UI contract, build and dependency audit
+        run: |
+          npm --prefix apps/web ci
+          npm --prefix apps/web run schema:check
+          npm --prefix apps/web run build
+          npm --prefix apps/web audit --audit-level=high
+      - name: Browser acceptance
+        run: |
+          cd apps/web
+          npx playwright install --with-deps chromium
+          npm test
       - name: Static security analysis
         run: .venv/bin/bandit --ini .bandit -r xcorgen generate.py tools server

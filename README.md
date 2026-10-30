@@ -280,3 +280,9 @@ Connections include readiness evidence and Markdown/JSON setup kits. Forwarding 
 Secrets are write-only: macOS Keychain locally, `SG_<NAME>_TOKEN` or `SG_<NAME>_TOKEN_FILE` in hosted environments (`CHRONOSPHERE`, `EMBRACE_API`, `ANTHROPIC`, `SYMBOL_UPLOAD`). On non-macOS hosts, Settings writes require `SG_SECRET_DIR` pointing to a private mounted directory. Remote API access requires a bearer token and an explicit `SG_ALLOWED_HOSTS` hostname. Set `SG_REQUIRE_AUTH=1` to require a token locally too. Never expose the port without TLS at the reverse proxy.
 
 Server checks: `.venv/bin/python -m unittest discover -s tests/server -v` and `.venv/bin/python tools/generate_models.py --check`.
+
+### Scenario studio
+
+Build the React UI with `npm --prefix apps/web ci && npm --prefix apps/web run build`, then start the local server as above. Vite development (`npm --prefix apps/web run dev`) proxies API calls to port 8000. Connections, scenario editing, browser capability guidance, payload previews, versioned saves, confirmed dry/live runs, receipts, verification and stream controls share the server API. Cmd+K opens navigation, presets and saved scenarios. Copilot remains disabled until its server key is configured.
+
+The UI bundles Figtree locally and uses the Cortex XCOR dark palette without external fonts or invented logo assets. Generated Zod contracts are checked with `npm --prefix apps/web run schema:check`. Run `npm --prefix apps/web exec -- playwright install chromium` once, then `npm --prefix apps/web test` for isolated local browser checks. No production destinations are used by these tests.

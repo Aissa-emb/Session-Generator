@@ -192,3 +192,7 @@ Handoff 4.3 uses `journal.py` (stdlib SQLite, FULL synchronous commits). A froze
 Handoff 4.4 now has `server/` with generated Pydantic v2 contracts, SQLAlchemy/SQLite persistence, versioned specs, isolated workers, receipt capture, SSE, run/stream controls, previews, readiness kits, write-only secrets and verification. Job processes use an OS lock and re-read the latest live spec before starting a session. Tests exercise API workflows and certificate-verified loopback ingest. `tests/server` intentionally runs separately so stdlib engine tests do not require server dependencies.
 
 Embrace MCP source correction: `get_session_distribution` groups by a dimension, not hour. Web-vital tools use `name` (uppercase) and `dimension`, not `metric`/`group_by`. The server discovers and validates remote tool schemas; hourly platform exports can be attached through the observations endpoint for comparison with the sent cohort. API acceptance never establishes dashboard visibility.
+
+### V2 scenario studio
+
+Handoff 4.5 provides the React 18/TypeScript/Vite application in `apps/web`. Generated Zod validation supplements server validation; Radix controls, TanStack Query, RHF, Framer Motion, Recharts and cmdk provide the requested interactions. Browser tests cover every screen, keyboard commands, capability restrictions, laptop overflow, and a complete confirmed dry run. Future live incident previews use a projected clock and cannot send telemetry. UI tests own a separate `.state/ui-tests` server on loopback port 8001.

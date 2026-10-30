@@ -1,0 +1,1 @@
+export default { content: ['./index.html','./src/**/*.{ts,tsx}'], theme: { extend: { colors: { cortex: '#00CC66', surface: '#0B0B0C', raised: '#141416' }, fontFamily: { sans: ['Figtree', 'sans-serif'] } } }, plugins: [] };
