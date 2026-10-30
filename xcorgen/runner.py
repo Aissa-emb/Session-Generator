@@ -198,12 +198,20 @@ class Sender:
 
 class Generator:
     def __init__(self, profile_keys, cfg, incident=None, emit_client_spans=False, backend_logs=False, persist=True,
-                 platform="android"):
+                 platform="android", shared=None, app_overrides=None, pool_options=None, runtime=None,
+                 state_dir=None):
+        """shared=True forces super-app mode (one app, lines of business by business_unit), as V2 targets are.
+
+        app_overrides: {profile key: dict merged into the Android app definition}. pool_options:
+        PersonaPool keyword arguments (returning_share, android_overrides). runtime is shared across
+        targets so backend caches, idempotency records and incident occupants are one backend.
+        """
         self.profiles = [load(k) for k in profile_keys]
         self.cfg, self.incident, self.emit_client_spans = cfg, incident, emit_client_spans
         self.backend_logs, self.persist, self.platform = backend_logs, persist, platform
         self.session_cls = AndroidSession if platform == "android" else WebSession
-        self.runtime = Runtime()
+        self.runtime = runtime or Runtime()
+        self.app_overrides = app_overrides or {}
         self.settings = cfg.get("generation", {})
         self.verification_queue = list(self.settings.get("verification_plan", []))
         from .scenarios import validate_settings
@@ -214,7 +222,7 @@ class Generator:
             validate_settings(dict(self.settings, **case.get("settings", {})))
         for profile in self.profiles:
             install(profile)
-        state = os.path.join(ROOT, ".state")
+        state = state_dir or os.path.join(ROOT, ".state")
         # Profiles that share one Android app ID are lines of business in one super app, with one user base.
         by_app = {}
         for p in self.profiles:
@@ -222,36 +230,64 @@ class Generator:
             if not isinstance(app, str) or not re.fullmatch(r"[A-Za-z0-9]{5}", app):
                 raise SecurityError("Each selected profile needs a five-character alphanumeric Embrace app ID.")
             by_app.setdefault(app, []).append(p)
-        self.shared = {p.key for group in by_app.values() if len(group) > 1 and platform == "android" for p in group}
+        if shared:
+            self.shared = {p.key for p in self.profiles}
+        else:
+            self.shared = {p.key for group in by_app.values() if len(group) > 1 and platform == "android" for p in group}
         self.pools = {}
+        pool_options = pool_options or {}
         for app, group in by_app.items():
             if self.shared and group[0].key in self.shared:
-                pool = PersonaPool(f"app-{app}", state, size=4000, platform=platform)
+                pool = PersonaPool(f"app-{app}", state, size=4000, platform=platform, **pool_options)
                 for p in group:
                     self.pools[p.key] = pool
             else:
                 for p in group:
-                    self.pools[p.key] = PersonaPool(p.key, state, platform=platform)
+                    self.pools[p.key] = PersonaPool(p.key, state, platform=platform, **pool_options)
         self._make_user = {}
         for p in self.profiles:
             app = app_id_for(cfg, p.key)
             if self.incident and self.incident not in p.incidents and len(self.profiles) == 1:
                 raise SystemExit(f"Unknown incident '{incident}' for {p.key}. Options: {', '.join(p.incidents)}")
 
-    def session(self, start_ms):
-        selection = self.verification_queue.pop(0) if self.verification_queue else {}
-        profile = next((p for p in self.profiles if p.key == selection.get("profile")), None) or random.choice(self.profiles)
+    def pick(self, profile_key=None, now_s=None, weights=None):
+        """Choose the line of business and visitor for one session (a planner skeleton)."""
+        if profile_key:
+            profile = next(p for p in self.profiles if p.key == profile_key)
+        elif weights:
+            profile = weighted([(p, weights.get(p.key, 0)) for p in self.profiles])
+        else:
+            profile = random.choice(self.profiles)
         pool = self.pools[profile.key]
-        persona = pool.pick(self._shared_make_user if profile.key in self.shared else profile.make_user)
+        persona = pool.pick(self._shared_make_user if profile.key in self.shared else profile.make_user, now=now_s)
+        return profile, persona
+
+    def session(self, start_ms, skeleton=None, assignment=None, settings=None):
+        selection = self.verification_queue.pop(0) if self.verification_queue and skeleton is None else {}
+        if skeleton:
+            profile, persona = skeleton["profile"], skeleton["persona"]
+        else:
+            profile = next((p for p in self.profiles if p.key == selection.get("profile")), None) or random.choice(self.profiles)
+            pool = self.pools[profile.key]
+            persona = pool.pick(self._shared_make_user if profile.key in self.shared else profile.make_user)
         journey = JOURNEYS[profile.key]
         incident = selection.get("incident") or (self.incident if self.incident in profile.incidents else None)
         kwargs = {"shared": True} if profile.key in self.shared else {}
+        if self.platform == "android":
+            if self.app_overrides.get(profile.key):
+                kwargs["app"] = self.app_overrides[profile.key]
+            if skeleton and skeleton.get("version"):
+                kwargs["version"] = skeleton["version"]
         s = self.session_cls(profile, persona, app_id_for(self.cfg, profile.key), start_ms, incident,
                              self.emit_client_spans, **kwargs)
-        settings = dict(self.settings, **selection.get("settings", {}))
-        s.plan = Plan(s, self.runtime, settings, incident)
+        if skeleton is not None:
+            s.traces = skeleton.get("traces", True)
+        settings = dict(settings if settings is not None else self.settings, **selection.get("settings", {}))
+        s.plan = Plan(s, self.runtime, settings, incident, assignment=assignment)
+        if skeleton is not None and assignment is not None:
+            s.plan.shape = skeleton.get("shape")
         s.verification_case = selection.get("name")
-        if s.plan.primary == "mobile" and s.plan.ring == "stable" and random.random() < self.settings.get("transport_share", .4) and not incident:
+        if assignment is None and s.plan.primary == "mobile" and s.plan.ring == "stable" and random.random() < self.settings.get("transport_share", .4) and not incident:
             s.plan.transport = random.choice(("dns", "offline", "reset", "timeout", "cancelled"))
             s.plan.incident = None
         try:
@@ -311,9 +347,10 @@ class Generator:
             if prof.key in self.shared:
                 prof.make_user(p)
                 traits.update(p["traits"])
-        traits["membership"] = weighted([("standard", 62), ("plus", 29), ("premium", 9)])
+        traits["membership"] = weighted(getattr(self, "membership_weights", None) or
+                                        [("standard", 62), ("plus", 29), ("premium", 9)])
         p["traits"] = traits
-        p["user_id"] = uuid4() if random.random() < 0.82 else None
+        p["user_id"] = uuid4() if random.random() < getattr(self, "signed_in_share", 0.82) else None
 
     def save(self):
         if not self.persist:
@@ -342,18 +379,27 @@ def run_burst(gen, sender, count, spread_min, quiet=False):
     tenant = gen.cfg["chronosphere"].get("tenant")
     for _ in range(count):
         s, journey, deliveries = gen.session(now - random.uniform(0, spread_min * 60_000))
-        sessions.append((s, journey))
+        sessions.append((s, journey, deliveries))
         all_deliveries.extend(deliveries)
     # One shift for the complete batch preserves shared pool-occupant links.
     delta_ms = min(0, now - 15000 - max(d["due"] for d in all_deliveries))
     for d in all_deliveries:
         (shift_envelope if d.get("fmt") == "envelope" else shift)(d["payload"], int(delta_ms * 1_000_000))
         d["due"] += delta_ms
-    for s, journey in sessions:
+    # Cortex XCOR drops spans dated more than 10 minutes before ingest, so older sessions are sent
+    # without trace context: no traceparent on their requests and no backend traces.
+    from .limits import trace_eligible
+    from .spec_runner import strip_traces
+    kept = []
+    for s, journey, deliveries in sessions:
         s.start_ms += delta_ms
         s.end_ms += delta_ms
+        if not trace_eligible(s.start_ms, now):
+            deliveries = strip_traces(s, deliveries)
+        kept.extend(deliveries)
         if not quiet:
-            print(describe(s, journey, tenant))
+            print(describe(s, journey, tenant if s.traces else None))
+    all_deliveries = kept
     gen.save()
     all_deliveries.sort(key=lambda d: d["due"])
     # Backend traces go first so Chronosphere has them before Embrace forwards the client spans.

@@ -12,6 +12,27 @@ Three lines of business are included:
 | `banking` | Money (Corvia Bank when it has its own app) | Sign in with MFA, check balances and transactions, transfers, bill pay, statements, card lock | `banking-experience-api`, `strong-auth-service`, `account-summary-service`, `core-banking-gateway`, `transaction-history-service` (Cassandra), `payee-management-service`, `funds-transfer-service`, `transaction-limits-service`, `payment-rails-gateway`, `general-ledger-service` (Kafka), `bill-payment-service`, `card-management-service`, `statement-rendering-service` |
 | `travel` | Travel (Vantra Travel) | Search flights and hotels, review fares, book, manage trips | `travel-experience-api`, `geo-location-service`, `air-shopping-service` with parallel supplier fan-out (`gds-connector-service`, `ndc-connector-service`), `fare-pricing-service`, `fare-rules-service`, `lodging-search-service`, `lodging-content-service`, `reservation-service`, `pnr-management-service`, `loyalty-accrual-service`, `trip-itinerary-service`, `ticketing-fulfillment-worker` (Kafka) |
 
+## V2: runs described by a ScenarioSpec
+
+On the `v2` branch, a run is described by one JSON document, the ScenarioSpec (`spec/scenario.schema.json`): targets, population, traffic (live, burst or backfill), client faults, backend faults, incidents, rollouts and the destination mode. The same document will be edited by the web UI, the REST API, MCP clients and the copilot.
+
+```bash
+python3 generate.py preset list                                   # Android, backend and story presets
+python3 generate.py preset apply release-regression > my-spec.json
+python3 generate.py validate my-spec.json                         # schema, platform limits, realism checks
+python3 generate.py explain my-spec.json                          # what the run will generate
+python3 generate.py run my-spec.json --dry-run out/run            # writes payloads, prints requested versus emitted
+python3 generate.py run my-spec.json                              # sends
+```
+
+- **Destination modes.** `sessions_only` sends Cortex XCOR RUM data only: no traceparents, so nothing is forwarded and no "View trace" links appear. `end_to_end` also sends backend traces to Cortex XCOR, joined through network span forwarding.
+- **Exact distributions.** "One in three sessions crashes" means exactly that in bursts and backfills (`quota: auto` or `exact`); live streams draw per session unless `quota` is `exact`. After every run the generator reports requested versus emitted rates, computed from the generated payloads.
+- **Backfill.** Up to 24 hours of sessions appear at their original times in rolling ranges. Present history with "Last 24 hours", not a calendar "Yesterday"; alerts, metric exports and version-over-version views do not include history.
+
+> Cortex XCOR accepts trace data only for the last 10 minutes, so distributed traces cannot be backfilled. Traces are generated from the moment this run starts; sessions dated earlier are sent to Cortex XCOR RUM without trace links. For a fuller trace history, start the run at least two hours before the demo.
+
+`python3 generate.py capabilities` prints every platform limit, fault type and backfill rule. Examples are in `spec/examples/`: `live-end-to-end.json` is the always-on Baseline stream, `baseline-burst.json` an 8-minute burst and `verification-plan.json` the V1 verification cases. The web generator, server, UI, MCP server and copilot follow in later phases (see `docs/v2/V2-BUILD-PROMPT.md`).
+
 ## One app, three lines of business
 
 When several profiles use the same Embrace Android app ID (the default config does this with one app), the sessions come from a single super app, **Vantra** (`com.vantra.android`), with three lines of business that share one user base and one account system:

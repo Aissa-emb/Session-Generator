@@ -19,6 +19,7 @@ from contextlib import contextmanager
 
 from . import otlp
 from .calls import Result, deliver_backend, release_backend, simulate
+from .catalog import NETWORK_FAILURES
 from .profiles import ENTRY_POINTS, SHARED_ANDROID_APP
 from .util import emb_id, hex_id, lat, uuid4, weighted
 
@@ -95,22 +96,31 @@ class Part:
         self.end_type = "state"
 
 
+def pick_version(versions, persona, rng=random):
+    """Installed app version: a returning device keeps its version, a new one follows adoption shares."""
+    installed = next((x for x in versions if x[0] == persona.get("installed_version")), None)
+    return installed[:3] if installed else weighted([((v, c, s), w) for v, c, s, w in versions], rng)
+
+
 class AndroidSession:
     def __init__(self, profile, persona, app_id, start_ms, incident=None, emit_client_spans=False, rng=random,
-                 shared=False):
+                 shared=False, app=None, version=None):
         self.profile, self.persona, self.app_id, self.rng = profile, persona, app_id, rng
         self.incident, self.emit_client_spans = incident, emit_client_spans
+        # Whether network requests carry a forwarded traceparent and produce backend traces
+        # (end-to-end mode, and only for activity Cortex XCOR can still ingest).
+        self.traces = True
         if shared:
             self.app = dict(profile.android, **SHARED_ANDROID_APP)
             self.api_host = profile.android["shared_api_host"]
         else:
             self.app = profile.android
             self.api_host = profile.api_host
+        if app:
+            self.app = dict(self.app, **app)
+            self.api_host = self.app.get("api_host", self.api_host)
         self.t = self.start_ms = start_ms
-        versions = self.app["versions"]
-        installed = next((x for x in versions if x[0] == persona.get("installed_version")), None)
-        self.app_version, self.version_code, self.sdk_version = (installed[:3] if installed else weighted(
-            [((v, c, s), w) for v, c, s, w in versions], rng))
+        self.app_version, self.version_code, self.sdk_version = version or pick_version(self.app["versions"], persona, rng)
         if persona.get("installed_version") != self.app_version:
             persona["installed_version"] = self.app_version
             persona["version_starts"] = 0
@@ -136,9 +146,10 @@ class AndroidSession:
             self.login()  # one account across the app: signed-in users stay signed in
 
     def _shared_properties(self):
-        props = {"business_unit": self.app["business_unit"], "market": "US",
+        market = weighted(self.app["markets"], self.rng) if self.app.get("markets") else "US"
+        props = {"business_unit": self.app["business_unit"], "market": market,
                  "membership_tier": self.persona["traits"].get("membership", "standard"),
-                 "entry_point": weighted(ENTRY_POINTS, self.rng)}
+                 "entry_point": weighted(self.app.get("entry_points") or ENTRY_POINTS, self.rng)}
         props.update({k: v for k, v in self.profile.properties(self.persona, self.rng).items()
                       if k not in SHARED_REPLACED_PROPERTIES})
         return props
@@ -232,7 +243,7 @@ class AndroidSession:
     def _start_part(self, start_type):
         index = 1 if self.part is None else self.part.index + 1
         self.part_number += 1
-        cold = index == 1 and self.rng.random() < 0.78
+        cold = index == 1 and (self.rng.random() < 0.78 or bool(getattr(getattr(self, "plan", None), "slow_startup", None)))
         self.part = Part(index, self.part_number, self.t, start_type, cold)
         if index == 1:
             self._startup(cold)
@@ -340,6 +351,20 @@ class AndroidSession:
             gap = lat(40, 160, rng) * slow
             create = lat(90, 260, rng) * slow
             render = lat(120, 420, rng) * slow
+            regression = getattr(getattr(self, "plan", None), "slow_startup", None)
+            if regression:
+                # The regressed phase absorbs the extra time: application init (process start and
+                # Application.onCreate), SDK init, or first render of the launch activity.
+                total = rng.uniform(regression.get("min_ms", 4200), regression.get("max_ms", 7500))
+                extra = max(0.0, total - (proc + init + gap + create + render))
+                phase = regression.get("phase", "application_init")
+                if phase == "sdk_init":
+                    init += extra
+                elif phase == "first_render":
+                    render += extra * .7
+                    create += extra * .3
+                else:
+                    proc += extra
             t1, t2, t3, t4 = t0 + proc, t0 + proc + init, t0 + proc + init + gap, t0 + proc + init + gap + create
             end = t4 + render
             self._span("emb-process-init", t0, t1, {"emb.type": "perf"}, trace_id=tid, parent=root)
@@ -535,24 +560,24 @@ class AndroidSession:
         c = simulate(self, key, params, start, self.rng)
         url = c.url.split("?")[0]
         path = url.split(self.api_host, 1)[1] or ""
-        a = {"emb.type": "perf.network_request", "url.full": url, "http.request.method": c.ep.method,
-             "emb.w3c_traceparent": c.traceparent, "emb.forward_telemetry": True,
-             "http.response.status_code": c.status, "http.request.body.size": c.request_bytes,
-             "http.response.body.size": c.response_bytes, "user_agent.name": "okhttp", "user_agent.version": "4.12.0"}
+        a = {"emb.type": "perf.network_request", "url.full": url, "http.request.method": c.ep.method}
+        if self.traces:
+            # NetworkRequestDataSourceImpl sets both only for domains with network span forwarding.
+            a.update({"emb.w3c_traceparent": c.traceparent, "emb.forward_telemetry": True})
+        a.update({"http.response.status_code": c.status, "http.request.body.size": c.request_bytes,
+                  "http.response.body.size": None if c.transport else c.response_bytes,
+                  "user_agent.name": "okhttp", "user_agent.version": "4.12.0"})
         failed = c.status is None or c.status >= 400
         if c.transport:
-            errors = {"dns": ("java.net.UnknownHostException", "Unable to resolve host"),
-                      "offline": ("java.net.ConnectException", "Network is unreachable"),
-                      "reset": ("java.net.SocketException", "Connection reset before request headers"),
-                      "timeout": ("java.net.SocketTimeoutException", "Connect timed out"),
-                      "cancelled": ("java.io.IOException", "Canceled")}
-            a["error.type"], a["exception.message"] = errors[c.transport]
-            a["emb.forward_telemetry"] = False
+            # OkHttpDataSource: error.type is the exception's canonical class name, exception.message its message.
+            exc, message, _ = NETWORK_FAILURES[c.transport]
+            a["error.type"], a["exception.message"] = exc, message.format(host=self.api_host)
         if failed:
             a["emb.error_code"] = "failure"
         self._span(f"emb-{c.ep.method} {path}", start, c.end, a, status="Error" if failed else "Unset",
                    trace_id=c.trace_id, span_id=c.span_id)
-        deliver_backend(self, c, self.rng)
+        if self.traces:
+            deliver_backend(self, c, self.rng)
         self.calls.append((key, c.status, c.trace_id))
         return Result(c.status, c.outcome, c.data, c.trace_id, start, c.end)
 

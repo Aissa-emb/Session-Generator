@@ -9,6 +9,8 @@ This is an outbound telemetry generator, not a banking, shopping, or travel serv
 - Use a service account limited to trace ingestion. Trace queries and administrative changes may require a different credential. Anyone who can read the token or execute code as the generator's OS user can use its permissions.
 - If a real credential is ever committed or otherwise disclosed, revoke/rotate it at the provider and update the local secret. Deleting the text or rewriting history does not invalidate the old credential.
 
+- V2 specs never contain secret values. `chronosphere.token_ref` names where the token lives: `keychain:<service>[/<account>]` (macOS Keychain), `file:<absolute path>` (owner-only file, same rules as above) or `env:<VARIABLE>`. Specs, presets and run manifests are safe to share; the referenced secret is not.
+
 ## Network and local data
 
 HTTPS certificate verification remains enabled. Remote HTTP endpoints, URL credentials, query strings, fragments, header injection, and redirects are refused. Plain HTTP is permitted only for a local loopback collector without credential or identifying headers. Proxy configuration and the OS trust store remain trusted deployment settings.

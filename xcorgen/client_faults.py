@@ -21,6 +21,11 @@ def fault(s, fatal=False):
     family = s.plan.crash_family if fatal else 3
     exception, message, method, line = FAMILIES[family]
     cls = CLASSES[s.profile.key][family]
+    custom = (getattr(s.plan, "crash_details", None) or {}) if fatal else {}
+    if custom.get("exception"):
+        # A spec-defined crash keeps the family's stage and milestone, with its own type and frame.
+        exception, message = custom["exception"], custom.get("message", message)
+        method, cls, line = custom.get("method", method), custom.get("class", cls), custom.get("line", line)
     package = s.app["package"] if hasattr(s, "app") else s.profile.android["package"]
     frames = [f"{package}.{s.profile.key}.{cls}.{method}({cls}.kt:{line})",
               "kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)",
@@ -51,10 +56,41 @@ def fault(s, fatal=False):
                                  "severity_text": "ERROR", "body": message, "attributes": kv(a)}))
 
 
+def followup(s):
+    """The UI layer catches a failed response and reports it with Embrace.logException (handled)."""
+    failed = next(((key, status) for key, status, _ in reversed(s.calls) if status is None or status >= 400), None)
+    if failed is None or not hasattr(s, "_crash"):
+        return
+    from .android_session import kv, nanos
+    from .catalog import NETWORK_FAILURES
+    key, status = failed
+    if status is None:
+        exc, message, _ = NETWORK_FAILURES.get(getattr(s.plan, "transport", None) or "timeout")
+        message = message.format(host=s.api_host)
+        frames = ["okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)",
+                  "okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)"]
+    else:
+        exc, message = "retrofit2.HttpException", f"HTTP {status} "
+        frames = ["retrofit2.KotlinExtensions$await$2$2.onResponse(KotlinExtensions.kt:53)",
+                  "retrofit2.OkHttpCall$1.onResponse(OkHttpCall.java:164)",
+                  "okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:529)"]
+    frames += ["java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)",
+               "java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)",
+               "java.lang.Thread.run(Thread.java:1012)"]
+    s.exception_number += 1
+    a = dict(s._log_common(), **{"emb.type": "sys.exception", "emb.exception_handling": "handled",
+        "emb.private.send_mode": "IMMEDIATE", "exception.type": exc.rsplit(".", 1)[-1],
+        "exception.message": message, "exception.stacktrace": json.dumps(frames)})
+    s._use("log_exception")
+    s.part.logs.append((s.t, {"time_unix_nano": nanos(s.t), "severity_number": 17,
+                             "severity_text": "ERROR", "body": message, "attributes": kv(a)}))
+
+
 def blockage(s):
     mark(s, "main_thread_work_started")
-    cause = s.plan.settings.get("blockage_cause") or s.rng.choice(("migration", "worker_lock", "layout"))
-    duration = s.rng.uniform(6000, 12000)
+    spec = getattr(s.plan, "blockage_details", None) or {}
+    cause = spec.get("cause") or s.plan.settings.get("blockage_cause") or s.rng.choice(("migration", "worker_lock", "layout"))
+    duration = s.rng.uniform(spec.get("min_ms", 6000), spec.get("max_ms", 12000))
     start = s.t
     package = s.app["package"] if hasattr(s, "app") else s.profile.android["package"]
     frames = {

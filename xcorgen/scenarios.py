@@ -71,6 +71,10 @@ def incident_phase_at(timestamp_ms, settings):
     phase = settings.get("incident_phase", "scheduled")
     if phase != "scheduled":
         return phase
+    window = settings.get("incident_window")
+    if window:
+        from .spec import phase_at
+        return phase_at(timestamp_ms, window) or "recovery"
     cycle = settings.get("incident_cycle_minutes", 60)
     minute = (timestamp_ms / 60000) % cycle
     return ("onset" if minute < settings.get("incident_onset_minutes", 2) else
@@ -79,6 +83,24 @@ def incident_phase_at(timestamp_ms, settings):
 
 def fraction(identity, salt):
     return int.from_bytes(hashlib.sha256(f"{salt}:{identity}".encode()).digest()[:8], "big") / 2**64
+
+
+def occurrence_id(timestamp_ms, settings):
+    """Shared incident occurrence: Shop and Travel requests in one window report the same ID."""
+    window = settings.get("incident_window")
+    if window:
+        period = window["repeat_ms"] or 10**15
+        return f"payments-{int((timestamp_ms - window['start_ms']) // period + window['start_ms'] // 60000)}"
+    return f"payments-{int(timestamp_ms // (settings.get('incident_cycle_minutes', 60) * 60000))}"
+
+
+def assign_ring(persona, settings):
+    """Stable release ring for a visitor; persisted so an anonymous visitor keeps it after signing in."""
+    seed = str(settings.get("cohort_seed", "vantra-2026-10"))
+    identity = persona.get("user_id") or persona["device_id"]
+    assignments = persona.setdefault("rollout_assignments", {})
+    assignments.setdefault(seed, "canary" if fraction(identity, seed) < settings.get("canary_share", .25) else "stable")
+    return assignments[seed]
 
 
 @dataclass
@@ -102,14 +124,20 @@ class Runtime:
 
 
 class Plan:
-    def __init__(self, session, runtime, settings=None, forced=None):
+    def __init__(self, session, runtime, settings=None, forced=None, assignment=None):
         self.s, self.runtime, self.settings = session, runtime, settings or {}
         self.seed = str(self.settings.get("cohort_seed", "vantra-2026-10"))
-        identity = session.persona.get("user_id") or session.persona["device_id"]
-        assignments = session.persona.setdefault("rollout_assignments", {})
-        assignments.setdefault(self.seed, "canary" if fraction(identity, self.seed) < self.settings.get("canary_share", .25) else "stable")
-        self.ring = assignments[self.seed]
+        self.ring = assign_ring(session.persona, self.settings)
         self.rollback = self.settings.get("rollout_phase", "active") == "rollback"
+        self.handled = False
+        self.transport = self.transport_target = None
+        self.transport_used = False
+        self.slow_startup = self.slow_root_span = None
+        self.http_errors = {}
+        self.crash_details = {}
+        if assignment is not None:
+            self._assigned(session, assignment)
+            return
         # Assignment precedes scenario choice; the conditional model produces
         # 80% affected / 20% healthy canaries, while preserving global budgets.
         weights = dict(DEFAULT_WEIGHTS, **self.settings.get("scenario_weights", {}))
@@ -140,19 +168,42 @@ class Plan:
             cr = self.settings.get("crash_session_rate", .10)
             bl = self.settings.get("blockage_session_rate", .30)
             self.client_fault = weighted([(None, 1 - cr - bl), ("crash", cr), ("blockage", bl)], session.rng)
+        self._common(session)
+        self.crash_family = weighted([(0, 40), (1, 25), (2, 15), (3, 12), (4, 8)], session.rng)
+        if self.settings.get("crash_family") is not None:
+            self.crash_family = int(self.settings["crash_family"])
+
+    def _common(self, session):
         self.phase = incident_phase_at(session.start_ms, self.settings)
-        cycle = self.settings.get("incident_cycle_minutes", 60)
-        self.occurrence = f"payments-{int(session.start_ms // (cycle * 60000))}"
+        self.occurrence = occurrence_id(session.start_ms, self.settings)
         self.target = None
         self.used = False
         self.attempts = {}
         self.contexts = []
         self.evidence = []
         self.operation_id = hashlib.sha256(f"{session.user_session_id}:operation".encode()).hexdigest()[:24]
-        self.crash_family = weighted([(0, 40), (1, 25), (2, 15), (3, 12), (4, 8)], session.rng)
-        if self.settings.get("crash_family") is not None:
-            self.crash_family = int(self.settings["crash_family"])
         session.properties.update({"release_ring": self.ring, "feature_exposed": "false"})
+
+    def _assigned(self, session, a):
+        """Take the outcome a ScenarioSpec planner allocated, instead of drawing one."""
+        self.primary = a.get("primary", "clean")
+        self.incident = a.get("incident")
+        self.client_fault = a.get("client_fault")
+        self.crash_family = a.get("crash_family", 0)
+        self.crash_details = a.get("crash_details") or {}
+        self.blockage_details = a.get("blockage_details") or {}
+        self.blockage = bool(a.get("blockage"))
+        self.handled_followup = a.get("handled_followup", 0.0)
+        self.handled = bool(a.get("handled"))
+        self.transport = a.get("transport")
+        self.transport_target = a.get("transport_target")
+        self.slow_startup = a.get("slow_startup")
+        self.slow_root_span = a.get("slow_root_span")
+        self.http_errors = dict(a.get("http_errors") or {})
+        self.fault_ids = list(a.get("fault_ids", []))
+        if self.rollback and self.ring == "canary" and a.get("rollback_clears_canary"):
+            self.primary, self.incident = "clean", None
+        self._common(session)
 
     def request(self, key, params):
         s = self.s
@@ -172,7 +223,7 @@ class Plan:
         incident = self.incident if key == self.target and not self.used else None
         if incident == "payments-db-pool":
             self.phase = incident_phase_at(s.t, self.settings)
-            self.occurrence = f"payments-{int(s.t // (self.settings.get('incident_cycle_minutes', 60) * 60000))}"
+            self.occurrence = occurrence_id(s.t, self.settings)
             context.update({"incident.occurrence_id": self.occurrence, "incident.phase": self.phase,
                             "routing.reason": "weighted_deployment_route",
                             "routing.target": "payments-hot", "db.client.connection.pool.name": "HikariPool-1"})
@@ -186,12 +237,14 @@ class Plan:
                        "rails-outage": "rail_unavailable", "gds-pnr-timeouts": "pnr_timeout",
                        "inventory-sync": "out_of_stock", "hotel-supplier-outage": "supplier_503",
                        "supplier-timeouts": "supplier_timeout", "account-read-fallback": "snapshot_fallback",
+                       "inventory-deadlock": "inventory_conflict",
                        "recs-latency": "fallback" if self.primary == "backend" else "slow_model",
                        "fraud-latency": "fraud_timeout" if self.primary == "mobile" else "fraud_slow"}.get(incident, "ok")
         if incident == "payments-db-pool" and self.phase == "onset":
             outcome = "ok"
+        http_error = self.http_errors.pop(key, None) if not incident else None
         req = {"attributes": context, "plan": self, "key": key, "incident": incident, "outcome": outcome,
-               "now": s.t, "params": params}
+               "now": s.t, "params": params, "http_error": http_error}
         self.contexts.append(dict(context))
         return req
 

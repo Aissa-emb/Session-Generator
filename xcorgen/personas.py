@@ -63,6 +63,14 @@ ANDROID_DEVICES = [
     ("OnePlus", "CPH2583", ["15", "16"], "1440x3168", "SM8650", 256, 2),
 ]
 API_LEVEL = {"16": "36", "15": "35", "14": "34"}
+# Hardware class by Build.MODEL, used by spec filters (device_tiers) and startup timing.
+DEVICE_TIERS = {
+    "SM-S931U": "flagship", "SM-S938U": "flagship", "SM-S936U": "flagship", "SM-S921U": "flagship",
+    "SM-S928U": "flagship", "SM-F966U": "flagship", "Pixel 9 Pro": "flagship", "Pixel 10": "flagship",
+    "CPH2583": "flagship", "SM-S911U": "mid", "SM-A356U": "mid", "Pixel 9": "mid", "Pixel 9a": "mid",
+    "Pixel 8": "mid", "Pixel 8a": "mid", "SM-A166U": "budget", "SM-A156U": "budget",
+    "moto g power 5G - 2024": "budget", "moto g 5G - 2024": "budget",
+}
 
 # Desktop/mobile split differs by vertical: retail is mobile-heavy, banking and travel lean desktop.
 KIND_BIAS = {
@@ -105,9 +113,16 @@ def _new_persona(profile_key, rng):
     }
 
 
-def _new_android_persona(profile_key, rng):
-    maker, model, versions, screen, soc, gb, _ = weighted([(d, d[6]) for d in ANDROID_DEVICES], rng)
-    os_version = rng.choice(versions)
+def _new_android_persona(profile_key, rng, overrides=None):
+    overrides = overrides or {}
+    device_weights = overrides.get("device_weights") or {}
+    maker, model, versions, screen, soc, gb, _ = weighted(
+        [(d, device_weights.get(d[1], d[6])) for d in ANDROID_DEVICES], rng)
+    os_mix = overrides.get("os_version_mix") or {}
+    if os_mix and any(os_mix.get(v, 0) > 0 for v in versions):
+        os_version = weighted([(v, os_mix.get(v, 0)) for v in sorted(set(versions))], rng)
+    else:
+        os_version = rng.choice(versions)
     conn = weighted([("wifi", 6), ("5g", 4), ("4g", 4), ("4g-weak", 1)], rng)
     rtt = {"wifi": (25, 70), "5g": (35, 80), "4g": (55, 130), "4g-weak": (140, 320)}[conn]
     mbps = {"wifi": (30, 180), "5g": (40, 220), "4g": (8, 45), "4g-weak": (1.2, 4)}[conn]
@@ -127,8 +142,12 @@ def _new_android_persona(profile_key, rng):
 
 
 class PersonaPool:
-    def __init__(self, profile_key, state_dir, size=600, rng=random, platform="web"):
+    def __init__(self, profile_key, state_dir, size=600, rng=random, platform="web", returning_share=None,
+                 android_overrides=None):
         self.profile_key, self.rng, self.platform = profile_key, rng, platform
+        # Steady-state share of returning visitors; V1 settles at 45% returning.
+        self.new_floor = 1 - returning_share if returning_share is not None else 0.55
+        self.android_overrides = android_overrides
         self.path = os.path.join(state_dir, f"personas-{profile_key}{'' if platform == 'web' else '-' + platform}.json")
         self.size = size
         self.personas = []
@@ -136,19 +155,21 @@ class PersonaPool:
             with open(self.path) as f:
                 self.personas = json.load(f)
 
-    def pick(self, make_user):
+    def pick(self, make_user, now=None):
         """Return a persona: mostly returning visitors once the pool has filled up.
 
         A visitor who had a session in the last 30 minutes is not picked again, so one device
         never shows several overlapping or back-to-back sessions.
         """
-        now = time.time()
-        fresh = [p for p in self.personas if now - p.get("last_seen", 0) > 1800]
+        now = time.time() if now is None else now
+        fresh = [p for p in self.personas if abs(now - p.get("last_seen", 0)) > 1800]
         # A young pool is mostly first-time visitors; it settles at ~55% new once it has grown.
-        p_new = max(0.55, 1 - len(self.personas) / 150)
+        p_new = max(self.new_floor, 1 - len(self.personas) / 150)
         if len(self.personas) < self.size and (not fresh or self.rng.random() < p_new):
-            new = _new_android_persona if self.platform == "android" else _new_persona
-            p = new(self.profile_key, self.rng)
+            if self.platform == "android":
+                p = _new_android_persona(self.profile_key, self.rng, self.android_overrides)
+            else:
+                p = _new_persona(self.profile_key, self.rng)
             make_user(p)
             self.personas.append(p)
         else:

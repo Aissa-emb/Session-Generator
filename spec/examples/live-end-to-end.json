@@ -1,0 +1,468 @@
+{
+ "spec_version": "2.0",
+ "name": "Vantra Android baseline, always on",
+ "seed": null,
+ "targets": [
+  {
+   "id": "vantra-android",
+   "platform": "android",
+   "embrace_app_id": "5nrc2",
+   "app_name": "Vantra",
+   "environment": "production",
+   "region": "us",
+   "api_domains": {
+    "retail": "api.vantrashop.com",
+    "banking": "api.vantramoney.com",
+    "travel": "api.vantratravel.com"
+   },
+   "android": {
+    "package": "com.vantra.android",
+    "ui_toolkit": "compose",
+    "sdk_version": "9.3.1",
+    "versions": [
+     {
+      "version": "10.28.0",
+      "version_code": "1028004",
+      "sdk_version": "9.3.1",
+      "released": "2026-10-20",
+      "share": 0.61
+     },
+     {
+      "version": "10.27.3",
+      "version_code": "1027032",
+      "sdk_version": "9.3.1",
+      "released": "2026-10-06",
+      "share": 0.3
+     },
+     {
+      "version": "10.25.1",
+      "version_code": "1025011",
+      "sdk_version": "9.3.0",
+      "released": "2026-09-08",
+      "share": 0.09
+     }
+    ]
+   }
+  }
+ ],
+ "chronosphere": {
+  "tenant": "demo-sandbox",
+  "token_ref": "file:/Users/aissamamdouh/Library/Application Support/Session-Generator/chronosphere.token"
+ },
+ "destinations": {
+  "mode": "end_to_end",
+  "backend_logs": false
+ },
+ "population": {
+  "line_of_business_mix": {
+   "retail": 1,
+   "banking": 1,
+   "travel": 1
+  },
+  "signed_in_share": 0.82,
+  "returning_share": 0.45,
+  "journey_depth": {
+   "retail": 0.23,
+   "banking": 0.18,
+   "travel": 0.23
+  },
+  "session_properties": {
+   "market": {
+    "US": 1
+   },
+   "membership_tier": {
+    "standard": 62,
+    "plus": 29,
+    "premium": 9
+   },
+   "entry_point": {
+    "home_tab": 55,
+    "push_notification": 15,
+    "deep_link": 12,
+    "widget": 6,
+    "search": 12
+   }
+  }
+ },
+ "traffic": {
+  "mode": "live",
+  "rate_per_minute": 10,
+  "duration_minutes": 0,
+  "daily_curve": {
+   "kind": "flat"
+  }
+ },
+ "client_faults": [
+  {
+   "id": "baseline-network-failure",
+   "type": "network_failure",
+   "rate": 0.133333,
+   "exclusive_group": "story",
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   },
+   "details": {
+    "kinds": [
+     "dns",
+     "offline",
+     "reset",
+     "timeout",
+     "cancelled"
+    ],
+    "story": "mobile",
+    "handled_followup": 0.6
+   }
+  },
+  {
+   "id": "baseline-handled-story",
+   "type": "handled_exception",
+   "rate": 0.2,
+   "exclusive_group": "story",
+   "filters": {
+    "release_rings": [
+     "stable"
+    ],
+    "lines_of_business": [
+     "banking",
+     "travel"
+    ]
+   },
+   "details": {
+    "story": "handled"
+   }
+  },
+  {
+   "id": "baseline-crash",
+   "type": "jvm_crash",
+   "rate": 0.1,
+   "exclusive_group": "client",
+   "steer_journey": true
+  },
+  {
+   "id": "baseline-blockage",
+   "type": "main_thread_blockage",
+   "rate": 0.3,
+   "exclusive_group": "client"
+  }
+ ],
+ "backend_faults": [
+  {
+   "id": "baseline-account-read-fallback-canary",
+   "type": "downstream_timeout",
+   "variant": "account-read-fallback",
+   "rate": 0.6,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "banking"
+   ],
+   "filters": {
+    "release_rings": [
+     "canary"
+    ]
+   }
+  },
+  {
+   "id": "baseline-account-read-fallback-stable",
+   "type": "downstream_timeout",
+   "variant": "account-read-fallback",
+   "rate": 0.133333,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "banking"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-core-banking-latency-stable",
+   "type": "slow_query",
+   "variant": "core-banking-latency",
+   "rate": 0.066667,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "banking"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-fraud-latency",
+   "type": "downstream_timeout",
+   "variant": "fraud-latency",
+   "rate": 0.1,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "banking"
+   ],
+   "details": {
+    "handled_followup": 0.6
+   }
+  },
+  {
+   "id": "baseline-fraud-slow-stable",
+   "type": "dependency_latency",
+   "variant": "fraud-slow",
+   "rate": 0.066667,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "banking"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-gds-pnr-timeouts",
+   "type": "downstream_timeout",
+   "variant": "gds-pnr-timeouts",
+   "rate": 0.1,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "travel"
+   ],
+   "details": {
+    "handled_followup": 0.6
+   }
+  },
+  {
+   "id": "baseline-hotel-supplier-outage-canary",
+   "type": "dependency_5xx",
+   "variant": "hotel-supplier-outage",
+   "rate": 0.3,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "travel"
+   ],
+   "filters": {
+    "release_rings": [
+     "canary"
+    ]
+   }
+  },
+  {
+   "id": "baseline-hotel-supplier-outage-stable",
+   "type": "dependency_5xx",
+   "variant": "hotel-supplier-outage",
+   "rate": 0.066667,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "travel"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-inventory-sync-stable",
+   "type": "validation_conflict",
+   "variant": "inventory-sync",
+   "rate": 0.2,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "retail"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-payment-timeouts",
+   "type": "downstream_timeout",
+   "variant": "payment-timeouts",
+   "rate": 0.1,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "retail"
+   ],
+   "details": {
+    "handled_followup": 0.6
+   }
+  },
+  {
+   "id": "baseline-payments-db-pool",
+   "type": "db_pool_exhaustion",
+   "variant": "payments-db-pool",
+   "rate": 0.1,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "retail",
+    "travel"
+   ],
+   "details": {
+    "handled_followup": 0.6
+   },
+   "schedule": "payments-pool-hourly"
+  },
+  {
+   "id": "baseline-rails-outage",
+   "type": "dependency_5xx",
+   "variant": "rails-outage",
+   "rate": 0.1,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "banking"
+   ],
+   "details": {
+    "handled_followup": 0.6
+   }
+  },
+  {
+   "id": "baseline-recs-fallback-canary",
+   "type": "downstream_timeout",
+   "variant": "recs-fallback",
+   "rate": 0.6,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "retail"
+   ],
+   "filters": {
+    "release_rings": [
+     "canary"
+    ]
+   }
+  },
+  {
+   "id": "baseline-recs-fallback-stable",
+   "type": "downstream_timeout",
+   "variant": "recs-fallback",
+   "rate": 0.133333,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "retail"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-recs-latency-stable",
+   "type": "dependency_latency",
+   "variant": "recs-latency",
+   "rate": 0.1,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "retail"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-reviews-n-plus-one-stable",
+   "type": "n_plus_one",
+   "variant": "reviews-n-plus-one",
+   "rate": 0.1,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "retail"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-search-complexity-stable",
+   "type": "slow_query",
+   "variant": "search-complexity",
+   "rate": 0.2,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "travel"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-statements-slow-stable",
+   "type": "dependency_latency",
+   "variant": "statements-slow",
+   "rate": 0.066667,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "banking"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  },
+  {
+   "id": "baseline-supplier-timeouts-canary",
+   "type": "partial_results",
+   "variant": "supplier-timeouts",
+   "rate": 0.3,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "travel"
+   ],
+   "filters": {
+    "release_rings": [
+     "canary"
+    ]
+   }
+  },
+  {
+   "id": "baseline-supplier-timeouts-stable",
+   "type": "partial_results",
+   "variant": "supplier-timeouts",
+   "rate": 0.066667,
+   "exclusive_group": "story",
+   "lines_of_business": [
+    "travel"
+   ],
+   "filters": {
+    "release_rings": [
+     "stable"
+    ]
+   }
+  }
+ ],
+ "incidents": [
+  {
+   "id": "payments-pool-hourly",
+   "fault_ref": "baseline-payments-db-pool",
+   "start": "2026-01-01T00:00:00Z",
+   "onset_minutes": 2,
+   "peak_minutes": 52,
+   "recovery_minutes": 6,
+   "repeat_every_minutes": 60
+  }
+ ],
+ "rollouts": [
+  {
+   "id": "payment-orchestration-v2",
+   "kind": "feature_cohort",
+   "subject": "payment_orchestration",
+   "canary_share": 0.25,
+   "cohort_seed": "vantra-2026-10"
+  }
+ ],
+ "stories": [
+  "baseline"
+ ],
+ "notes": "V2 equivalent of the V1 LaunchAgent (generate.py --profile all --rate 10): the Baseline preset, live, end to end."
+}

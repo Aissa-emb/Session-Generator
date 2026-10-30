@@ -37,3 +37,14 @@ jobs:
           python3 tools/check_output.py out/web
           python3 generate.py --profile all --sessions 120 --quiet --incident payments-db-pool --dry-run out/incident
           python3 tools/check_output.py out/incident
+      - name: Validate V2 specs and spec-driven payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in spec/examples/*.json; do python3 generate.py validate "$spec"; done
+          python3 generate.py run spec/examples/baseline-burst.json --dry-run out/spec --quiet --seed 7331
+          python3 tools/check_output.py out/spec
+          python3 generate.py report out/spec spec/examples/baseline-burst.json
+          python3 generate.py lint out/spec
+          python3 generate.py run spec/examples/verification-plan.json --dry-run out/verify --quiet
+          python3 tools/check_output.py out/verify

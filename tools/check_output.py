@@ -60,6 +60,9 @@ def golden_session_keys():
     return keys
 
 
+no_forwarding = [0]
+
+
 def check_envelope(doc, problem, client_spans, devices):
     p = doc["payload"]
     if p.get("version") != "0.1.0" or p.get("type") not in ("spans", "logs"):
@@ -107,10 +110,17 @@ def check_envelope(doc, problem, client_spans, devices):
             if missing:
                 problem(f"span missing common attributes {missing}: {s['name']}")
         if a.get("emb.type") == "perf.network_request":
-            url, tp = a["url.full"], a.get("emb.w3c_traceparent", "")
+            url, tp = a["url.full"], a.get("emb.w3c_traceparent")
             path = url.split("/", 3)[3] if url.count("/") >= 3 else ""
             if s["name"] != f"emb-{a['http.request.method']} /{path}" or "?" in url:
                 problem("network span name must be 'emb-<METHOD> <path>' with the query stripped")
+            if (tp is None) != ("emb.forward_telemetry" not in a):
+                problem("emb.w3c_traceparent and emb.forward_telemetry are set together, only for forwarded domains")
+            if tp is None:
+                no_forwarding[0] += 1
+                continue
+            if a.get("emb.forward_telemetry") != "true":
+                problem("emb.forward_telemetry must be the string true when forwarding is on")
             m = TP.match(tp)
             if not m or m.group(1) != s["trace_id"] or m.group(2) != s["span_id"]:
                 problem("traceparent does not match the network span IDs")
@@ -281,7 +291,8 @@ def main(d):
         if root and int(root["endTimeUnixNano"]) > int(b["endTimeUnixNano"]):
             problem("backend root ends after the browser span")
 
-    print(f"{len(browser_spans)} API network spans with traceparent, {len(backend)} backend traces")
+    print(f"{len(browser_spans)} API network spans with traceparent, {len(backend)} backend traces"
+          + (f", {no_forwarding[0]} network spans without forwarding (sessions only)" if no_forwarding[0] else ""))
     n_spans = sum(len(v) for v in backend.values())
     services = {svc for v in backend.values() for svc, _ in v}
     print(f"{n_spans} backend spans across {len(services)} services; "

@@ -2,6 +2,66 @@
 
 You are picking up **Session-Generator**: a stdlib-only Python tool that generates realistic mobile (Android) and web sessions for **Cortex XCOR RUM** (formerly Embrace) and matching full distributed backend traces for **Cortex XCOR** (formerly Chronosphere), stitched together so a session's network request opens a complete trace. It feeds a live sales/demo tenant. Read this file fully before changing anything; `README.md` is the user-facing guide.
 
+## V2 (branch `v2`)
+
+V2 turns the generator into a product driven by one versioned document, the **ScenarioSpec** (`spec/scenario.schema.json`). The build prompt and the verified feasibility findings are in `docs/v2/V2-BUILD-PROMPT.md` and `docs/v2/V2-SCOPE.md`; read both before V2 work. The prompt's phases: (1) spec and engine, (2) web generator, (3) server and runs, (4) UI, (5) MCP and copilot, (6) destinations, demo preparation and backfill, (7) hosted stream.
+
+**Phase 1 status (done):** spec, stdlib schema validator, semantic validation, platform limits, exact quotas, realism linter, presets with a computed Baseline, `generate.py run spec.json`, requested-versus-emitted report, new Android faults, and the burst trace-window fix. Live, burst and backfill modes run from specs; V1 flags still work unchanged for the LaunchAgent.
+
+**Owner decisions (2026-10-30):** local Mac first (uvicorn, single user, macOS Keychain secrets; container later); no Anthropic key yet, so build the MCP server before the in-app copilot; web estate accepted (www.vantra.com retail multi-page and travel landing, app.vantra.com banking SPA and booking flow, static.vantra.com CDN; retail multi-page, banking single-page, travel hybrid); web app `kfs9f` "Vantra Web" (web, production, US). Embrace names forwarded client spans `lower(app name with spaces as underscores)-<platform>-<environment>` (`go/lib/common/data_destinations_config.go:114`), so this app forwards as **`vantra_web-web-production`**, not `vantra-web-production`, unless it is renamed "Vantra". Derive service names with `limits.forwarded_service_name`, never by hand.
+
+### How a spec runs
+
+```
+spec.json --validate()--> Planner --skeleton per session--> allocation (exact quota / probability) --> assignment
+          (schema, limits,   (target, line of business, visitor, app version, ring, start time,      (V1 Plan fields: story,
+           linter)            trace eligibility, journey shape)                                       incident, client fault ...)
+                                                                    --> V1 journeys and builders --> Emitted report (payloads only)
+```
+
+| File | Role |
+| --- | --- |
+| `spec/scenario.schema.json` | The ScenarioSpec. `xcorgen/schema.py` validates it with the stdlib (the engine stays dependency-free); the server will generate Pydantic and Zod types from the same file |
+| `xcorgen/spec.py` | Defaults (`ANDROID_TARGET`, `WEB_TARGET`), `validate()` (actionable issues; severity `error` blocks a run), JSON Patch, `explain()`, incident windows and ramps |
+| `xcorgen/limits.py` | Verified platform limits and the verbatim trace caveat; `trace_eligible()` (8-minute rule), `forwarded_service_name()` |
+| `xcorgen/catalog.py` | Client fault types and backend variants (V1 incidents) with story, endpoints and emitted evidence |
+| `xcorgen/quota.py` | Exact allocation (count from every eligible session, placed only where available) and streaming quotas |
+| `xcorgen/planner.py` | Skeletons, journey shapes and steering, eligibility versus availability, V1 `Plan` assignments |
+| `xcorgen/spec_runner.py` | `SpecRun`: live streams, bursts, backfills, per-session time shift, trace stripping, run manifest, throttling |
+| `xcorgen/emitted.py` | Requested versus emitted from payloads only (never the plan) |
+| `xcorgen/linter.py` | Realism linter for specs and payloads (forbidden words, service names, stack language, status, durations, device/OS, PII) |
+| `xcorgen/presets.py` | Preset library; `baseline()` re-expresses V1's default policy as fault rates |
+| `xcorgen/generic_faults.py` | Backend traces for spec-defined `http_error` faults, with language-shaped exceptions |
+| `xcorgen/secrets.py` | `token_ref` resolution (`keychain:`, `file:`, `env:`); specs never hold secret values |
+
+Rules that keep the numbers honest:
+- **Rates are shares of eligible sessions.** Session-level filters (line of business, app version, OS, device model and tier, signed-in, release ring) define eligibility. `steer_journey` (default true) makes affected sessions reach the fault's stage; with it false, only sessions that reach the stage naturally are eligible (`filters.endpoints`).
+- **Exact quotas** (default for bursts and backfills) fix the count from all eligible sessions and place it only where the fault can happen: free in its exclusive group, not after a fatal crash or a journey-ending failure (`ends_journey`), and compatible with the journey shape. This is why emitted shares match within one session.
+- **One backend story per session** (all backend faults share one exclusive group); fatal faults share one group. `details.with_fault` couples a fault to another's sessions (for example a crash after a failed payment).
+- **Payments pool phase:** in spec mode the phase is fixed per session from its planned start (exact counts); V1 mode still evaluates it per request. Onset sessions get the slow lock-query story without failing.
+- **Time model:** a session dated more than 8 minutes before it is sent carries no `emb.w3c_traceparent`/`emb.forward_telemetry` and no backend trace (`strip_traces`). Batch sessions keep their planned time; only sessions still running at send time move back. The V1 `--sessions` burst now applies the same rule and defaults to `--spread 8`.
+- **Evidence:** the report counts crash logs, blockage spans, handled exceptions by type, transport failures, startup and root-span durations, HTTP statuses, app-side fallback breadcrumbs and logs, and backend spans when the session has traces. Latency-only evidence without traces is labeled approximate (±2 pp).
+
+### SDK behavior verified for V2 (and V1 discrepancies fixed)
+
+- `emb.w3c_traceparent` and `emb.forward_telemetry="true"` are set together, only for domains with network span forwarding (`NetworkRequestDataSourceImpl.kt:123-127`). Sessions-only runs omit both. V1 set `emb.forward_telemetry=false` on transport failures; the SDK never does, so V2 keeps `"true"`.
+- Transport failures: `error.type` is the exception's canonical class name and `exception.message` its message, with no status code (`OkHttpDataSource.kt:156`). Timeouts and resets happen after the request reached the gateway, so the backend trace is still built; DNS, offline, TLS and cancelled requests produce none.
+- Handled exceptions use `throwable.javaClass.simpleName` for `exception.type` (`LogsApiDelegate.kt:104-121`). In spec mode the handled error a screen logs after a failed request is the failure itself (`retrofit2.HttpException: HTTP 502 ` or the transport exception), not V1's `NumberFormatException`, so it is distinguishable from a requested handled-exception fault.
+
+### V2 workflow
+
+```bash
+python3 generate.py validate spec/examples/baseline-burst.json
+python3 generate.py run spec/examples/baseline-burst.json --dry-run out/spec --seed 7331 --quiet
+python3 tools/check_output.py out/spec && python3 generate.py report out/spec spec/examples/baseline-burst.json && python3 generate.py lint out/spec
+python3 generate.py run spec/examples/verification-plan.json --dry-run out/verify --quiet && python3 tools/check_output.py out/verify
+python3 -m unittest discover -s tests -v
+```
+
+`spec/examples/live-end-to-end.json` is the V2 equivalent of the LaunchAgent (Baseline, 10 sessions per minute, end to end). Do not point the LaunchAgent at this branch until the owner approves; it runs from `~/xcor-demo-generator`. Non-dry runs write an owner-only manifest to `.runs/<run id>/manifest.jsonl` and lint a preflight sample first; any realism error blocks sending.
+
+**Not built yet:** web targets are rejected by validation (the V1 web generator raises Android exception families in JavaScript stacks and must not reach `kfs9f`); backend types `cache_outage`, `rate_limited`, `kafka_consumer_lag` and `deploy_regression` are rejected until their builders exist; backfill resume after interruption; the server, UI, MCP, copilot and readiness checks.
+
 ## What the owner cares about
 
 1. **It must look like real production data.** Viewers must not be able to tell it is synthetic. Never put "demo", "fake", "test", "sample" or similar into session properties, attribute values, service names, IDs, URLs or log text. Use the formats real SDKs and backends produce.
