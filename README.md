@@ -258,3 +258,9 @@ No live forwarding or dashboard acceptance is implied by a passing dry run or HT
 ### Backend fault scenarios
 
 Backend presets include `catalog-cache-outage`, `accounts-cache-outage`, `gateway-rate-limited`, `fulfillment-consumer-lag`, and `catalog-deploy-regression`. Cache outages default to database fallback; `details.fallback=false` returns 503. Gateway 429 responses have one bounded Retry-After retry. Kafka lag is limited to 10–240 seconds and produces pending status polls. Service-version rollouts select stable canary cohorts and stop regressions at rollback.
+
+### Resume a bounded run
+
+Every V2 burst/backfill stores a private SQLite journal alongside its manifest. Resume with `python3 generate.py run spec.json --resume RUN_ID` (add the original `--dry-run DIR` for a local run). The original random states, visitor pools, timestamp and spec digest regenerate the exact plan. Delivered payloads are skipped, including partially delivered sessions; a session receipt is appended only after its deliveries finish. The spec and dry/live destination must match. Delivery defaults to 20 payloads/second, stops after 20 failures, and removes expired trace context at send time.
+
+An interrupted POST or lost acknowledgement can leave acceptance uncertain. Resume then blocks instead of risking duplicate sessions. HTTP acceptance remains distinct from platform verification. Keep the journal and inspect the known IDs through the platform before resolving an uncertain delivery.

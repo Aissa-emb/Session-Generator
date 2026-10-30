@@ -182,3 +182,7 @@ Phase 2 local checks: 13 browser tests plus the 57 existing tests; all three 120
 ### V2 backend fault builders
 
 Handoff 4.2 is implemented in `backend_faults.py`: cache fallback or fail-closed, gateway admission with one Retry-After retry, delayed Kafka processing with pending status reconciliation, and canary-specific serializer failures with rollback. Resource cache keys include service version; internal routing metadata never enters request evidence. Presets expose all variants. Six new tests cover quotas, failure structure, retry timing, asynchronous timing, rollout attribution and lag bounds.
+
+### Durable bounded runs
+
+Handoff 4.3 uses `journal.py` (stdlib SQLite, FULL synchronous commits). A frozen RNG/pool/clock snapshot regenerates the same IDs, allocations and payload hashes. Intent is committed before each POST; accepted deliveries are never retried, and complete-session receipts follow delivery. In-flight, ambiguous and partially accepted exports block automatic resume. Retry-free strict receipt mode prevents hidden duplicate POSTs. At live send time stale backend exports expire and stale app payloads lose trace context. Five interruption/security tests exercise resume. Live stream persistence is provided by the server phase.

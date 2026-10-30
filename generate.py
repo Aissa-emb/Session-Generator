@@ -127,6 +127,7 @@ def spec_main(argv):
     r.add_argument("spec")
     r.add_argument("--dry-run", metavar="DIR", help="write payloads to DIR instead of sending")
     r.add_argument("--seed", type=int)
+    r.add_argument("--resume", metavar="RUN_ID", help="resume the frozen plan and skip accepted deliveries")
     r.add_argument("--config", default=os.path.join(ROOT, "config.json"))
     r.add_argument("--quiet", action="store_true")
     r.add_argument("--verbose", action="store_true")
@@ -202,7 +203,20 @@ def run_spec(a, spec):
     else:
         cfg["chronosphere"] = {"tenant": None, "api_token": None}  # nosec B105: no credential in sessions-only runs
     try:
-        run = SpecRun(spec, cfg, persist=not a.dry_run)
+        resume = getattr(a, "resume", None)
+        directory = a.dry_run or (os.path.join(ROOT, ".runs", resume) if resume else None)
+        if resume and (os.path.basename(resume) != resume or resume in (".", "..")):
+            raise ValueError("Resume expects a run ID, not a path.")
+        frozen_now = None
+        if resume:
+            from xcorgen.journal import RunJournal
+            journal = RunJournal(directory)
+            meta = journal.get("plan")
+            journal.close()
+            if not meta or meta["run_id"] != resume:
+                raise ValueError("Run ID does not match the saved plan.")
+            frozen_now = meta["now_ms"]
+        run = SpecRun(spec, cfg, persist=not a.dry_run, now_ms=frozen_now)
     except ValueError as error:
         sys.exit(str(error))
     for issue in run.issues:
@@ -217,7 +231,7 @@ def run_spec(a, spec):
         blocking = specs.errors(lint_payloads(sample))
         if blocking:
             sys.exit("Realism lint failed; nothing was sent:\n" + "\n".join(f"  {i['message']}" for i in blocking))
-    run.open_manifest(a.dry_run)
+    run.open_manifest(directory, resume=bool(resume), dry=bool(a.dry_run))
     sender = Sender(cfg, a.dry_run, verbose=a.verbose)
     t0 = time.time()
     if s["traffic"]["mode"] == "live":
@@ -240,5 +254,5 @@ if __name__ == "__main__":
         if len(sys.argv) > 1 and sys.argv[1] in SUBCOMMANDS:
             sys.exit(spec_main(sys.argv[1:]))
         main()
-    except SecurityError as error:
+    except (SecurityError, ValueError) as error:
         sys.exit(str(error))

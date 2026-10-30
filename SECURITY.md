@@ -37,3 +37,5 @@ A clean scan is evidence for these checks, not a guarantee that the code, host, 
 Web targets default to omitting `Origin`. The `allowed` policy sends the configured value, and `site` sends the current estate origin. API trace propagation is limited to the target's explicit host allow-list. SDK uploads and third-party requests never carry trace context. Browser fault inputs use catalog families with engine-specific stacks; the realism linter checks generated payloads and the browser capability/lifecycle contract. Only the anonymized web sample under `reference/` is committed.
 
 Backend fault controls accept bounded retry and Kafka-delay values. Service-version routing metadata is internal and is excluded from emitted attributes. Fault construction performs no network access.
+
+Run journals and manifests are owner-only, reject symbolic links, and contain no credentials. Resume checks the normalized spec digest and dry/live mode. Network ambiguity and OTLP partial success block automatic resends; exactly-once remote ingestion cannot be promised without a transactional ingest API. Strict journaled delivery disables transport retries.

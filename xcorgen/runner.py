@@ -40,6 +40,8 @@ def append_manifest(path, record):
         with os.fdopen(fd, "a") as f:
             fd = None
             f.write(json.dumps(record, separators=(",", ":")) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
     finally:
         if fd is not None:
             os.close(fd)
@@ -112,6 +114,7 @@ class Sender:
         self.stats = {"embrace_spans": 0, "embrace_logs": 0, "otlp_traces": 0, "otlp_logs": 0, "errors": 0}
         self.counter = itertools.count(1)
         self.last_errors = []
+        self.strict_receipts = False
         ch = cfg["chronosphere"]
         o = cfg["otlp"]
         if o.get("endpoint"):
@@ -125,6 +128,8 @@ class Sender:
         self.encoding = o.get("encoding", "protobuf")
         if dry_run_dir:
             os.makedirs(dry_run_dir, exist_ok=True)
+            numbers = [int(f.split("-", 1)[0]) for f in os.listdir(dry_run_dir) if re.match(r"^\d+-", f)]
+            self.counter = itertools.count(max(numbers, default=0) + 1)
 
     def submit(self, d):
         self.pending_slots.acquire()
@@ -134,18 +139,26 @@ class Sender:
             self.pending_slots.release()
             raise
         future.add_done_callback(lambda _: self.pending_slots.release())
+        return future
 
     def _send(self, d):
         key = f"{d['target']}_{d['kind']}"
+        receipt = {"target": d["target"], "kind": d["kind"], "time_ms": time.time() * 1000,
+                   "status": "accepted", "http_status": None, "accepted": 0, "rejected": 0, "trace_ids": sorted({
+                       sp["traceId"] for rs in d["payload"].get("resourceSpans", [])
+                       for ss in rs["scopeSpans"] for sp in ss["spans"]})}
         try:
             if self.dry:
                 n = next(self.counter)
                 with open(os.path.join(self.dry, f"{n:05d}-{key}.json"), "w") as f:
-                    json.dump({k: v for k, v in d.items() if k != "due"}, f, indent=1)
+                    json.dump({k: v for k, v in d.items() if k != "due" and not k.startswith("_")}, f, indent=1)
+                    f.flush()
+                    os.fsync(f.fileno())
             elif d["target"] == "embrace":
-                self._post_embrace(d)
+                receipt["http_status"] = getattr(self._post_embrace(d), "status", 200)
             else:
-                self._post_otlp(d)
+                receipt["http_status"] = getattr(self._post_otlp(d), "status", 200)
+            receipt["accepted"] = sum(len(ss.get("spans", ss.get("logRecords", []))) for rs in d["payload"].get("resourceSpans", d["payload"].get("resourceLogs", [])) for ss in rs.get("scopeSpans", rs.get("scopeLogs", []))) or len(d["payload"].get("data", {}).get("spans", d["payload"].get("data", {}).get("logs", [])))
             with self.lock:
                 self.stats[key] += 1
                 if not self.dry and self.cfg.get("generation", {}).get("manifest_path"):
@@ -154,13 +167,17 @@ class Sender:
                     append_manifest(self.cfg["generation"]["manifest_path"] + ".receipts", {
                         "stage": "accepted", "target": d["target"], "kind": d["kind"], "time_ms": time.time() * 1000,
                         "device_id": d["device_id"], "trace_ids": sorted(set(ids))})
-        except Exception as e:  # keep generating; report at the end
+        except Exception as e:  # preserve delivery uncertainty without leaking remote response bodies
+            receipt["http_status"] = getattr(e, "status", None)
+            receipt["rejected"] = getattr(e, "rejected", 0)
+            receipt["status"] = "partial" if receipt["rejected"] else ("rejected" if isinstance(e, SecurityError) or (getattr(e, "status", None) is not None and 400 <= e.status < 500) else "uncertain")
             with self.lock:
                 self.stats["errors"] += 1
                 detail = str(e) if isinstance(e, (SecurityError, TransportError)) else "Payload delivery failed (details suppressed)."
                 self.last_errors = (self.last_errors + [f"{key}: {detail}"])[-5:]
             if self.verbose:
                 print(f"  ! {key} failed: {detail}", file=sys.stderr)
+        return receipt
 
     def _post(self, url, body, headers):
         compressed = gzip.compress(body)
@@ -168,7 +185,7 @@ class Sender:
             try:
                 return post(url, compressed, dict(headers, **{"Content-Encoding": "gzip"}))
             except TransportError as e:
-                if (e.status is not None and e.status != 429 and e.status < 500) or attempt == 2:
+                if self.strict_receipts or (e.status is not None and e.status != 429 and e.status < 500) or attempt == 2:
                     raise
             time.sleep(0.5 * (attempt + 1))
 
@@ -177,10 +194,12 @@ class Sender:
         body = json.dumps(d["payload"], separators=(",", ":")).encode()
         headers = {"Content-Type": "application/json", "X-EM-AID": d["app_id"], "X-EM-DID": d["device_id"]}
         headers.update(d.get("headers") or {"User-Agent": d["ua"], "Origin": d["origin"]})
-        self._post(f"{base}/v2/{d['kind']}", body, headers)
+        return self._post(f"{base}/v2/{d['kind']}", body, headers)
 
     def _post_otlp(self, d):
         if not self.otlp_base:
+            if self.strict_receipts:
+                raise SecurityError("No backend destination is configured.")
             return
         if self.encoding == "json":
             body, ctype = json.dumps(d["payload"], separators=(",", ":")).encode(), "application/json"
@@ -190,7 +209,10 @@ class Sender:
         resp = self._post(f"{self.otlp_base}/v1/{d['kind']}", body, dict(self.otlp_headers, **{"Content-Type": ctype}))
         rejected, _ = otlp.partial_success(resp or b"", json_body=self.encoding == "json")
         if rejected:
-            raise TransportError(f"Backend rejected {rejected} {d['kind']} records.")
+            error = TransportError(f"Backend rejected {rejected} {d['kind']} records.", status=getattr(resp, "status", 200))
+            error.rejected = rejected
+            raise error
+        return resp
 
     def close(self):
         self.pool.shutdown(wait=True)

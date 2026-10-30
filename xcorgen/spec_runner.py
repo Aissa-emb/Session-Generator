@@ -5,6 +5,7 @@ eight minutes before it is sent carries no traceparent and produces no
 backend trace (limits.trace_eligible), on every platform, so a backfill never
 creates "View trace" links that open empty traces.
 """
+import copy
 import heapq
 import itertools
 import json
@@ -18,6 +19,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from . import catalog, limits
+from .journal import RunJournal, digest, tuples
 from .android_session import shift_envelope
 from .emitted import Emitted
 from .planner import Planner
@@ -107,6 +109,9 @@ class SpecRun:
         self.target_weights = [(tid, mix.get(tid, 0)) for tid in self.generators]
         self.emitted = Emitted(self.spec)
         self.manifest = None
+        self.journal = None
+        self.resuming = False
+        self.session_index = 0
 
     @staticmethod
     def _case(case):
@@ -147,23 +152,105 @@ class SpecRun:
         self.emitted.add(target, s, deliveries)
         if self.manifest:
             trace_ids = sorted({r["trace_id"] for r in s.plan.evidence}) if s.traces else []
-            append_manifest(self.manifest, {
-                "run_id": self.run_id, "target": target["id"], "app_id": s.app_id, "session_id": s.user_session_id,
+            record = {
+                "index": self.session_index, "run_id": self.run_id, "target": target["id"], "platform": target["platform"], "app_id": s.app_id, "session_id": s.user_session_id,
                 "device_id": getattr(s, "device_id", s.persona["device_id"]), "start_ms": s.start_ms, "end_ms": s.end_ms,
                 "planned_start_ms": getattr(s, "planned_start_ms", s.start_ms),
                 "line_of_business": s.properties.get("business_unit"), "faults": fault_ids,
                 "verification_case": s.verification_case, "traces": bool(s.traces), "trace_ids": trace_ids,
                 "part_ids": sorted({_part_id(d) for d in deliveries
                                     if d.get("fmt") == "envelope" and d["kind"] == "spans"} - {None})
-                            + [p.id for p in getattr(s, "parts", [])]})
+                            + [p.id for p in getattr(s, "parts", [])]}
+            if self.journal:
+                self.journal.plan_session(self.session_index, record, deliveries)
+            else:
+                append_manifest(self.manifest, record)
+            self.session_index += 1
 
-    def open_manifest(self, directory=None):
+    def open_manifest(self, directory=None, resume=False, dry=False):
         directory = directory or os.path.join(ROOT, ".runs", self.run_id)
         os.makedirs(directory, mode=0o700, exist_ok=True)
         self.manifest = os.path.join(directory, "manifest.jsonl")
-        append_manifest(self.manifest, {"provenance": "generated", "run_id": self.run_id, "spec": self.spec,
-                                        "issues": self.issues, "created_ms": self.now_ms})
+        if self.spec["traffic"]["mode"] == "live":
+            if resume:
+                raise ValueError("A live stream starts a new segment; only bounded jobs resume a frozen plan.")
+            append_manifest(self.manifest, {"provenance": "generated", "run_id": self.run_id,
+                            "spec": self.spec, "issues": self.issues, "created_ms": self.now_ms})
+            return self.manifest
+        self.journal = RunJournal(directory)
+        meta = self.journal.get("plan")
+        if resume:
+            if not meta:
+                raise ValueError("No resumable plan exists in this run directory.")
+            if meta["spec_version"] != self.spec["spec_version"] or meta["spec_hash"] != digest(self.spec):
+                raise ValueError("Spec or spec version differs from the original run; resume refused.")
+            if meta["dry"] != dry:
+                raise ValueError("A dry run cannot resume as a live run, or the reverse.")
+            self.journal.assert_resumable()
+            self.run_id, self.now_ms = meta["run_id"], meta["now_ms"]
+            random.setstate(tuples(meta["global_rng"]))
+            self.rng.setstate(tuples(meta["rng"]))
+            for tid, (_, gen) in self.generators.items():
+                for key, pool in gen.pools.items():
+                    pool.personas = copy.deepcopy(meta["pools"][tid][key])
+            self.resuming = True
+        else:
+            if meta:
+                raise ValueError("This directory already contains a run; use --resume or choose a new directory.")
+            meta = {"run_id": self.run_id, "now_ms": self.now_ms, "spec_version": self.spec["spec_version"],
+                    "spec_hash": digest(self.spec), "dry": dry, "rng": self.rng.getstate(),
+                    "global_rng": random.getstate(), "pools": {tid: {key: pool.personas for key, pool in gen.pools.items()}
+                    for tid, (_, gen) in self.generators.items()}}
+            self.journal.put("plan", meta)
+            append_manifest(self.manifest, {"provenance": "generated", "run_id": self.run_id,
+                            "spec": self.spec, "issues": self.issues, "created_ms": self.now_ms})
         return self.manifest
+
+    def _acknowledge(self):
+        # A crash between append and acknowledgement must not duplicate the session receipt.
+        with open(self.manifest) as stream:
+            recorded = {r["index"] for line in stream if (r := json.loads(line)).get("stage") == "sent"}
+        for index, record in self.journal.completed():
+            if index not in recorded:
+                append_manifest(self.manifest, dict(record, stage="sent", sent_ms=time.time() * 1000))
+            self.journal.acknowledge_session(index)
+
+    def _deliver(self, sender, delivery):
+        if not self.journal:
+            sender.submit(delivery)
+            return
+        ident = delivery["_delivery_id"]
+        if not self.journal.begin(ident):
+            return
+        if not getattr(sender, "dry", True):
+            starts = [int(sp.get("startTimeUnixNano", "0")) / 1e6
+                      for rs in delivery["payload"].get("resourceSpans", [])
+                      for ss in rs["scopeSpans"] for sp in ss["spans"]]
+            record = json.loads(self.journal.db.execute("SELECT record FROM sessions WHERE idx=?", (int(ident.split(":")[0]),)).fetchone()[0])
+            now = time.time() * 1000
+            age = now - record["start_ms"]
+            expired = age > 24 * 3600000 or (delivery["target"] != "embrace" and
+                      (age > limits.TRACE_ELIGIBLE_MS or any(now - t > limits.TRACE_ELIGIBLE_MS for t in starts)))
+            if expired:
+                receipt = {"status": "expired", "target": delivery["target"], "kind": delivery["kind"],
+                           "http_status": None, "accepted": 0, "rejected": 0, "reason": "outside_ingest_window"}
+                self.journal.receipt(ident, receipt)
+                append_manifest(self.manifest + ".receipts", dict(receipt, delivery_id=ident))
+                self._acknowledge()
+                return
+            if delivery["target"] == "embrace" and age > limits.TRACE_ELIGIBLE_MS:
+                payload = copy.deepcopy(delivery["payload"])
+                groups = [payload.get("data", {}).get("spans", [])] if delivery.get("fmt") == "envelope" else [
+                    ss["spans"] for rs in payload.get("resourceSpans", []) for ss in rs["scopeSpans"]]
+                for spans in groups:
+                    for span in spans:
+                        span["attributes"] = [a for a in span["attributes"] if a["key"] not in TRACE_KEYS]
+                delivery = dict(delivery, payload=payload)
+        sender.strict_receipts = True
+        receipt = sender.submit(delivery).result()
+        self.journal.receipt(ident, receipt)
+        append_manifest(self.manifest + ".receipts", dict(receipt, delivery_id=ident))
+        self._acknowledge()
 
     def save(self):
         for _, gen in self.generators.values():
@@ -213,19 +300,30 @@ class SpecRun:
             kept.extend(deliveries)
             if not quiet:
                 print(describe(s, journey, (self.spec.get("chronosphere") or {}).get("tenant") if s.traces else None))
+        from .linter import lint_payloads
+        blocking = errors(lint_payloads(kept))
+        if blocking:
+            raise ValueError("Realism lint failed; no payloads were sent: " + "; ".join(x["message"] for x in blocking[:5]))
         self.save()
+        if self.journal:
+            completed = {row[0] for row in self.journal.db.execute("SELECT id FROM deliveries WHERE status IN ('accepted','expired')")}
+            kept = [d for d in kept if d["_delivery_id"] not in completed]
+            self._acknowledge()
         kept.sort(key=lambda d: d["due"])
         backend = [d for d in kept if d["target"] != "embrace"]
-        for d in backend:
-            sender.submit(d)
+        rate = pace or self.spec["traffic"].get("throttle_payloads_per_second") or limits.DEFAULT_BACKFILL_PAYLOADS_PER_SECOND
+        for i, d in enumerate(backend):
+            if sender.stats["errors"] >= 20:
+                break
+            if rate and i and not getattr(sender, "dry", True):
+                time.sleep(1 / rate)
+            self._deliver(sender, d)
         sender.pool.shutdown(wait=True)
         sender.pool = ThreadPoolExecutor(max_workers=8)
-        rate = pace or self.spec["traffic"].get("throttle_payloads_per_second") or (
-            limits.DEFAULT_BACKFILL_PAYLOADS_PER_SECOND if self.spec["traffic"]["mode"] == "backfill" else None)
         for i, d in enumerate(x for x in kept if x["target"] == "embrace"):
-            if rate and i:
+            if rate and i and not getattr(sender, "dry", True):
                 time.sleep(1 / rate)
-            sender.submit(d)
+            self._deliver(sender, d)
             if rate and sender.stats["errors"] >= 20:
                 print("Stopping: repeated delivery failures.", file=sys.stderr)
                 break
