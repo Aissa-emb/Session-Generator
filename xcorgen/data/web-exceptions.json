@@ -1,0 +1,4641 @@
+{
+  "compiler": "esbuild 0.28.2",
+  "source_hash": "d9041a54dc776e338e28d76d7cd88ee0d76f244e34b4a3f9a00f6b4534504422",
+  "bundles": {
+    "storefront": {
+      "code": "var VantraApplication=(()=>{var u=Object.defineProperty;var b=Object.getOwnPropertyDescriptor;var v=Object.getOwnPropertyNames;var _=Object.prototype.hasOwnProperty;var g=(e,r)=>{for(var t in r)u(e,t,{get:r[t],enumerable:!0})},q=(e,r,t,o)=>{if(r&&typeof r==\"object\"||typeof r==\"function\")for(let n of v(r))!_.call(e,n)&&n!==t&&u(e,n,{get:()=>r[n],enumerable:!(o=b(r,n))||o.enumerable});return e};var E=e=>q(u({},\"__esModule\",{value:!0}),e);var S={};g(S,{fetchProductResults:()=>k,initializePage:()=>L,mountProductPage:()=>P,openProductRoute:()=>C,updateProductResults:()=>y});function s(e){return e.price.amount}function d(e){return e.formatPrice(e.price)}function i(e,r){return e.map(r)}function l(e){localStorage.setItem(\"vantra:recently-viewed\",e)}function p(e,r){if(e!==r)throw new Error(\"Hydration failed: the server-rendered results do not match the client state.\");return r}function I(e){return JSON.parse(e)}async function f(e){let t=await(await fetch(e)).text();return I(t)}async function h(e){let r=new AbortController;return r.abort(),await fetch(e,{signal:r.signal})}async function m(e){return await import(e)}function w(e,r){return new Promise(function(o,n){let c=document.createElement(\"script\");c.src=e,c.onload=o,c.onerror=function(){let a=new Error(\"Loading chunk \"+r+` failed.\n(error: `+e+\")\");a.name=\"ChunkLoadError\",n(a)},document.head.appendChild(c)})}function x(e){switch(e.operation){case\"property_undefined\":return i(e.records,s);case\"not_a_function\":return i(e.records,d);case\"quota_exceeded\":return l(e.recent);case\"hydration\":return p(e.serverText,e.clientText);default:return e.records}}async function R(e){switch(e.operation){case\"abort\":return await h(e.endpoint);case\"chunk_load\":return await m(e.chunk);case\"webpack_chunk_load\":return await w(e.chunk,e.chunkId);default:return await f(e.endpoint)}}function y(e){return x(e)}function P(e){return y(e)}async function k(e){return await R(e)}async function C(e){return await k(e)}function L(e){return e.remote?C(e):P(e)}return E(S);})();",
+      "map": {
+        "version": 3,
+        "sources": [
+          "src/storefront/results.js",
+          "src/shared/catalog.js",
+          "src/shared/client.js",
+          "src/shared/router.js",
+          "src/shared/page.js"
+        ],
+        "sourcesContent": [
+          "import { renderResults, loadResults } from '../shared/page.js';\n\nexport function updateProductResults(state) {\n  return renderResults(state);\n}\n\nexport function mountProductPage(state) {\n  return updateProductResults(state);\n}\n\nexport async function fetchProductResults(state) {\n  return await loadResults(state);\n}\n\nexport async function openProductRoute(state) {\n  return await fetchProductResults(state);\n}\n\nexport function initializePage(state) {\n  return state.remote ? openProductRoute(state) : mountProductPage(state);\n}\n",
+          "export function readPrice(record) {\n  return record.price.amount;\n}\n\nexport function formatPrice(record) {\n  return record.formatPrice(record.price);\n}\n\nexport function buildPriceRows(records, formatter) {\n  return records.map(formatter);\n}\n\nexport function saveRecentlyViewed(value) {\n  localStorage.setItem('vantra:recently-viewed', value);\n}\n\nexport function hydrateResults(serverText, clientText) {\n  if (serverText !== clientText) {\n    throw new Error('Hydration failed: the server-rendered results do not match the client state.');\n  }\n  return clientText;\n}\n",
+          "export function decodeResponse(body) {\n  return JSON.parse(body);\n}\n\nexport async function requestCollection(url) {\n  const response = await fetch(url);\n  const body = await response.text();\n  return decodeResponse(body);\n}\n\nexport async function cancelRequest(url) {\n  const controller = new AbortController();\n  controller.abort();\n  return await fetch(url, { signal: controller.signal });\n}\n",
+          "export async function importRoute(url) {\n  return await import(url);\n}\n\nexport function loadRouteChunk(url, chunkId) {\n  return new Promise(function resolveChunk(resolve, reject) {\n    const script = document.createElement('script');\n    script.src = url;\n    script.onload = resolve;\n    script.onerror = function handleChunkError() {\n      const error = new Error('Loading chunk ' + chunkId + ' failed.\\n(error: ' + url + ')');\n      error.name = 'ChunkLoadError';\n      reject(error);\n    };\n    document.head.appendChild(script);\n  });\n}\n",
+          "import { readPrice, formatPrice, buildPriceRows, saveRecentlyViewed, hydrateResults } from './catalog.js';\nimport { requestCollection, cancelRequest } from './client.js';\nimport { importRoute, loadRouteChunk } from './router.js';\n\nexport function renderResults(state) {\n  switch (state.operation) {\n    case 'property_undefined': return buildPriceRows(state.records, readPrice);\n    case 'not_a_function': return buildPriceRows(state.records, formatPrice);\n    case 'quota_exceeded': return saveRecentlyViewed(state.recent);\n    case 'hydration': return hydrateResults(state.serverText, state.clientText);\n    default: return state.records;\n  }\n}\n\nexport async function loadResults(state) {\n  switch (state.operation) {\n    case 'abort': return await cancelRequest(state.endpoint);\n    case 'chunk_load': return await importRoute(state.chunk);\n    case 'webpack_chunk_load': return await loadRouteChunk(state.chunk, state.chunkId);\n    default: return await requestCollection(state.endpoint);\n  }\n}\n"
+        ],
+        "mappings": "wbAAA,IAAAA,EAAA,GAAAC,EAAAD,EAAA,yBAAAE,EAAA,mBAAAC,EAAA,qBAAAC,EAAA,qBAAAC,EAAA,yBAAAC,ICAO,SAASC,EAAUC,EAAQ,CAChC,OAAOA,EAAO,MAAM,MACtB,CAEO,SAASC,EAAYD,EAAQ,CAClC,OAAOA,EAAO,YAAYA,EAAO,KAAK,CACxC,CAEO,SAASE,EAAeC,EAASC,EAAW,CACjD,OAAOD,EAAQ,IAAIC,CAAS,CAC9B,CAEO,SAASC,EAAmBC,EAAO,CACxC,aAAa,QAAQ,yBAA0BA,CAAK,CACtD,CAEO,SAASC,EAAeC,EAAYC,EAAY,CACrD,GAAID,IAAeC,EACjB,MAAM,IAAI,MAAM,8EAA8E,EAEhG,OAAOA,CACT,CCrBO,SAASC,EAAeC,EAAM,CACnC,OAAO,KAAK,MAAMA,CAAI,CACxB,CAEA,eAAsBC,EAAkBC,EAAK,CAE3C,IAAMF,EAAO,MADI,MAAM,MAAME,CAAG,GACJ,KAAK,EACjC,OAAOH,EAAeC,CAAI,CAC5B,CAEA,eAAsBG,EAAcD,EAAK,CACvC,IAAME,EAAa,IAAI,gBACvB,OAAAA,EAAW,MAAM,EACV,MAAM,MAAMF,EAAK,CAAE,OAAQE,EAAW,MAAO,CAAC,CACvD,CCdA,eAAsBC,EAAYC,EAAK,CACrC,OAAO,MAAM,OAAOA,EACtB,CAEO,SAASC,EAAeD,EAAKE,EAAS,CAC3C,OAAO,IAAI,QAAQ,SAAsBC,EAASC,EAAQ,CACxD,IAAMC,EAAS,SAAS,cAAc,QAAQ,EAC9CA,EAAO,IAAML,EACbK,EAAO,OAASF,EAChBE,EAAO,QAAU,UAA4B,CAC3C,IAAMC,EAAQ,IAAI,MAAM,iBAAmBJ,EAAU;AAAA,UAAuBF,EAAM,GAAG,EACrFM,EAAM,KAAO,iBACbF,EAAOE,CAAK,CACd,EACA,SAAS,KAAK,YAAYD,CAAM,CAClC,CAAC,CACH,CCZO,SAASE,EAAcC,EAAO,CACnC,OAAQA,EAAM,UAAW,CACvB,IAAK,qBAAsB,OAAOC,EAAeD,EAAM,QAASE,CAAS,EACzE,IAAK,iBAAkB,OAAOD,EAAeD,EAAM,QAASG,CAAW,EACvE,IAAK,iBAAkB,OAAOC,EAAmBJ,EAAM,MAAM,EAC7D,IAAK,YAAa,OAAOK,EAAeL,EAAM,WAAYA,EAAM,UAAU,EAC1E,QAAS,OAAOA,EAAM,OACxB,CACF,CAEA,eAAsBM,EAAYN,EAAO,CACvC,OAAQA,EAAM,UAAW,CACvB,IAAK,QAAS,OAAO,MAAMO,EAAcP,EAAM,QAAQ,EACvD,IAAK,aAAc,OAAO,MAAMQ,EAAYR,EAAM,KAAK,EACvD,IAAK,qBAAsB,OAAO,MAAMS,EAAeT,EAAM,MAAOA,EAAM,OAAO,EACjF,QAAS,OAAO,MAAMU,EAAkBV,EAAM,QAAQ,CACxD,CACF,CJnBO,SAASW,EAAqBC,EAAO,CAC1C,OAAOC,EAAcD,CAAK,CAC5B,CAEO,SAASE,EAAiBF,EAAO,CACtC,OAAOD,EAAqBC,CAAK,CACnC,CAEA,eAAsBG,EAAoBH,EAAO,CAC/C,OAAO,MAAMI,EAAYJ,CAAK,CAChC,CAEA,eAAsBK,EAAiBL,EAAO,CAC5C,OAAO,MAAMG,EAAoBH,CAAK,CACxC,CAEO,SAASM,EAAeN,EAAO,CACpC,OAAOA,EAAM,OAASK,EAAiBL,CAAK,EAAIE,EAAiBF,CAAK,CACxE",
+        "names": [
+          "results_exports",
+          "__export",
+          "fetchProductResults",
+          "initializePage",
+          "mountProductPage",
+          "openProductRoute",
+          "updateProductResults",
+          "readPrice",
+          "record",
+          "formatPrice",
+          "buildPriceRows",
+          "records",
+          "formatter",
+          "saveRecentlyViewed",
+          "value",
+          "hydrateResults",
+          "serverText",
+          "clientText",
+          "decodeResponse",
+          "body",
+          "requestCollection",
+          "url",
+          "cancelRequest",
+          "controller",
+          "importRoute",
+          "url",
+          "loadRouteChunk",
+          "chunkId",
+          "resolve",
+          "reject",
+          "script",
+          "error",
+          "renderResults",
+          "state",
+          "buildPriceRows",
+          "readPrice",
+          "formatPrice",
+          "saveRecentlyViewed",
+          "hydrateResults",
+          "loadResults",
+          "cancelRequest",
+          "importRoute",
+          "loadRouteChunk",
+          "requestCollection",
+          "updateProductResults",
+          "state",
+          "renderResults",
+          "mountProductPage",
+          "fetchProductResults",
+          "loadResults",
+          "openProductRoute",
+          "initializePage"
+        ]
+      },
+      "engines": {
+        "chromium": {
+          "browser_version": "156.0.8078.4",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Cannot read properties of undefined (reading 'price')",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 600,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "Array.map",
+                  "native": true
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 145,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "Object.L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 636,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "Array.map",
+                  "native": true
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 188,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "Object.L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON",
+              "frames": [
+                {
+                  "name": "JSON.parse",
+                  "native": true
+                },
+                {
+                  "name": "I",
+                  "line": 1,
+                  "column": 908,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 979,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async R",
+                  "line": 2,
+                  "column": 515,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 20,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "async k",
+                  "line": 2,
+                  "column": 615,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 9,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "async C",
+                  "line": 2,
+                  "column": 653,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 9,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Failed to fetch",
+              "frames": [
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 955,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 6,
+                    "column": 25,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 521,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchProductResults"
+                  }
+                },
+                {
+                  "name": "Object.L",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openProductRoute"
+                  }
+                }
+              ]
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "signal is aborted without reason",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1039,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 13,
+                    "column": 13,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 386,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchProductResults"
+                  }
+                },
+                {
+                  "name": "Object.L",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openProductRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Failed to fetch dynamically imported module: {chunk}",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "c.onerror",
+                  "line": 1,
+                  "column": 1257,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 20,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "QuotaExceededError",
+              "name": "QuotaExceededError",
+              "message": "Failed to execute 'setItem' on 'Storage': Setting the value of 'vantra:recently-viewed' exceeded the quota.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 716,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 231,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "Object.L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 783,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 10,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 266,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "Object.L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "webkit": {
+          "browser_version": "27.2",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "global code",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "undefined is not an object (evaluating 'e.price')",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 599,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 9,
+                    "name": "record"
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 685,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 146,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function. (In 'e.formatPrice(e.price)', 'e.formatPrice' is undefined)",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 647,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 685,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 189,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "JSON Parse error: Unrecognized token '<'",
+              "frames": [
+                {
+                  "name": "I",
+                  "line": 1,
+                  "column": 913,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 980,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async R",
+                  "line": 2,
+                  "column": 522,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "async k",
+                  "line": 2,
+                  "column": 622,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "async C",
+                  "line": 2,
+                  "column": 660,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchProductResults"
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Load failed",
+              "frames": []
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "The operation was aborted.",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1044,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 13,
+                    "column": 13,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 387,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 622,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 660,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 695,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openProductRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Importing a module script failed.",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "",
+                  "line": 1,
+                  "column": 1266,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 24,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "DOMException",
+              "name": "QuotaExceededError",
+              "message": "The quota has been exceeded.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 723,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 232,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 792,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 267,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "gecko": {
+          "browser_version": "157.0",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "can't access property \"price\", e is undefined",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 591,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 2,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 145,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 636,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 188,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "JSON.parse: unexpected character at line 1 column 1 of the JSON data",
+              "frames": [
+                {
+                  "name": "I",
+                  "line": 1,
+                  "column": 908,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 979,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async*R",
+                  "line": 2,
+                  "column": 521,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openProductRoute"
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "NetworkError when attempting to fetch resource.",
+              "frames": []
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "The operation was aborted. ",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1053,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 386,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openProductRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "error loading dynamically imported module: {chunk}",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "w/VantraApplication</c.onerror",
+                  "line": 1,
+                  "column": 1257,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 20,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "EventHandlerNonNull*w/VantraApplication<",
+                  "line": 1,
+                  "column": 1230,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 10,
+                    "column": 4,
+                    "name": "script"
+                  }
+                },
+                {
+                  "name": "w",
+                  "line": 1,
+                  "column": 1146,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 6,
+                    "column": 9,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 479,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 19,
+                    "column": 44,
+                    "name": "loadRouteChunk"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openProductRoute"
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "DOMException",
+              "name": "QuotaExceededError",
+              "message": "The quota has been exceeded.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 716,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 231,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 783,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 10,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 266,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateProductResults"
+                  }
+                },
+                {
+                  "name": "L",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/storefront/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountProductPage"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "travel": {
+      "code": "var VantraApplication=(()=>{var u=Object.defineProperty;var C=Object.getOwnPropertyDescriptor;var b=Object.getOwnPropertyNames;var v=Object.prototype.hasOwnProperty;var _=(e,r)=>{for(var t in r)u(e,t,{get:r[t],enumerable:!0})},q=(e,r,t,o)=>{if(r&&typeof r==\"object\"||typeof r==\"function\")for(let n of b(r))!v.call(e,n)&&n!==t&&u(e,n,{get:()=>r[n],enumerable:!(o=C(r,n))||o.enumerable});return e};var E=e=>q(u({},\"__esModule\",{value:!0}),e);var L={};_(L,{fetchFlightResults:()=>g,initializePage:()=>I,mountFlightPage:()=>k,openFlightRoute:()=>P,updateFlightResults:()=>y});function s(e){return e.price.amount}function d(e){return e.formatPrice(e.price)}function i(e,r){return e.map(r)}function l(e){localStorage.setItem(\"vantra:recently-viewed\",e)}function p(e,r){if(e!==r)throw new Error(\"Hydration failed: the server-rendered results do not match the client state.\");return r}function F(e){return JSON.parse(e)}async function f(e){let t=await(await fetch(e)).text();return F(t)}async function h(e){let r=new AbortController;return r.abort(),await fetch(e,{signal:r.signal})}async function m(e){return await import(e)}function w(e,r){return new Promise(function(o,n){let c=document.createElement(\"script\");c.src=e,c.onload=o,c.onerror=function(){let a=new Error(\"Loading chunk \"+r+` failed.\n(error: `+e+\")\");a.name=\"ChunkLoadError\",n(a)},document.head.appendChild(c)})}function x(e){switch(e.operation){case\"property_undefined\":return i(e.records,s);case\"not_a_function\":return i(e.records,d);case\"quota_exceeded\":return l(e.recent);case\"hydration\":return p(e.serverText,e.clientText);default:return e.records}}async function R(e){switch(e.operation){case\"abort\":return await h(e.endpoint);case\"chunk_load\":return await m(e.chunk);case\"webpack_chunk_load\":return await w(e.chunk,e.chunkId);default:return await f(e.endpoint)}}function y(e){return x(e)}function k(e){return y(e)}async function g(e){return await R(e)}async function P(e){return await g(e)}function I(e){return e.remote?P(e):k(e)}return E(L);})();",
+      "map": {
+        "version": 3,
+        "sources": [
+          "src/travel/results.js",
+          "src/shared/catalog.js",
+          "src/shared/client.js",
+          "src/shared/router.js",
+          "src/shared/page.js"
+        ],
+        "sourcesContent": [
+          "import { renderResults, loadResults } from '../shared/page.js';\n\nexport function updateFlightResults(state) {\n  return renderResults(state);\n}\n\nexport function mountFlightPage(state) {\n  return updateFlightResults(state);\n}\n\nexport async function fetchFlightResults(state) {\n  return await loadResults(state);\n}\n\nexport async function openFlightRoute(state) {\n  return await fetchFlightResults(state);\n}\n\nexport function initializePage(state) {\n  return state.remote ? openFlightRoute(state) : mountFlightPage(state);\n}\n",
+          "export function readPrice(record) {\n  return record.price.amount;\n}\n\nexport function formatPrice(record) {\n  return record.formatPrice(record.price);\n}\n\nexport function buildPriceRows(records, formatter) {\n  return records.map(formatter);\n}\n\nexport function saveRecentlyViewed(value) {\n  localStorage.setItem('vantra:recently-viewed', value);\n}\n\nexport function hydrateResults(serverText, clientText) {\n  if (serverText !== clientText) {\n    throw new Error('Hydration failed: the server-rendered results do not match the client state.');\n  }\n  return clientText;\n}\n",
+          "export function decodeResponse(body) {\n  return JSON.parse(body);\n}\n\nexport async function requestCollection(url) {\n  const response = await fetch(url);\n  const body = await response.text();\n  return decodeResponse(body);\n}\n\nexport async function cancelRequest(url) {\n  const controller = new AbortController();\n  controller.abort();\n  return await fetch(url, { signal: controller.signal });\n}\n",
+          "export async function importRoute(url) {\n  return await import(url);\n}\n\nexport function loadRouteChunk(url, chunkId) {\n  return new Promise(function resolveChunk(resolve, reject) {\n    const script = document.createElement('script');\n    script.src = url;\n    script.onload = resolve;\n    script.onerror = function handleChunkError() {\n      const error = new Error('Loading chunk ' + chunkId + ' failed.\\n(error: ' + url + ')');\n      error.name = 'ChunkLoadError';\n      reject(error);\n    };\n    document.head.appendChild(script);\n  });\n}\n",
+          "import { readPrice, formatPrice, buildPriceRows, saveRecentlyViewed, hydrateResults } from './catalog.js';\nimport { requestCollection, cancelRequest } from './client.js';\nimport { importRoute, loadRouteChunk } from './router.js';\n\nexport function renderResults(state) {\n  switch (state.operation) {\n    case 'property_undefined': return buildPriceRows(state.records, readPrice);\n    case 'not_a_function': return buildPriceRows(state.records, formatPrice);\n    case 'quota_exceeded': return saveRecentlyViewed(state.recent);\n    case 'hydration': return hydrateResults(state.serverText, state.clientText);\n    default: return state.records;\n  }\n}\n\nexport async function loadResults(state) {\n  switch (state.operation) {\n    case 'abort': return await cancelRequest(state.endpoint);\n    case 'chunk_load': return await importRoute(state.chunk);\n    case 'webpack_chunk_load': return await loadRouteChunk(state.chunk, state.chunkId);\n    default: return await requestCollection(state.endpoint);\n  }\n}\n"
+        ],
+        "mappings": "wbAAA,IAAAA,EAAA,GAAAC,EAAAD,EAAA,wBAAAE,EAAA,mBAAAC,EAAA,oBAAAC,EAAA,oBAAAC,EAAA,wBAAAC,ICAO,SAASC,EAAUC,EAAQ,CAChC,OAAOA,EAAO,MAAM,MACtB,CAEO,SAASC,EAAYD,EAAQ,CAClC,OAAOA,EAAO,YAAYA,EAAO,KAAK,CACxC,CAEO,SAASE,EAAeC,EAASC,EAAW,CACjD,OAAOD,EAAQ,IAAIC,CAAS,CAC9B,CAEO,SAASC,EAAmBC,EAAO,CACxC,aAAa,QAAQ,yBAA0BA,CAAK,CACtD,CAEO,SAASC,EAAeC,EAAYC,EAAY,CACrD,GAAID,IAAeC,EACjB,MAAM,IAAI,MAAM,8EAA8E,EAEhG,OAAOA,CACT,CCrBO,SAASC,EAAeC,EAAM,CACnC,OAAO,KAAK,MAAMA,CAAI,CACxB,CAEA,eAAsBC,EAAkBC,EAAK,CAE3C,IAAMF,EAAO,MADI,MAAM,MAAME,CAAG,GACJ,KAAK,EACjC,OAAOH,EAAeC,CAAI,CAC5B,CAEA,eAAsBG,EAAcD,EAAK,CACvC,IAAME,EAAa,IAAI,gBACvB,OAAAA,EAAW,MAAM,EACV,MAAM,MAAMF,EAAK,CAAE,OAAQE,EAAW,MAAO,CAAC,CACvD,CCdA,eAAsBC,EAAYC,EAAK,CACrC,OAAO,MAAM,OAAOA,EACtB,CAEO,SAASC,EAAeD,EAAKE,EAAS,CAC3C,OAAO,IAAI,QAAQ,SAAsBC,EAASC,EAAQ,CACxD,IAAMC,EAAS,SAAS,cAAc,QAAQ,EAC9CA,EAAO,IAAML,EACbK,EAAO,OAASF,EAChBE,EAAO,QAAU,UAA4B,CAC3C,IAAMC,EAAQ,IAAI,MAAM,iBAAmBJ,EAAU;AAAA,UAAuBF,EAAM,GAAG,EACrFM,EAAM,KAAO,iBACbF,EAAOE,CAAK,CACd,EACA,SAAS,KAAK,YAAYD,CAAM,CAClC,CAAC,CACH,CCZO,SAASE,EAAcC,EAAO,CACnC,OAAQA,EAAM,UAAW,CACvB,IAAK,qBAAsB,OAAOC,EAAeD,EAAM,QAASE,CAAS,EACzE,IAAK,iBAAkB,OAAOD,EAAeD,EAAM,QAASG,CAAW,EACvE,IAAK,iBAAkB,OAAOC,EAAmBJ,EAAM,MAAM,EAC7D,IAAK,YAAa,OAAOK,EAAeL,EAAM,WAAYA,EAAM,UAAU,EAC1E,QAAS,OAAOA,EAAM,OACxB,CACF,CAEA,eAAsBM,EAAYN,EAAO,CACvC,OAAQA,EAAM,UAAW,CACvB,IAAK,QAAS,OAAO,MAAMO,EAAcP,EAAM,QAAQ,EACvD,IAAK,aAAc,OAAO,MAAMQ,EAAYR,EAAM,KAAK,EACvD,IAAK,qBAAsB,OAAO,MAAMS,EAAeT,EAAM,MAAOA,EAAM,OAAO,EACjF,QAAS,OAAO,MAAMU,EAAkBV,EAAM,QAAQ,CACxD,CACF,CJnBO,SAASW,EAAoBC,EAAO,CACzC,OAAOC,EAAcD,CAAK,CAC5B,CAEO,SAASE,EAAgBF,EAAO,CACrC,OAAOD,EAAoBC,CAAK,CAClC,CAEA,eAAsBG,EAAmBH,EAAO,CAC9C,OAAO,MAAMI,EAAYJ,CAAK,CAChC,CAEA,eAAsBK,EAAgBL,EAAO,CAC3C,OAAO,MAAMG,EAAmBH,CAAK,CACvC,CAEO,SAASM,EAAeN,EAAO,CACpC,OAAOA,EAAM,OAASK,EAAgBL,CAAK,EAAIE,EAAgBF,CAAK,CACtE",
+        "names": [
+          "results_exports",
+          "__export",
+          "fetchFlightResults",
+          "initializePage",
+          "mountFlightPage",
+          "openFlightRoute",
+          "updateFlightResults",
+          "readPrice",
+          "record",
+          "formatPrice",
+          "buildPriceRows",
+          "records",
+          "formatter",
+          "saveRecentlyViewed",
+          "value",
+          "hydrateResults",
+          "serverText",
+          "clientText",
+          "decodeResponse",
+          "body",
+          "requestCollection",
+          "url",
+          "cancelRequest",
+          "controller",
+          "importRoute",
+          "url",
+          "loadRouteChunk",
+          "chunkId",
+          "resolve",
+          "reject",
+          "script",
+          "error",
+          "renderResults",
+          "state",
+          "buildPriceRows",
+          "readPrice",
+          "formatPrice",
+          "saveRecentlyViewed",
+          "hydrateResults",
+          "loadResults",
+          "cancelRequest",
+          "importRoute",
+          "loadRouteChunk",
+          "requestCollection",
+          "updateFlightResults",
+          "state",
+          "renderResults",
+          "mountFlightPage",
+          "fetchFlightResults",
+          "loadResults",
+          "openFlightRoute",
+          "initializePage"
+        ]
+      },
+      "engines": {
+        "chromium": {
+          "browser_version": "156.0.8078.4",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Cannot read properties of undefined (reading 'price')",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 596,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "Array.map",
+                  "native": true
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 678,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 145,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 632,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "Array.map",
+                  "native": true
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 678,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 188,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON",
+              "frames": [
+                {
+                  "name": "JSON.parse",
+                  "native": true
+                },
+                {
+                  "name": "F",
+                  "line": 1,
+                  "column": 904,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 975,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async R",
+                  "line": 2,
+                  "column": 515,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 20,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "async g",
+                  "line": 2,
+                  "column": 615,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 9,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "async P",
+                  "line": 2,
+                  "column": 653,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 9,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Failed to fetch",
+              "frames": [
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 951,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 6,
+                    "column": 25,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 521,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "g",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchFlightResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openFlightRoute"
+                  }
+                }
+              ]
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "signal is aborted without reason",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1035,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 13,
+                    "column": 13,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 386,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "g",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchFlightResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openFlightRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Failed to fetch dynamically imported module: {chunk}",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "c.onerror",
+                  "line": 1,
+                  "column": 1253,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 20,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "QuotaExceededError",
+              "name": "QuotaExceededError",
+              "message": "Failed to execute 'setItem' on 'Storage': Setting the value of 'vantra:recently-viewed' exceeded the quota.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 712,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 231,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 779,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 10,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 266,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "webkit": {
+          "browser_version": "27.2",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "global code",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "undefined is not an object (evaluating 'e.price')",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 595,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 9,
+                    "name": "record"
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 681,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 146,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function. (In 'e.formatPrice(e.price)', 'e.formatPrice' is undefined)",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 643,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 681,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 189,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "JSON Parse error: Unrecognized token '<'",
+              "frames": [
+                {
+                  "name": "F",
+                  "line": 1,
+                  "column": 909,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 976,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async R",
+                  "line": 2,
+                  "column": 522,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "async g",
+                  "line": 2,
+                  "column": 622,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "async P",
+                  "line": 2,
+                  "column": 660,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchFlightResults"
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Load failed",
+              "frames": []
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "The operation was aborted.",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1040,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 13,
+                    "column": 13,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 387,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "g",
+                  "line": 2,
+                  "column": 622,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 660,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 695,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openFlightRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Importing a module script failed.",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "",
+                  "line": 1,
+                  "column": 1262,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 24,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "DOMException",
+              "name": "QuotaExceededError",
+              "message": "The quota has been exceeded.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 719,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 232,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 788,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 267,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "gecko": {
+          "browser_version": "157.0",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "can't access property \"price\", e is undefined",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 587,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 2,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 678,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 145,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 632,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 678,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 188,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "JSON.parse: unexpected character at line 1 column 1 of the JSON data",
+              "frames": [
+                {
+                  "name": "F",
+                  "line": 1,
+                  "column": 904,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 975,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async*R",
+                  "line": 2,
+                  "column": 521,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "g",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openFlightRoute"
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "NetworkError when attempting to fetch resource.",
+              "frames": []
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "The operation was aborted. ",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1049,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 386,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "g",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openFlightRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "error loading dynamically imported module: {chunk}",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "w/VantraApplication</c.onerror",
+                  "line": 1,
+                  "column": 1253,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 20,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "EventHandlerNonNull*w/VantraApplication<",
+                  "line": 1,
+                  "column": 1226,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 10,
+                    "column": 4,
+                    "name": "script"
+                  }
+                },
+                {
+                  "name": "w",
+                  "line": 1,
+                  "column": 1142,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 6,
+                    "column": 9,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 479,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 19,
+                    "column": 44,
+                    "name": "loadRouteChunk"
+                  }
+                },
+                {
+                  "name": "g",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openFlightRoute"
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "DOMException",
+              "name": "QuotaExceededError",
+              "message": "The quota has been exceeded.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 712,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 231,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 779,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 10,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 266,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateFlightResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/travel/results.js",
+                    "line": 20,
+                    "column": 49,
+                    "name": "mountFlightPage"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "money": {
+      "code": "var VantraApplication=(()=>{var u=Object.defineProperty;var b=Object.getOwnPropertyDescriptor;var v=Object.getOwnPropertyNames;var _=Object.prototype.hasOwnProperty;var g=(e,r)=>{for(var n in r)u(e,n,{get:r[n],enumerable:!0})},q=(e,r,n,o)=>{if(r&&typeof r==\"object\"||typeof r==\"function\")for(let t of v(r))!_.call(e,t)&&t!==n&&u(e,t,{get:()=>r[t],enumerable:!(o=b(r,t))||o.enumerable});return e};var A=e=>q(u({},\"__esModule\",{value:!0}),e);var L={};g(L,{fetchAccountResults:()=>P,initializePage:()=>I,mountAccountPage:()=>k,openAccountRoute:()=>C,updateAccountResults:()=>y});function s(e){return e.price.amount}function d(e){return e.formatPrice(e.price)}function i(e,r){return e.map(r)}function l(e){localStorage.setItem(\"vantra:recently-viewed\",e)}function p(e,r){if(e!==r)throw new Error(\"Hydration failed: the server-rendered results do not match the client state.\");return r}function E(e){return JSON.parse(e)}async function f(e){let n=await(await fetch(e)).text();return E(n)}async function h(e){let r=new AbortController;return r.abort(),await fetch(e,{signal:r.signal})}async function m(e){return await import(e)}function w(e,r){return new Promise(function(o,t){let c=document.createElement(\"script\");c.src=e,c.onload=o,c.onerror=function(){let a=new Error(\"Loading chunk \"+r+` failed.\n(error: `+e+\")\");a.name=\"ChunkLoadError\",t(a)},document.head.appendChild(c)})}function x(e){switch(e.operation){case\"property_undefined\":return i(e.records,s);case\"not_a_function\":return i(e.records,d);case\"quota_exceeded\":return l(e.recent);case\"hydration\":return p(e.serverText,e.clientText);default:return e.records}}async function R(e){switch(e.operation){case\"abort\":return await h(e.endpoint);case\"chunk_load\":return await m(e.chunk);case\"webpack_chunk_load\":return await w(e.chunk,e.chunkId);default:return await f(e.endpoint)}}function y(e){return x(e)}function k(e){return y(e)}async function P(e){return await R(e)}async function C(e){return await P(e)}function I(e){return e.remote?C(e):k(e)}return A(L);})();",
+      "map": {
+        "version": 3,
+        "sources": [
+          "src/money/results.js",
+          "src/shared/catalog.js",
+          "src/shared/client.js",
+          "src/shared/router.js",
+          "src/shared/page.js"
+        ],
+        "sourcesContent": [
+          "import { renderResults, loadResults } from '../shared/page.js';\n\nexport function updateAccountResults(state) {\n  return renderResults(state);\n}\n\nexport function mountAccountPage(state) {\n  return updateAccountResults(state);\n}\n\nexport async function fetchAccountResults(state) {\n  return await loadResults(state);\n}\n\nexport async function openAccountRoute(state) {\n  return await fetchAccountResults(state);\n}\n\nexport function initializePage(state) {\n  return state.remote ? openAccountRoute(state) : mountAccountPage(state);\n}\n",
+          "export function readPrice(record) {\n  return record.price.amount;\n}\n\nexport function formatPrice(record) {\n  return record.formatPrice(record.price);\n}\n\nexport function buildPriceRows(records, formatter) {\n  return records.map(formatter);\n}\n\nexport function saveRecentlyViewed(value) {\n  localStorage.setItem('vantra:recently-viewed', value);\n}\n\nexport function hydrateResults(serverText, clientText) {\n  if (serverText !== clientText) {\n    throw new Error('Hydration failed: the server-rendered results do not match the client state.');\n  }\n  return clientText;\n}\n",
+          "export function decodeResponse(body) {\n  return JSON.parse(body);\n}\n\nexport async function requestCollection(url) {\n  const response = await fetch(url);\n  const body = await response.text();\n  return decodeResponse(body);\n}\n\nexport async function cancelRequest(url) {\n  const controller = new AbortController();\n  controller.abort();\n  return await fetch(url, { signal: controller.signal });\n}\n",
+          "export async function importRoute(url) {\n  return await import(url);\n}\n\nexport function loadRouteChunk(url, chunkId) {\n  return new Promise(function resolveChunk(resolve, reject) {\n    const script = document.createElement('script');\n    script.src = url;\n    script.onload = resolve;\n    script.onerror = function handleChunkError() {\n      const error = new Error('Loading chunk ' + chunkId + ' failed.\\n(error: ' + url + ')');\n      error.name = 'ChunkLoadError';\n      reject(error);\n    };\n    document.head.appendChild(script);\n  });\n}\n",
+          "import { readPrice, formatPrice, buildPriceRows, saveRecentlyViewed, hydrateResults } from './catalog.js';\nimport { requestCollection, cancelRequest } from './client.js';\nimport { importRoute, loadRouteChunk } from './router.js';\n\nexport function renderResults(state) {\n  switch (state.operation) {\n    case 'property_undefined': return buildPriceRows(state.records, readPrice);\n    case 'not_a_function': return buildPriceRows(state.records, formatPrice);\n    case 'quota_exceeded': return saveRecentlyViewed(state.recent);\n    case 'hydration': return hydrateResults(state.serverText, state.clientText);\n    default: return state.records;\n  }\n}\n\nexport async function loadResults(state) {\n  switch (state.operation) {\n    case 'abort': return await cancelRequest(state.endpoint);\n    case 'chunk_load': return await importRoute(state.chunk);\n    case 'webpack_chunk_load': return await loadRouteChunk(state.chunk, state.chunkId);\n    default: return await requestCollection(state.endpoint);\n  }\n}\n"
+        ],
+        "mappings": "wbAAA,IAAAA,EAAA,GAAAC,EAAAD,EAAA,yBAAAE,EAAA,mBAAAC,EAAA,qBAAAC,EAAA,qBAAAC,EAAA,yBAAAC,ICAO,SAASC,EAAUC,EAAQ,CAChC,OAAOA,EAAO,MAAM,MACtB,CAEO,SAASC,EAAYD,EAAQ,CAClC,OAAOA,EAAO,YAAYA,EAAO,KAAK,CACxC,CAEO,SAASE,EAAeC,EAASC,EAAW,CACjD,OAAOD,EAAQ,IAAIC,CAAS,CAC9B,CAEO,SAASC,EAAmBC,EAAO,CACxC,aAAa,QAAQ,yBAA0BA,CAAK,CACtD,CAEO,SAASC,EAAeC,EAAYC,EAAY,CACrD,GAAID,IAAeC,EACjB,MAAM,IAAI,MAAM,8EAA8E,EAEhG,OAAOA,CACT,CCrBO,SAASC,EAAeC,EAAM,CACnC,OAAO,KAAK,MAAMA,CAAI,CACxB,CAEA,eAAsBC,EAAkBC,EAAK,CAE3C,IAAMF,EAAO,MADI,MAAM,MAAME,CAAG,GACJ,KAAK,EACjC,OAAOH,EAAeC,CAAI,CAC5B,CAEA,eAAsBG,EAAcD,EAAK,CACvC,IAAME,EAAa,IAAI,gBACvB,OAAAA,EAAW,MAAM,EACV,MAAM,MAAMF,EAAK,CAAE,OAAQE,EAAW,MAAO,CAAC,CACvD,CCdA,eAAsBC,EAAYC,EAAK,CACrC,OAAO,MAAM,OAAOA,EACtB,CAEO,SAASC,EAAeD,EAAKE,EAAS,CAC3C,OAAO,IAAI,QAAQ,SAAsBC,EAASC,EAAQ,CACxD,IAAMC,EAAS,SAAS,cAAc,QAAQ,EAC9CA,EAAO,IAAML,EACbK,EAAO,OAASF,EAChBE,EAAO,QAAU,UAA4B,CAC3C,IAAMC,EAAQ,IAAI,MAAM,iBAAmBJ,EAAU;AAAA,UAAuBF,EAAM,GAAG,EACrFM,EAAM,KAAO,iBACbF,EAAOE,CAAK,CACd,EACA,SAAS,KAAK,YAAYD,CAAM,CAClC,CAAC,CACH,CCZO,SAASE,EAAcC,EAAO,CACnC,OAAQA,EAAM,UAAW,CACvB,IAAK,qBAAsB,OAAOC,EAAeD,EAAM,QAASE,CAAS,EACzE,IAAK,iBAAkB,OAAOD,EAAeD,EAAM,QAASG,CAAW,EACvE,IAAK,iBAAkB,OAAOC,EAAmBJ,EAAM,MAAM,EAC7D,IAAK,YAAa,OAAOK,EAAeL,EAAM,WAAYA,EAAM,UAAU,EAC1E,QAAS,OAAOA,EAAM,OACxB,CACF,CAEA,eAAsBM,EAAYN,EAAO,CACvC,OAAQA,EAAM,UAAW,CACvB,IAAK,QAAS,OAAO,MAAMO,EAAcP,EAAM,QAAQ,EACvD,IAAK,aAAc,OAAO,MAAMQ,EAAYR,EAAM,KAAK,EACvD,IAAK,qBAAsB,OAAO,MAAMS,EAAeT,EAAM,MAAOA,EAAM,OAAO,EACjF,QAAS,OAAO,MAAMU,EAAkBV,EAAM,QAAQ,CACxD,CACF,CJnBO,SAASW,EAAqBC,EAAO,CAC1C,OAAOC,EAAcD,CAAK,CAC5B,CAEO,SAASE,EAAiBF,EAAO,CACtC,OAAOD,EAAqBC,CAAK,CACnC,CAEA,eAAsBG,EAAoBH,EAAO,CAC/C,OAAO,MAAMI,EAAYJ,CAAK,CAChC,CAEA,eAAsBK,EAAiBL,EAAO,CAC5C,OAAO,MAAMG,EAAoBH,CAAK,CACxC,CAEO,SAASM,EAAeN,EAAO,CACpC,OAAOA,EAAM,OAASK,EAAiBL,CAAK,EAAIE,EAAiBF,CAAK,CACxE",
+        "names": [
+          "results_exports",
+          "__export",
+          "fetchAccountResults",
+          "initializePage",
+          "mountAccountPage",
+          "openAccountRoute",
+          "updateAccountResults",
+          "readPrice",
+          "record",
+          "formatPrice",
+          "buildPriceRows",
+          "records",
+          "formatter",
+          "saveRecentlyViewed",
+          "value",
+          "hydrateResults",
+          "serverText",
+          "clientText",
+          "decodeResponse",
+          "body",
+          "requestCollection",
+          "url",
+          "cancelRequest",
+          "controller",
+          "importRoute",
+          "url",
+          "loadRouteChunk",
+          "chunkId",
+          "resolve",
+          "reject",
+          "script",
+          "error",
+          "renderResults",
+          "state",
+          "buildPriceRows",
+          "readPrice",
+          "formatPrice",
+          "saveRecentlyViewed",
+          "hydrateResults",
+          "loadResults",
+          "cancelRequest",
+          "importRoute",
+          "loadRouteChunk",
+          "requestCollection",
+          "updateAccountResults",
+          "state",
+          "renderResults",
+          "mountAccountPage",
+          "fetchAccountResults",
+          "loadResults",
+          "openAccountRoute",
+          "initializePage"
+        ]
+      },
+      "engines": {
+        "chromium": {
+          "browser_version": "156.0.8078.4",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Cannot read properties of undefined (reading 'price')",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 600,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "Array.map",
+                  "native": true
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 145,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 636,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "Array.map",
+                  "native": true
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 188,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON",
+              "frames": [
+                {
+                  "name": "JSON.parse",
+                  "native": true
+                },
+                {
+                  "name": "E",
+                  "line": 1,
+                  "column": 908,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 979,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async R",
+                  "line": 2,
+                  "column": 515,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 20,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "async P",
+                  "line": 2,
+                  "column": 615,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 9,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "async C",
+                  "line": 2,
+                  "column": 653,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 9,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Failed to fetch",
+              "frames": [
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 955,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 6,
+                    "column": 25,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 521,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchAccountResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openAccountRoute"
+                  }
+                }
+              ]
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "signal is aborted without reason",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1039,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 13,
+                    "column": 13,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 386,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchAccountResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openAccountRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Failed to fetch dynamically imported module: {chunk}",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "c.onerror",
+                  "line": 1,
+                  "column": 1257,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 20,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "QuotaExceededError",
+              "name": "QuotaExceededError",
+              "message": "Failed to execute 'setItem' on 'Storage': Setting the value of 'vantra:recently-viewed' exceeded the quota.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 716,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 231,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 783,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 10,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 266,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "Object.I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "webkit": {
+          "browser_version": "27.2",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "global code",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "undefined is not an object (evaluating 'e.price')",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 599,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 9,
+                    "name": "record"
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 685,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 146,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function. (In 'e.formatPrice(e.price)', 'e.formatPrice' is undefined)",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 647,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 685,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 189,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "JSON Parse error: Unrecognized token '<'",
+              "frames": [
+                {
+                  "name": "E",
+                  "line": 1,
+                  "column": 913,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 980,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async R",
+                  "line": 2,
+                  "column": 522,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "async P",
+                  "line": 2,
+                  "column": 622,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "async C",
+                  "line": 2,
+                  "column": 660,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchAccountResults"
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Load failed",
+              "frames": []
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "The operation was aborted.",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1044,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 13,
+                    "column": 13,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 387,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 622,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 660,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 695,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openAccountRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "Importing a module script failed.",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "",
+                  "line": 1,
+                  "column": 1266,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 24,
+                    "name": null
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "DOMException",
+              "name": "QuotaExceededError",
+              "message": "The quota has been exceeded.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 723,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 232,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 792,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 267,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 558,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 584,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 700,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "gecko": {
+          "browser_version": "157.0",
+          "injection": [
+            {
+              "name": "",
+              "line": 5,
+              "column": 33
+            },
+            {
+              "name": "",
+              "line": 5,
+              "column": 126
+            }
+          ],
+          "exceptions": {
+            "property_undefined": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "can't access property \"price\", e is undefined",
+              "frames": [
+                {
+                  "name": "s",
+                  "line": 1,
+                  "column": 591,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 2,
+                    "column": 2,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 145,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 7,
+                    "column": 38,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "not_a_function": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "e.formatPrice is not a function",
+              "frames": [
+                {
+                  "name": "d",
+                  "line": 1,
+                  "column": 636,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 6,
+                    "column": 16,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "i",
+                  "line": 1,
+                  "column": 682,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 10,
+                    "column": 17,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 188,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 8,
+                    "column": 34,
+                    "name": "buildPriceRows"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "json_html": {
+              "type": "SyntaxError",
+              "name": "SyntaxError",
+              "message": "JSON.parse: unexpected character at line 1 column 1 of the JSON data",
+              "frames": [
+                {
+                  "name": "E",
+                  "line": 1,
+                  "column": 908,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 2,
+                    "column": 14,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "f",
+                  "line": 1,
+                  "column": 979,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "decodeResponse"
+                  }
+                },
+                {
+                  "name": "async*R",
+                  "line": 2,
+                  "column": 521,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 20,
+                    "column": 26,
+                    "name": "requestCollection"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openAccountRoute"
+                  }
+                }
+              ]
+            },
+            "failed_to_fetch": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "NetworkError when attempting to fetch resource.",
+              "frames": []
+            },
+            "abort": {
+              "type": "DOMException",
+              "name": "AbortError",
+              "message": "The operation was aborted. ",
+              "frames": [
+                {
+                  "name": "h",
+                  "line": 1,
+                  "column": 1053,
+                  "original": {
+                    "source": "src/shared/client.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 386,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 17,
+                    "column": 31,
+                    "name": "cancelRequest"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openAccountRoute"
+                  }
+                }
+              ]
+            },
+            "chunk_load": {
+              "type": "TypeError",
+              "name": "TypeError",
+              "message": "error loading dynamically imported module: {chunk}",
+              "frames": []
+            },
+            "webpack_chunk_load": {
+              "type": "Error",
+              "name": "ChunkLoadError",
+              "message": "Loading chunk {chunk_id} failed.\n(error: {chunk})",
+              "frames": [
+                {
+                  "name": "w/VantraApplication</c.onerror",
+                  "line": 1,
+                  "column": 1257,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 11,
+                    "column": 20,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "EventHandlerNonNull*w/VantraApplication<",
+                  "line": 1,
+                  "column": 1230,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 10,
+                    "column": 4,
+                    "name": "script"
+                  }
+                },
+                {
+                  "name": "w",
+                  "line": 1,
+                  "column": 1146,
+                  "original": {
+                    "source": "src/shared/router.js",
+                    "line": 6,
+                    "column": 9,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "R",
+                  "line": 2,
+                  "column": 479,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 19,
+                    "column": 44,
+                    "name": "loadRouteChunk"
+                  }
+                },
+                {
+                  "name": "P",
+                  "line": 2,
+                  "column": 621,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 12,
+                    "column": 15,
+                    "name": "loadResults"
+                  }
+                },
+                {
+                  "name": "C",
+                  "line": 2,
+                  "column": 659,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 16,
+                    "column": 15,
+                    "name": "fetchAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 694,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 24,
+                    "name": "openAccountRoute"
+                  }
+                }
+              ]
+            },
+            "quota_exceeded": {
+              "type": "DOMException",
+              "name": "QuotaExceededError",
+              "message": "The quota has been exceeded.",
+              "frames": [
+                {
+                  "name": "l",
+                  "line": 1,
+                  "column": 716,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 14,
+                    "column": 15,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 231,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 9,
+                    "column": 34,
+                    "name": "saveRecentlyViewed"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            },
+            "hydration": {
+              "type": "Error",
+              "name": "Error",
+              "message": "Hydration failed: the server-rendered results do not match the client state.",
+              "frames": [
+                {
+                  "name": "p",
+                  "line": 1,
+                  "column": 783,
+                  "original": {
+                    "source": "src/shared/catalog.js",
+                    "line": 19,
+                    "column": 10,
+                    "name": null
+                  }
+                },
+                {
+                  "name": "x",
+                  "line": 2,
+                  "column": 266,
+                  "original": {
+                    "source": "src/shared/page.js",
+                    "line": 10,
+                    "column": 29,
+                    "name": "hydrateResults"
+                  }
+                },
+                {
+                  "name": "y",
+                  "line": 2,
+                  "column": 557,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 4,
+                    "column": 9,
+                    "name": "renderResults"
+                  }
+                },
+                {
+                  "name": "k",
+                  "line": 2,
+                  "column": 583,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 8,
+                    "column": 9,
+                    "name": "updateAccountResults"
+                  }
+                },
+                {
+                  "name": "I",
+                  "line": 2,
+                  "column": 699,
+                  "original": {
+                    "source": "src/money/results.js",
+                    "line": 20,
+                    "column": 50,
+                    "name": "mountAccountPage"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

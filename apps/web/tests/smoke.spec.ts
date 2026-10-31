@@ -392,3 +392,83 @@ test("continuous duration must be finite and app token is never part of the save
     page.getByLabel("Chronosphere API token", { exact: true }),
   ).toHaveValue("");
 });
+
+test("web source maps are uploaded before live start and upload failures never start a run", async ({
+  page,
+}) => {
+  let configured = false;
+  let failUpload = true;
+  const calls: string[] = [];
+  await page.route("**/api/settings", (r) =>
+    r.fulfill({
+      json: {
+        secrets: { chronosphere: false, symbol_upload: configured },
+        defaults: {},
+      },
+    }),
+  );
+  await page.route("**/api/settings/secrets/symbol_upload", async (r) => {
+    expect(r.request().postDataJSON()).toEqual({
+      value: "fixture-symbol-token",
+    });
+    configured = true;
+    await r.fulfill({ json: { configured: true } });
+  });
+  await page.route("**/api/specs/*/symbols/upload", (r) => {
+    calls.push("maps");
+    expect(r.request().postDataJSON()).toEqual({ confirm: true });
+    return failUpload
+      ? r.fulfill({
+          status: 422,
+          json: {
+            detail: "Source map upload failed. Check the Symbol Upload token.",
+          },
+        })
+      : r.fulfill({ json: { uploaded: 42, receipts: [] } });
+  });
+  await page.route("**/api/runs", (r) => {
+    calls.push("run");
+    // Inspect the ordering without creating any live worker or external traffic.
+    return r.fulfill({
+      status: 400,
+      json: { detail: "Live start intercepted by isolated test." },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Web", exact: true }).click();
+  await page.getByRole("button", { name: "Android", exact: true }).click();
+  await page.getByLabel("Web app ID", { exact: true }).fill("kfs9f");
+  await page
+    .getByRole("button", { name: "Sessions only", exact: false })
+    .click();
+  await page
+    .getByLabel("Embrace Symbol Upload token", { exact: true })
+    .fill("fixture-symbol-token");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
+    "fixture-symbol-token",
+  );
+  await preview(page);
+  await page
+    .getByRole("button", { name: "Send to destination", exact: false })
+    .click();
+  await page.getByRole("button", { name: "Send batch", exact: true }).click();
+  await expect(
+    page.getByText("Source map upload failed. Check the Symbol Upload token.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(calls).toEqual(["maps"]);
+  expect(
+    await page.evaluate(() => localStorage.getItem("sg_launch_attempt")),
+  ).toBeNull();
+  await expect(
+    page.getByText(/A start request has an unconfirmed/),
+  ).toHaveCount(0);
+  failUpload = false;
+  await page.getByRole("button", { name: "Send batch", exact: true }).click();
+  await expect(
+    page.getByText("Live start intercepted by isolated test.", { exact: true }),
+  ).toBeVisible();
+  expect(calls).toEqual(["maps", "maps", "run"]);
+});

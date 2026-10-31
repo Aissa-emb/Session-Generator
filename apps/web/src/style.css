@@ -1683,3 +1683,16 @@ details[open] > summary {
       no-repeat;
   }
 }
+
+.symbol-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+.symbol-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--mint);
+}

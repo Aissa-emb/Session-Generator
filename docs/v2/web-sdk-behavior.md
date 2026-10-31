@@ -166,3 +166,11 @@ error_log 500, warning_log 200, info_log 100, exception 500, breadcrumb 100, ses
 - Firefox's modern TypeError text is `can't access property "price", t is undefined`, not `t is undefined`.
 - Log batching delay is the OTel default (1 s), not V1's 5 s.
 - The SPA estate in the prompt put the travel booking flow on app.vantra.com; a cross-origin hop would split the user session and device ID (separate storage), so V2 keeps travel's hybrid site on one origin (www.vantra.com, booking flow under `/travel/book`).
+
+## Exception corpus correction (2026-10-31)
+
+`reference/web-exceptions/src/` is now the executable source for emitted JavaScript exception frames. `apps/web/scripts/build-web-exceptions.mjs` compiles it and captures errors in Chromium, WebKit and Firefox; the checked-in corpus records browser versions, original source positions and bundle-ID injection frames. `web_symbols.py` appends release metadata without moving compiled code and supplies matching source maps. Every application frame is independently decoded in the Python tests.
+
+The old fixed `q` vendor frame and unrelated checkout callers have been removed. Native fetch/import failures may have no application stack in WebKit/Firefox or Chromium dynamic imports; those empty stacks are preserved. Exception constructor names come from the thrown object (for example, a custom `ChunkLoadError` name on an `Error` instance does not change `exception.type` to `ChunkLoadError`). The hydration fixture is an application renderer error, not an invented React stack.
+
+The guided UI exposes an Embrace Symbol Upload token and the Resolve original files and lines option for web targets. A live start uploads the matching maps first and stops on an upload failure. Tokens stay out of the draft; dry runs never upload. Upload acknowledgements are not proof of dashboard symbolication; the live dashboard check still requires a configured upload token and fresh exceptions.

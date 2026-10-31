@@ -7,7 +7,12 @@ export type AppTarget = {
   region: string;
 };
 export type Signal =
-  "crashes" | "exceptions" | "freezes" | "network" | "pages" | "payments";
+  | "crashes"
+  | "exceptions"
+  | "freezes"
+  | "network"
+  | "pages"
+  | "payments";
 export type Draft = {
   apps: AppTarget[];
   destination: "end_to_end" | "sessions_only";
@@ -22,6 +27,7 @@ export type Draft = {
   count: number;
   rate: number;
   duration: number;
+  symbolication: boolean;
 };
 export const defaults: Draft = {
   apps: [{ platform: "android", appId: "", name: "Vantra", region: "us" }],
@@ -51,6 +57,7 @@ export const defaults: Draft = {
   count: 100,
   rate: 10,
   duration: 60,
+  symbolication: true,
 };
 export const flowNames: Record<string, string> = {
   all: "All journeys",
@@ -167,6 +174,9 @@ export function scenario(caps: Json, d: Draft): Json {
     app_name: a.name.trim(),
     region: a.region,
   }));
+  for (const target of s.targets) {
+    if (target.platform === "web") target.web.symbolication = d.symbolication;
+  }
   s.population.platform_mix = Object.fromEntries(
     s.targets.map((t: Json) => [t.id, 1]),
   );

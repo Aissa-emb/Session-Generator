@@ -737,7 +737,7 @@ class BrowserSession:
         if severity != "info":
             a["emb.stacktrace.js"] = web_faults.exception("property_undefined", self.caps["engine"], self.app_version,
                                                           self._bundle(), self._bundle("vendor"))[3]
-            a["emb.js_file_bundle_ids"] = "{}"
+            a["emb.js_file_bundle_ids"] = self._bundle_ids()
         self.part.errors += int(severity == "error")
         self._log("logs", "emb-log", a, message, severity=num, text=text)
 

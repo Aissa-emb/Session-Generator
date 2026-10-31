@@ -1,143 +1,84 @@
-"""Deterministic executable bundles, source maps and Web CLI-compatible bundle IDs.
+"""Real compiled application modules, captured browser frames and matching source maps.
 
-Source positions in exception frames refer to these real assets. The map's
-MD5-derived debugId and injected stack-to-ID map follow web-cli 2.31 source.
+Rebuild the checked-in corpus with apps/web/scripts/build-web-exceptions.mjs.
+Only stdlib JSON loading is needed when generating sessions. Release metadata and
+CLI injection are appended after compiled code so mapped positions never move.
 """
-
+import copy
 import functools
 import gzip
 import hashlib
 import json
 import secrets
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 from uuid import UUID
 from . import web_sites
 from .security import post
 
-# Original function, minified name, parameters, executable body.
-FUNCTIONS = [
-    ("mapProductPrice", "p", "t", "return t.price;"),
-    ("formatProductPrice", "f", "t,e", "return t.formatPrice(e);"),
-    ("loadCheckoutRoute", "l", "u", "return import(u);"),
-    ("loadRouteChunk", "k", "u", "return import(u);"),
-    ("decodeResponse", "j", "t", "return JSON.parse(t);"),
-    ("requestAccount", "q", "u", "return fetch(u);"),
-    ("cancelRequest", "a", "u,s", "return fetch(u,{signal:s});"),
-    (
-        "saveRecentProducts",
-        "s",
-        "t",
-        'return localStorage.setItem("vantra:recently-viewed",t);',
-    ),
-    (
-        "renderCheckout",
-        "h",
-        "t",
-        'if(!t)throw new Error("Checkout content is unavailable");return t;',
-    ),
-    ("confirmOrder", "c", "t", "return p(t.item);"),
-    ("commitCheckout", "r", "t", "return h(t);"),
-]
-FAMILIES = dict(
-    zip(
-        (
-            "property_undefined",
-            "not_a_function",
-            "chunk_load",
-            "webpack_chunk_load",
-            "json_html",
-            "failed_to_fetch",
-            "abort",
-            "quota_exceeded",
-            "hydration",
-        ),
-        range(9),
-    )
-)
-BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 UPLOAD_URL = "https://dsym-store.emb-api.com/v2/store/sourcemap"
+CORPUS_PATH = Path(__file__).with_name("data") / "web-exceptions.json"
 
 
-def vlq(value):
-    n = (-value << 1 | 1) if value < 0 else value << 1
-    out = ""
-    while True:
-        digit = n & 31
-        n >>= 5
-        out += BASE64[digit | (32 if n else 0)]
-        if not n:
-            return out
+@functools.lru_cache(maxsize=1)
+def corpus():
+    return json.loads(CORPUS_PATH.read_text())
+
+
+def application(url):
+    path = urlsplit(url).path
+    domain = "money" if "/money/" in path else "travel" if "/travel/" in path else "storefront"
+    return corpus()["bundles"][domain]
+
+
+def captured_exception(url, family, engine):
+    return application(url)["engines"][engine]["exceptions"][family]
 
 
 @functools.lru_cache(maxsize=512)
 def bundle(url, release):
     filename = PurePosixPath(urlsplit(url).path).name
-    source = ["export const release = " + json.dumps(release) + ";"]
-    lines = ["const v=" + json.dumps(release) + ";"]
-    mappings = ["AAAA"]
-    previous_line = previous_name = 0
-    for i, (original, short, args, body) in enumerate(FUNCTIONS):
-        original_line = len(source)
-        readable = body.replace("return p(", "return mapProductPrice(").replace(
-            "return h(", "return renderCheckout("
-        )
-        source += [f"export function {original}({args}) {{", "  " + readable, "}"]
-        line = f"function {short}({args}){{{body}}}"
-        lines.append(line)
-        mappings.append(
-            "".join(
-                vlq(x)
-                for x in (0, 0, original_line - previous_line, 0, i - previous_name)
-            )
-        )
-        previous_line, previous_name = original_line, i
-    lines.append("//# sourceMappingURL=" + filename + ".map")
-    raw = "\n".join(lines) + "\n"
+    compiled = application(url)
+    lines = [compiled["code"], ";globalThis.VantraRelease=" + json.dumps(release) + ";"]
+    footer = "//# sourceMappingURL=" + filename + ".map"
+    raw = "\n".join(lines + [footer]) + "\n"
     bid = hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
-    sm = {
-        "version": 3,
-        "file": filename,
-        "sources": ["src/" + filename + ".source.js"],
-        "sourcesContent": ["\n".join(source) + "\n"],
-        "names": [f[0] for f in FUNCTIONS],
-        "mappings": ";".join(mappings),
-        "debugId": str(UUID(bid)),
-    }
+    sm = copy.deepcopy(compiled["map"])
+    sm.update(file=filename, debugId=str(UUID(bid)))
     snippet = (
         ';(E=>{try{const _=globalThis,c=(new _.Error).stack;c&&(_[E]=_[E]||{},_[E][c]="'
-        + bid
-        + '") }catch(E){}})("_EmbraceFileBundleIDs");'
+        + bid + '")}catch(E){}})("_EmbraceFileBundleIDs");'
     )
-    lines[-1:-1] = ["// Injected by Embrace Web CLI:", snippet]
     return {
-        "url": url,
-        "release": release,
-        "bundle_id": bid,
-        "bundle": "\n".join(lines) + "\n",
+        "url": url, "release": release, "bundle_id": bid,
+        "bundle": "\n".join(lines + ["// Injected by Embrace Web CLI:", snippet, footer]) + "\n",
         "sourcemap": json.dumps(sm, separators=(",", ":")),
     }
 
 
-def frame(family, role="fault"):
-    index = (
-        FAMILIES.get(family, 0) if role == "fault" else (9 if role == "caller" else 10)
-    )
-    original, short, args, body = FUNCTIONS[index]
-    return short, index + 2, len(f"function {short}({args}){{") + 1
+def format_frames(frames, url, engine):
+    lines = []
+    for frame in frames:
+        name = frame["name"]
+        if frame.get("native"):
+            if engine == "chromium":
+                lines.append(f"    at {name} (<anonymous>)")
+            continue
+        location = f'{url}:{frame["line"]}:{frame["column"]}'
+        if engine == "chromium":
+            lines.append(f"    at {name} ({location})" if name else f"    at {location}")
+        else:
+            lines.append(f"{name}@{location}")
+    return "\n".join(lines)
 
 
 def bundle_ids(urls, release, engine):
     result = {}
     for url in sorted(set(urls)):
-        asset = bundle(url, release)
-        line = len(FUNCTIONS) + 3
-        stack = (
-            f"Error\n    at {url}:{line}:30"
-            if engine == "chromium"
-            else f"@{url}:{line}:30"
-        )
-        result[stack] = asset["bundle_id"]
+        stack = format_frames(application(url)["engines"][engine]["injection"], url, engine)
+        if engine == "chromium":
+            stack = "Error\n" + stack
+        result[stack] = bundle(url, release)["bundle_id"]
     return json.dumps(result, separators=(",", ":"))
 
 

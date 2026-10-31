@@ -17,6 +17,39 @@ from xcorgen.runner import load_config
 from tools.regions import apply
 
 
+def resolve(sm, target_line, target_column):
+    """Independent source-map v3 decoder; generated columns reset on each line."""
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    source = original_line = column = name = 0
+    chosen = None
+    for line, segments in enumerate(sm["mappings"].split(";"), 1):
+        generated = 0
+        for segment in segments.split(","):
+            if not segment:
+                continue
+            values, value, shift = [], 0, 0
+            for char in segment:
+                digit = alphabet.index(char)
+                value |= (digit & 31) << shift
+                if digit & 32:
+                    shift += 5
+                else:
+                    values.append(-(value >> 1) if value & 1 else value >> 1)
+                    value = shift = 0
+            generated += values[0]
+            if len(values) >= 4:
+                source += values[1]
+                original_line += values[2]
+                column += values[3]
+                if len(values) == 5:
+                    name += values[4]
+            if line == target_line and generated <= target_column:
+                chosen = None if len(values) == 1 else dict(source=sm["sources"][source], line=original_line+1, column=column, name=sm["names"][name] if len(values)==5 else None)
+        if line == target_line:
+            return chosen
+    return None
+
+
 class SymbolsAndRegions(unittest.TestCase):
     def test_real_assets_ids_and_mapped_frames(self):
         target = spec.normalized(dict(spec.default_spec(), targets=[spec.WEB_TARGET]))[
@@ -41,11 +74,22 @@ class SymbolsAndRegions(unittest.TestCase):
                 hashlib.md5(original.encode(), usedforsecurity=False).hexdigest(),
                 asset["bundle_id"],
             )
-            for family in FAMILIES:
-                short, line, col = web_symbols.frame(family)
-                self.assertTrue(code[line - 1].startswith("function " + short + "("))
-                self.assertLess(col, len(code[line - 1]))
-                self.assertTrue(sm["mappings"].split(";")[line - 1])
+            compiled = web_symbols.application(asset["url"])
+            self.assertTrue(asset["bundle"].startswith(compiled["code"] + "\n"))
+            for source, content in zip(sm["sources"], sm["sourcesContent"]):
+                self.assertEqual(content, (Path(__file__).parents[1] / "reference/web-exceptions" / source).read_text())
+            # Validate every captured position, including call sites, against a
+            # separate VLQ decoder rather than the compiler's mapping library.
+            for engine in compiled["engines"].values():
+                for sample in engine["exceptions"].values():
+                    for frame in sample["frames"]:
+                        if frame.get("native"):
+                            continue
+                        self.assertLessEqual(frame["column"], len(code[frame["line"] - 1]))
+                        self.assertEqual(resolve(sm, frame["line"], frame["column"] - 1), frame["original"])
+            top = compiled["engines"]["chromium"]["exceptions"]["property_undefined"]["frames"][0]
+            source_index = sm["sources"].index(top["original"]["source"])
+            self.assertIn("return record.price.amount", sm["sourcesContent"][source_index].splitlines()[top["original"]["line"] - 1])
         current = assets[0]
         ids = json.loads(
             web_symbols.bundle_ids([current["url"]], current["release"], "chromium")

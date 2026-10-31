@@ -78,11 +78,11 @@ def observe(payloads, traces):
     return obs
 
 
-FAMILY_PATTERNS = {"property_undefined": r"reading 'price'|evaluating 't.price'|t is undefined",
+FAMILY_PATTERNS = {"property_undefined": r"reading 'price'|evaluating '[\w$]+\.price'|[\w$]+ is undefined",
     "not_a_function": r"not a function", "chunk_load": r"module script failed|dynamically imported module",
     "webpack_chunk_load": r"Loading chunk", "json_html": r"Unexpected token|JSON Parse error|JSON.parse:",
     "failed_to_fetch": r"Failed to fetch$|Load failed|NetworkError", "abort": r"aborted",
-    "quota_exceeded": r"quota", "hydration": r"React error #418", "script_error": r"^Script error\.$"}
+    "quota_exceeded": r"quota", "hydration": r"React error #418|Hydration failed", "script_error": r"^Script error\.$"}
 
 
 def affected(fault, obs):

@@ -318,7 +318,8 @@ class RunTests(unittest.TestCase):
 
 class LiveTests(unittest.TestCase):
     def test_live_stream_on_a_simulated_clock(self):
-        clock = [NOW / 1000]
+        # Fixed noon in New York: the diurnal load must not depend on when CI runs.
+        clock = [1793376000.0]
         s = specs.default_spec()
         s.update(destinations={"mode": "end_to_end"}, chronosphere={"tenant": "acme-prod"},
                  traffic={"mode": "live", "rate_per_minute": 60, "duration_minutes": 20, "daily_curve": {"kind": "diurnal"}},
@@ -326,7 +327,7 @@ class LiveTests(unittest.TestCase):
                                 {"id": "freeze", "type": "main_thread_blockage", "rate": .3, "quota": "exact"}])
         random.seed(6)
         with tempfile.TemporaryDirectory() as state:
-            r = SpecRun(s, load_config(None), persist=False, now_ms=NOW, state_dir=state, rng=random.Random(6))
+            r = SpecRun(s, load_config(None), persist=False, now_ms=clock[0] * 1000, state_dir=state, rng=random.Random(6))
             sender = Collect()
             started = r.run_live(sender, quiet=True, clock=lambda: clock[0],
                                  sleep=lambda x: clock.__setitem__(0, clock[0] + x))
