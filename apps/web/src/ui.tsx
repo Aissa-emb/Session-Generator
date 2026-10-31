@@ -1,4 +1,4 @@
-import { ReactNode, isValidElement, cloneElement, useId } from "react";
+import { ReactNode, isValidElement, cloneElement, useId, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Cross2Icon } from "@radix-ui/react-icons";
 export function Button({
@@ -98,11 +98,26 @@ export function Modal({
   description: string;
   children: ReactNode;
 }) {
+  const returnFocus = useRef<HTMLElement | null>(null);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="overlay" />
-        <Dialog.Content className="modal">
+        <Dialog.Content
+          className="modal"
+          onOpenAutoFocus={() => {
+            returnFocus.current =
+              document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            if (returnFocus.current?.isConnected) {
+              event.preventDefault();
+              returnFocus.current.focus();
+            }
+          }}
+        >
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{description}</Dialog.Description>
           <Dialog.Close className="icon-button close" aria-label="Close">

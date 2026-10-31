@@ -1,9 +1,18 @@
 import { test, expect, Page } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+async function capture(page: Page, name: string) {
+  if (!process.env.QA_SCREENSHOTS_DIR) return;
+  await mkdir(process.env.QA_SCREENSHOTS_DIR, { recursive: true });
+  await page.screenshot({
+    path: path.join(process.env.QA_SCREENSHOTS_DIR, name),
+  });
+}
 
 async function connect(page: Page, platforms = ["android"]) {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Where should the data go?" }),
+    page.getByRole("heading", { name: "Choose a destination" }),
   ).toBeVisible();
   for (const p of platforms.filter((p) => p !== "android"))
     await page
@@ -21,9 +30,11 @@ async function connect(page: Page, platforms = ["android"]) {
   await page
     .getByRole("button", { name: "Sessions only", exact: false })
     .click();
+  if (platforms.join() === "web")
+    await capture(page, "redesign-destination.png");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "What would you like to generate?" }),
+    page.getByRole("heading", { name: "Customize traffic" }),
   ).toBeVisible();
 }
 async function preview(page: Page) {
@@ -63,6 +74,7 @@ test("one workflow, input validation, scoped platform controls, no AI or MCP", a
   await expect(
     page.getByLabel("Slow page loads affected percentage"),
   ).toHaveValue("30");
+  await capture(page, "redesign-customize.png");
   await expect(page.getByText(/copilot|MCP connection/i)).toHaveCount(0);
   expect((await request.post("/mcp", { data: {} })).status()).toBe(404);
   expect(
@@ -114,6 +126,7 @@ test("custom mixed-platform faults produce real session and distributed trace pr
       .click();
     await expect(page.locator(".timeline-event").first()).toBeVisible();
   }
+  await capture(page, "redesign-preview.png");
   await page.locator(".waterfall-row").first().click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -133,16 +146,15 @@ test("complete local batch records receipts and survives refresh", async ({
     .getByRole("button", { name: "Start local test", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Completed", exact: true }),
+    page.locator(".run-status").filter({ hasText: /^Completed$/ }),
   ).toBeVisible({ timeout: 45000 });
   await expect(page.locator(".run-metrics").first()).toContainText("4");
-  await page.getByText("Recent delivery receipts", { exact: true }).click();
   await expect(
-    page.getByRole("cell", { name: "accepted", exact: true }).first(),
+    page.getByRole("cell", { name: "Generated", exact: true }).first(),
   ).toBeVisible();
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Completed", exact: true }),
+    page.locator(".run-status").filter({ hasText: /^Completed$/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Create another run" }).click();
   await expect(page.getByLabel("Android app ID", { exact: true })).toHaveValue(
@@ -150,7 +162,7 @@ test("complete local batch records receipts and survives refresh", async ({
   );
 });
 
-test("continuous rate and two-hour duration start a real local worker with pause and stop", async ({
+test("continuous rate and two-hour duration start a real local worker with pause, resume and stop", async ({
   page,
 }) => {
   await connect(page);
@@ -167,29 +179,34 @@ test("continuous rate and two-hour duration start a real local worker with pause
     .click();
   try {
     await expect(
-      page.getByRole("heading", { name: "Generating locally", exact: true }),
+      page.locator(".run-status").filter({ hasText: /^Running$/ }),
     ).toBeVisible({ timeout: 45000 });
-    await expect(page.locator(".sending-indicator")).toHaveClass(/animating/);
     await expect(
-      page.getByRole("progressbar", { name: "Sending duration" }),
+      page.getByRole("img", { name: "Generator active", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("progressbar", { name: "Scheduled time elapsed" }),
     ).toHaveAttribute("max", "7200");
     await expect(
-      page.locator(".run-metrics>div").first().locator("strong"),
+      page.locator(".run-metrics>div").first().locator("dd"),
     ).not.toHaveText("0");
     await page.reload();
     await expect(
-      page.getByRole("heading", { name: "Generating locally", exact: true }),
+      page.locator(".run-status").filter({ hasText: /^Running$/ }),
     ).toBeVisible();
+    await capture(page, "redesign-local-run.png");
     await page.getByRole("button", { name: "Pause", exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: /Pausing|Paused/ }),
+      page.locator(".run-status").filter({ hasText: /Pausing|Paused/ }),
     ).toBeVisible();
-    await expect(page.locator(".sending-indicator")).not.toHaveClass(
-      /animating/,
-    );
+    await expect(page.locator(".run-status")).toHaveText("Paused", {
+      timeout: 45000,
+    });
+    await page.getByRole("button", { name: "Resume", exact: true }).click();
+    await expect(page.locator(".run-status")).toHaveText("Running");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: "Stopped", exact: true }),
+      page.locator(".run-status").filter({ hasText: /^Stopped$/ }),
     ).toBeVisible({ timeout: 45000 });
   } finally {
     const id = await page.evaluate(() =>
@@ -241,7 +258,16 @@ test("lost start response recovers the same run after refresh", async ({
     if (route.request().method() === "POST") {
       const { spec_id } = route.request().postDataJSON();
       const correction = await request.patch(`/api/specs/${spec_id}`, {
-        data: { expected_version: 1, patch: [{ op: "replace", path: "/targets/0/embrace_app_id", value: "5nrc3" }] },
+        data: {
+          expected_version: 1,
+          patch: [
+            {
+              op: "replace",
+              path: "/targets/0/embrace_app_id",
+              value: "5nrc3",
+            },
+          ],
+        },
       });
       expect(correction.ok()).toBeTruthy();
       const response = await route.fetch();
@@ -257,11 +283,15 @@ test("lost start response recovers the same run after refresh", async ({
   ).toBeVisible();
   await page.unroute("**/api/runs");
   await page.reload();
-  await expect(page.getByRole("button", { name: "Local test", exact: false })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("Vantra · Android (5nrc3)", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Local test", exact: false }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByText("Vantra · Android (5nrc3)", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Retry start request" }).click();
   await expect(
-    page.getByRole("heading", { name: "Completed", exact: true }),
+    page.locator(".run-status").filter({ hasText: /^Completed$/ }),
   ).toBeVisible({ timeout: 45000 });
   const id = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("sg_run_id") || "null"),
@@ -270,24 +300,42 @@ test("lost start response recovers the same run after refresh", async ({
   const runs = await (await request.get("/api/runs")).json();
   expect(runs.filter((r: any) => r.id === created)).toHaveLength(1);
   await page.getByRole("button", { name: "Create another run" }).click();
-  await expect(page.getByLabel("Android app ID", { exact: true })).toHaveValue("5nrc3");
+  await expect(page.getByLabel("Android app ID", { exact: true })).toHaveValue(
+    "5nrc3",
+  );
 });
 
-test("a definitive credential preflight error unlocks Destination for correction", async ({ page }) => {
+test("a definitive credential preflight error unlocks Destination for correction", async ({
+  page,
+}) => {
   await connect(page);
   await page.getByLabel("Number of sessions").fill("2");
   await preview(page);
   await page.route("**/api/runs", async (route) => {
     if (route.request().method() === "POST")
-      await route.fulfill({ status: 422, json: { detail: "The Cortex XCOR token could not be read. Save it again in Destination. No run was started." } });
+      await route.fulfill({
+        status: 422,
+        json: {
+          detail:
+            "The Cortex XCOR token could not be read. Save it again in Destination. No run was started.",
+        },
+      });
     else await route.continue();
   });
-  await page.getByRole("button", { name: "Start local test", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Start local test", exact: true })
+    .click();
   await expect(page.getByRole("alert")).toContainText("No run was started");
-  await expect(page.getByRole("button", { name: "Retry start request" })).toHaveCount(0);
-  expect(await page.evaluate(() => localStorage.getItem("sg_launch_attempt"))).toBeNull();
-  await page.getByRole("button", { name: /Destination Choose your apps and tenant/ }).click();
-  await expect(page.getByRole("heading", { name: "Where should the data go?" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Retry start request" }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() => localStorage.getItem("sg_launch_attempt")),
+  ).toBeNull();
+  await page.getByRole("button", { name: /Destination/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose a destination" }),
+  ).toBeVisible();
 });
 
 test("laptop and mobile layout stay within the viewport", async ({ page }) => {
@@ -325,7 +373,7 @@ test("continuous duration must be finite and app token is never part of the save
     .click();
   await expect(page.getByRole("alert")).toContainText("Choose a duration");
   await expect(
-    page.getByRole("heading", { name: "What would you like to generate?" }),
+    page.getByRole("heading", { name: "Customize traffic" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await page

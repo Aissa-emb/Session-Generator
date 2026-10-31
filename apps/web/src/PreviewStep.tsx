@@ -173,9 +173,12 @@ export default function PreviewStep({
                           0.6,
                           ((Number(r.end) - Number(r.start)) / duration) * 100,
                         ) + "%",
-                      background: ["#bd9add", "#52b8f5", "#68d7dc", "#e1c150"][
-                        i % 4
-                      ],
+                      background: [
+                        "var(--chart-1)",
+                        "var(--chart-2)",
+                        "var(--chart-3)",
+                        "var(--chart-4)",
+                      ][i % 4],
                     }}
                   />
                 </div>

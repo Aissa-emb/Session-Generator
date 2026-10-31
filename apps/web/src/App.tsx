@@ -5,15 +5,13 @@ import {
   ArrowLeftIcon,
   CheckIcon,
   PlayIcon,
-  PauseIcon,
-  StopIcon,
   ReloadIcon,
   GlobeIcon,
   MobileIcon,
   ActivityLogIcon,
   LayersIcon,
 } from "@radix-ui/react-icons";
-import { api, ApiError, Json, number, time } from "./api";
+import { api, ApiError, Json, number } from "./api";
 import { Badge, Button, Field, Panel } from "./ui";
 import {
   AppTarget,
@@ -31,6 +29,8 @@ import {
   tenantName,
 } from "./workflow";
 import PreviewStep from "./PreviewStep";
+import RunView from "./RunView";
+import cortexLogo from "./assets/cortex-xcor-dark.svg";
 
 const steps = [
   ["Destination", "Choose your apps and tenant"],
@@ -39,23 +39,15 @@ const steps = [
   ["Send", "Run once or continuously"],
 ];
 const descriptions: Record<Signal, string> = {
-  crashes: "Fatal Android or iOS crashes with native stack traces.",
-  exceptions: "Handled Android exceptions and unhandled JavaScript errors.",
-  freezes: "Main-thread freezes lasting 6–10 seconds on mobile apps.",
-  network: "Request timeouts and connection resets across your journeys.",
-  pages: "Slower web page loads caused by a large hero image.",
-  payments: "Database pool exhaustion or a payment-rail outage.",
+  crashes: "Android & iOS",
+  exceptions: "Handled mobile & unhandled web errors",
+  freezes: "6–10 second mobile freezes",
+  network: "Timeouts & connection resets",
+  pages: "Slow-loading hero image",
+  payments: "Database or payment-rail outage",
 };
 const platformName = (p: string) =>
   p === "ios" ? "iOS" : p === "web" ? "Web" : "Android";
-const clock = (seconds: number) => {
-  const s = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(s / 3600)
-    .toString()
-    .padStart(2, "0")}:${Math.floor((s % 3600) / 60)
-    .toString()
-    .padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
-};
 const read = (key: string) => {
   try {
     return JSON.parse(localStorage.getItem(key) || "null");
@@ -119,7 +111,10 @@ export default function App() {
   const specId = run?.spec_id || read("sg_launch_attempt")?.specId;
   const savedSpec = useQuery({
     queryKey: ["run-spec", specId, run?.spec_version],
-    queryFn: () => api(`/specs/${specId}${run?.spec_version ? `?version=${run.spec_version}` : ""}`),
+    queryFn: () =>
+      api(
+        `/specs/${specId}${run?.spec_version ? `?version=${run.spec_version}` : ""}`,
+      ),
     enabled: !!specId,
     retry: false,
   });
@@ -127,8 +122,6 @@ export default function App() {
   const authError = [status.error, caps.error, settings.error, job.error].find(
     (e) => e instanceof ApiError && e.status === 401,
   );
-  const active =
-    !!runId && (!run || ["queued", "running", "paused"].includes(run.status));
   const waiting = !!read("sg_launch_attempt") && !runId;
   useEffect(() => {
     save("sg_workflow_v1", draft);
@@ -312,51 +305,11 @@ export default function App() {
   const liveBlocked =
     !dry && draft.destination === "end_to_end" && !configured && !pending;
   const runSpec = savedSpec.data?.spec;
-  const duration = runSpec?.traffic?.duration_minutes || 0;
-  const elapsed = run?.started
-    ? Math.max(0, (run.ended || now) - run.started)
-    : 0;
-  const remaining = Math.max(0, duration * 60 - elapsed);
-  const draining =
-    run?.status === "running" && run.desired_status !== "running";
-  const stale =
-    !!run?.heartbeat && now - run.heartbeat > 30 && run.status === "running";
-  const sending =
-    online && !job.isError && !stale && run?.status === "running" && !draining;
-  const runLabel =
-    !online || job.isError
-      ? "Connection lost"
-      : stale
-        ? "Worker not responding"
-        : run?.status === "running"
-          ? draining
-            ? run.desired_status === "paused"
-              ? "Pausing"
-              : "Stopping"
-            : duration && remaining === 0
-              ? "Finishing deliveries"
-              : run.dry_run
-                ? "Generating locally"
-                : "Sending data"
-          : (
-              {
-                queued: "Starting",
-                paused: "Paused",
-                completed: "Completed",
-                stopped: "Stopped",
-                failed: "Run needs attention",
-              } as Record<string, string>
-            )[run?.status || ""] || "Loading run";
-  const counters = run?.counters || {};
   return (
     <div className="app-shell">
       <aside className="workflow-rail">
         <div className="brand">
-          <span className="brand-mark" />
-          <div>
-            CORTEX <span>XCOR</span>
-            <small>SESSION GENERATOR</small>
-          </div>
+          <img src={cortexLogo} alt="Cortex XCOR" width="184" height="27" />
         </div>
         <div className="rail-intro">
           <ActivityLogIcon />
@@ -366,6 +319,7 @@ export default function App() {
           {steps.map(([title, sub], i) => (
             <button
               key={title}
+              title={sub}
               disabled={!!busy || !!runId || waiting || i > step}
               onClick={() => {
                 setStep(i);
@@ -382,24 +336,10 @@ export default function App() {
               </span>
               <span>
                 <strong>{title}</strong>
-                <small>{sub}</small>
               </span>
             </button>
           ))}
         </nav>
-        <div className="rail-bottom">
-          <span className={"status-dot " + (online ? "online" : "")} />
-          {online
-            ? "Local server connected"
-            : status.isPending
-              ? "Connecting to server"
-              : "Server unavailable"}
-          <p>
-            Configure. Preview. Send.
-            <br />
-            Every run starts with your choices.
-          </p>
-        </div>
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -407,9 +347,16 @@ export default function App() {
             Session Generator <span className="muted">/</span>{" "}
             <strong>{steps[step][0]}</strong>
           </span>
-          <Badge tone={online ? "success" : ""}>
+          <span
+            className="server-connection"
+            title="Connection to the local generator server"
+          >
+            <i
+              className={"status-dot " + (online ? "online" : "")}
+              aria-hidden="true"
+            />
             {online ? "Connected" : status.isPending ? "Connecting" : "Offline"}
-          </Badge>
+          </span>
         </header>
         <main>
           {((!online && !status.isPending) || caps.isError) && (
@@ -456,31 +403,32 @@ export default function App() {
               </Button>
             </div>
           )}
-          <div className="page-heading">
-            <div className="eyebrow">STEP {step + 1} OF 4</div>
-            <h1>
-              {
-                [
-                  "Where should the data go?",
-                  "What would you like to generate?",
-                  "Preview your data",
-                  runId ? "Your run" : "Ready to send",
-                ][step]
-              }
-            </h1>
-            <p>
-              {
-                [
-                  "Connect your apps and the tenant that will receive their distributed traces.",
-                  "Start with standard traffic or a regression, then choose the signals and sending schedule.",
-                  "Inspect real session timelines and backend spans before starting a run.",
-                  runId
-                    ? "Follow your run here. You can leave this page and return to its progress."
-                    : "Review the destination and schedule, then start your run.",
-                ][step]
-              }
-            </p>
-          </div>
+          {!(step === 3 && runId) && (
+            <div className="page-heading">
+              <h1>
+                {
+                  [
+                    "Choose a destination",
+                    "Customize traffic",
+                    "Preview data",
+                    runId ? "Your run" : "Ready to send",
+                  ][step]
+                }
+              </h1>
+              <p>
+                {
+                  [
+                    "Choose your apps and trace destination.",
+                    "Pick a flow, signals, and schedule.",
+                    "Review a local sample before sending.",
+                    runId
+                      ? "Follow your run here. You can leave this page and return to its progress."
+                      : "Check your choices, then start.",
+                  ][step]
+                }
+              </p>
+            </div>
+          )}
           {error && (
             <div className="error-notice" role="alert">
               <strong>Couldn’t complete that action</strong>
@@ -490,9 +438,6 @@ export default function App() {
           {step === 0 && (
             <>
               <Panel title="Applications" action={<Badge>Production</Badge>}>
-                <p className="section-description">
-                  Select the platforms you want to generate sessions for.
-                </p>
                 <div className="platform-picker">
                   {(["android", "ios", "web"] as Platform[]).map((p) => (
                     <button
@@ -515,7 +460,7 @@ export default function App() {
                     </span>
                     <Field
                       label={platformName(a.platform) + " app ID"}
-                      hint="Five-character ID from Cortex XCOR RUM."
+                      hint="From your RUM app."
                     >
                       <input
                         value={a.appId}
@@ -529,10 +474,7 @@ export default function App() {
                         }
                       />
                     </Field>
-                    <Field
-                      label={platformName(a.platform) + " app name"}
-                      hint="Use the name shown in your RUM app."
-                    >
+                    <Field label={platformName(a.platform) + " app name"}>
                       <input
                         value={a.name}
                         onChange={(e) =>
@@ -566,7 +508,7 @@ export default function App() {
                   >
                     <LayersIcon />
                     <strong>Sessions + distributed traces</strong>
-                    <span>Follow each app request through the backend.</span>
+                    <span>RUM with linked backend traces</span>
                   </button>
                   <button
                     className={
@@ -578,14 +520,14 @@ export default function App() {
                   >
                     <MobileIcon />
                     <strong>Sessions only</strong>
-                    <span>Generate RUM data for your apps.</span>
+                    <span>RUM only</span>
                   </button>
                 </div>
                 {draft.destination === "end_to_end" && (
                   <div className="destination-fields">
                     <Field
                       label="Chronosphere tenant"
-                      hint="Enter the tenant name or its chronosphere.io URL."
+                      hint="Tenant name or URL"
                     >
                       <input
                         value={draft.tenant}
@@ -600,8 +542,8 @@ export default function App() {
                       label="Chronosphere API token"
                       hint={
                         configured
-                          ? "A token is saved on this server. Enter a value to replace it."
-                          : "Optional for previews and local tests. Required to send traces."
+                          ? "Saved. Enter a token to replace it."
+                          : "Required for live traces"
                       }
                     >
                       <input
@@ -614,11 +556,13 @@ export default function App() {
                         onChange={(e) => setToken(e.target.value)}
                       />
                     </Field>
-                    <p className="hint full">
-                      Tokens are stored securely on the server. App network-span
-                      forwarding must point to this tenant to join sessions and
-                      traces.
-                    </p>
+                    <details className="connection-details full">
+                      <summary>Connection requirements</summary>
+                      <p className="hint">
+                        Tokens stay on the server. App network-span forwarding
+                        must point to this tenant.
+                      </p>
+                    </details>
                   </div>
                 )}
               </Panel>
@@ -641,9 +585,7 @@ export default function App() {
                     }
                   >
                     <strong>Standard traffic</strong>
-                    <span>
-                      Normal user journeys. Add individual signals below.
-                    </span>
+                    <span>Everyday user journeys</span>
                   </button>
                   <button
                     className={
@@ -660,7 +602,7 @@ export default function App() {
                     }
                   >
                     <strong>Regression</strong>
-                    <span>Reproduce a specific failure or slowdown.</span>
+                    <span>A specific failure or slowdown</span>
                   </button>
                 </div>
                 <div className="form-grid">
@@ -706,8 +648,7 @@ export default function App() {
                 action={<Badge>{selected.length} selected</Badge>}
               >
                 <p className="section-description">
-                  Choose the signals and their share of eligible sessions.
-                  Normal session activity is always included.
+                  Share of eligible sessions.
                 </p>
                 <div className="signal-list">
                   {signalKeys.map((key) => (
@@ -737,7 +678,7 @@ export default function App() {
                           <small>
                             {descriptions[key]}
                             {!available(key, draft) &&
-                              " Select a supported platform in step 1."}
+                              " · Requires another platform"}
                           </small>
                         </span>
                       </label>
@@ -760,7 +701,7 @@ export default function App() {
                               })
                             }
                           />
-                          <span>% affected</span>
+                          <span>%</span>
                         </div>
                       )}
                     </div>
@@ -806,7 +747,7 @@ export default function App() {
                   <div className="compact-field">
                     <Field
                       label="Number of sessions"
-                      hint="A single batch, spread across the last five minutes."
+                      hint="Spread over the last 5 minutes"
                     >
                       <input
                         type="number"
@@ -822,10 +763,7 @@ export default function App() {
                 ) : (
                   <>
                     <div className="form-grid">
-                      <Field
-                        label="Sessions per minute"
-                        hint="Average rate across all selected apps."
-                      >
+                      <Field label="Sessions per minute" hint="Across all apps">
                         <input
                           type="number"
                           min="0.1"
@@ -881,15 +819,16 @@ export default function App() {
                           {number(Math.round(draft.rate * draft.duration))}{" "}
                           sessions
                         </strong>{" "}
-                        over {draft.duration} minutes. Traffic stops
-                        automatically when the duration ends.
+                        · automatic stop after {draft.duration} minutes.
                       </span>
                     </div>
-                    <p className="hint">
-                      Keep the server running and your Mac awake. Pausing does
-                      not extend the scheduled end time; in-flight sessions
-                      finish before the run pauses.
-                    </p>
+                    <details className="connection-details">
+                      <summary>While running</summary>
+                      <p className="hint">
+                        Keep your Mac awake. Pausing finishes in-flight sessions
+                        and does not extend the end time.
+                      </p>
+                    </details>
                   </>
                 )}
               </Panel>
@@ -979,7 +918,7 @@ export default function App() {
                     onClick={() => setDry(false)}
                   >
                     <strong>Send to destination</strong>
-                    <span>Deliver to the apps and tenant shown above.</span>
+                    <span>Live delivery</span>
                   </button>
                   <button
                     disabled={waiting}
@@ -988,10 +927,7 @@ export default function App() {
                     onClick={() => setDry(true)}
                   >
                     <strong>Local test</strong>
-                    <span>
-                      Generate the same payloads locally. No data leaves this
-                      server.
-                    </span>
+                    <span>No external delivery</span>
                   </button>
                 </div>
                 {liveBlocked && (
@@ -1008,8 +944,8 @@ export default function App() {
                 )}
                 <p className="hint">
                   {dry
-                    ? "Local output checks the generator without contacting either destination."
-                    : "Delivery counters show API acceptance. Visibility in Cortex also depends on app forwarding, retention, and tenant configuration."}
+                    ? "No data leaves this server."
+                    : "API acceptance is shown here; confirm visibility in your destination."}
                 </p>
                 <div className="send-action">
                   <Button
@@ -1038,242 +974,18 @@ export default function App() {
             </>
           )}
           {step === 3 && runId && (
-            <>
-              <Panel className="run-panel">
-                <div className="run-status-header">
-                  <div
-                    className={
-                      "sending-indicator " + (sending ? "animating" : "")
-                    }
-                    aria-hidden="true"
-                  >
-                    <span />
-                    <span />
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                  <div>
-                    <div className="eyebrow">
-                      {run?.dry_run
-                        ? "LOCAL TEST · NO EXTERNAL DELIVERY"
-                        : run?.mode === "live"
-                          ? "CONTINUOUS SENDING"
-                          : "BATCH DELIVERY"}
-                    </div>
-                    <h2 aria-live="polite">{runLabel}</h2>
-                  </div>
-                  <Badge tone={run?.dry_run ? "" : "success"}>
-                    {run?.dry_run ? "Local test" : run?.status || "Connecting"}
-                  </Badge>
-                </div>
-                <div className="run-route">
-                  <div>
-                    <MobileIcon />
-                    <span>
-                      {runSpec?.targets
-                        ?.map(
-                          (a: Json) =>
-                            `${a.app_name} · ${platformName(a.platform)} (${a.embrace_app_id})`,
-                        )
-                        .join(", ") || "Your applications"}
-                    </span>
-                  </div>
-                  <div
-                    className={"sending-path " + (sending ? "animating" : "")}
-                  >
-                    <i />
-                    <i />
-                    <i />
-                  </div>
-                  <div>
-                    <LayersIcon />
-                    <span>
-                      {run?.dry_run
-                        ? "Local output"
-                        : runSpec?.chronosphere?.tenant || "Cortex XCOR RUM"}
-                    </span>
-                  </div>
-                </div>
-                <div className="run-metrics">
-                  <div>
-                    <span>Sessions generated</span>
-                    <strong>
-                      {number(counters.sessions ?? run?.sessions ?? 0)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>
-                      {run?.dry_run
-                        ? "Records generated"
-                        : "Records acknowledged by APIs"}
-                    </span>
-                    <strong>
-                      {number(
-                        counters.accepted ??
-                          (counters.embrace_spans || 0) +
-                            (counters.embrace_logs || 0) +
-                            (counters.otlp_traces || 0),
-                      )}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Delivery errors</span>
-                    <strong className={counters.errors ? "danger" : ""}>
-                      {number(counters.errors || 0)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Elapsed</span>
-                    <strong>{clock(elapsed)}</strong>
-                  </div>
-                </div>
-                <p className="hint">
-                  {run?.dry_run
-                    ? "Generated locally. No data was sent to Embrace or Cortex XCOR."
-                    : "Upload acknowledgements only: these records include individual spans and logs across Embrace and Cortex XCOR. They are not a count of sessions visible in Embrace. Dashboard visibility requires a separate check."}
-                </p>
-                {run?.mode === "live" && (
-                  <div className="run-progress">
-                    <div>
-                      <span>
-                        {runSpec?.traffic.rate_per_minute || "—"} sessions per
-                        minute · {duration || "—"} minutes
-                      </span>
-                      <strong>
-                        {run?.ended
-                          ? "Run ended"
-                          : remaining
-                            ? clock(remaining) + " remaining"
-                            : "Finishing pending sessions"}
-                      </strong>
-                    </div>
-                    <progress
-                      aria-label="Sending duration"
-                      value={Math.min(elapsed, duration * 60)}
-                      max={duration * 60 || 1}
-                    />
-                    <p className="hint">
-                      Started {time(run.started)}
-                      {duration && run.started
-                        ? ` · Scheduled end ${time(run.started + duration * 60)}`
-                        : ""}
-                      . In-flight sessions may finish after the scheduled end.
-                    </p>
-                  </div>
-                )}
-                {draining && (
-                  <p className="hint">
-                    {run.desired_status === "paused"
-                      ? "Waiting for in-flight sessions to finish before pausing."
-                      : "Finishing pending deliveries before stopping."}
-                  </p>
-                )}
-                {stale && (
-                  <p className="warning">
-                    The worker hasn’t reported progress recently. Reconnect or
-                    check the server log before starting another run.
-                  </p>
-                )}
-                {job.isError && (
-                  <p className="warning">
-                    {job.error.message} Run status will reconnect automatically.
-                  </p>
-                )}
-                {job.error instanceof ApiError && job.error.status === 404 && (
-                  <Button onClick={again}>Return to setup</Button>
-                )}
-                {run?.status === "failed" && (
-                  <p className="warning">
-                    The run stopped unexpectedly. Review its receipts and the
-                    server log before sending again; some data may already have
-                    been delivered.
-                  </p>
-                )}
-                <div className="run-controls">
-                  {active && (
-                    <>
-                      {run?.status === "paused" ? (
-                        <Button
-                          onClick={() => control("resume")}
-                          disabled={!!busy || !online}
-                        >
-                          <PlayIcon />
-                          Resume
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={() => control("pause")}
-                          disabled={
-                            !!busy ||
-                            !online ||
-                            draining ||
-                            run?.status !== "running"
-                          }
-                        >
-                          <PauseIcon />
-                          Pause
-                        </Button>
-                      )}
-                      <Button
-                        kind="danger-button"
-                        onClick={() => control("stop")}
-                        disabled={
-                          !!busy ||
-                          !online ||
-                          run?.desired_status === "stopped" ||
-                          !run
-                        }
-                      >
-                        <StopIcon />
-                        Stop
-                      </Button>
-                    </>
-                  )}
-                  {!active && (
-                    <Button kind="primary" onClick={again}>
-                      Create another run
-                      <ArrowRightIcon />
-                    </Button>
-                  )}
-                  <span className="hint">Run {runId.slice(0, 8)}</span>
-                </div>
-              </Panel>
-              {!!run?.receipts?.length && (
-                <details className="panel">
-                  <summary>Recent delivery receipts</summary>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Destination</th>
-                          <th>Type</th>
-                          <th>Status</th>
-                          <th>HTTP response</th>
-                          <th>Records acknowledged</th>
-                          <th>Rejected</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {run.receipts.slice(0, 20).map((r: Json) => (
-                          <tr key={r.id}>
-                            <td>{r.target}</td>
-                            <td>{r.kind}</td>
-                            <td>{r.status}</td>
-                            <td>
-                              {r.http_status ??
-                                (run.dry_run ? "Local only" : "No response")}
-                            </td>
-                            <td>{number(r.accepted)}</td>
-                            <td>{number(r.rejected)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-              )}
-            </>
+            <RunView
+              run={run}
+              spec={runSpec}
+              runId={runId}
+              online={online}
+              fetchError={job.error}
+              updatedAt={job.dataUpdatedAt}
+              busy={busy}
+              now={now}
+              control={control}
+              again={again}
+            />
           )}
           {!(step === 3 && runId) && (
             <footer className="workflow-footer">
@@ -1288,15 +1000,7 @@ export default function App() {
                 <ArrowLeftIcon />
                 Back
               </Button>
-              <span>
-                {step === 0
-                  ? "You can preview before adding a token."
-                  : step === 1
-                    ? "Your choices are saved on this device."
-                    : step === 2
-                      ? "Nothing has been sent."
-                      : "Ready when you are."}
-              </span>
+
               {step < 3 && (
                 <Button
                   kind="primary"
