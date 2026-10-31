@@ -239,6 +239,11 @@ test("lost start response recovers the same run after refresh", async ({
   let created = "";
   await page.route("**/api/runs", async (route) => {
     if (route.request().method() === "POST") {
+      const { spec_id } = route.request().postDataJSON();
+      const correction = await request.patch(`/api/specs/${spec_id}`, {
+        data: { expected_version: 1, patch: [{ op: "replace", path: "/targets/0/embrace_app_id", value: "5nrc3" }] },
+      });
+      expect(correction.ok()).toBeTruthy();
       const response = await route.fetch();
       created = (await response.json()).id;
       await route.abort();
@@ -263,6 +268,25 @@ test("lost start response recovers the same run after refresh", async ({
   expect(id).toBe(created);
   const runs = await (await request.get("/api/runs")).json();
   expect(runs.filter((r: any) => r.id === created)).toHaveLength(1);
+  await page.getByRole("button", { name: "Create another run" }).click();
+  await expect(page.getByLabel("Android app ID", { exact: true })).toHaveValue("5nrc3");
+});
+
+test("a definitive credential preflight error unlocks Destination for correction", async ({ page }) => {
+  await connect(page);
+  await page.getByLabel("Number of sessions").fill("2");
+  await preview(page);
+  await page.route("**/api/runs", async (route) => {
+    if (route.request().method() === "POST")
+      await route.fulfill({ status: 422, json: { detail: "The Cortex XCOR token could not be read. Save it again in Destination. No run was started." } });
+    else await route.continue();
+  });
+  await page.getByRole("button", { name: "Start local test", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("No run was started");
+  await expect(page.getByRole("button", { name: "Retry start request" })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("sg_launch_attempt"))).toBeNull();
+  await page.getByRole("button", { name: /Destination Choose your apps and tenant/ }).click();
+  await expect(page.getByRole("heading", { name: "Where should the data go?" })).toBeVisible();
 });
 
 test("laptop and mobile layout stay within the viewport", async ({ page }) => {

@@ -223,6 +223,23 @@ class RunTests(unittest.TestCase):
         crash = next(x for x in rows if x["id"] == "baseline-crash")
         self.assertAlmostEqual(crash["emitted_pct"], 10, delta=.5)
 
+    def test_exact_backend_quotas_reserve_narrow_release_cohorts(self):
+        # This clock/seed previously let broad payment stories occupy enough
+        # canary sessions to leave only 32 of the requested 33.6 fallbacks.
+        # Exercise the CLI's shared RNG and inspect emitted payloads, not plans.
+        s = specs.load(os.path.join(ROOT, 'spec/examples/baseline-burst.json'))
+        for clock in ('2026-10-31T02:20:05.400Z', '2026-10-31T02:24:05.400Z'):
+            with self.subTest(clock=clock), tempfile.TemporaryDirectory() as state:
+                random.seed(7331)
+                r = SpecRun(s, load_config(None), persist=False, state_dir=state,
+                            now_ms=specs.parse_time(clock))
+                sender = Collect()
+                r.run_batch(sender, quiet=True)
+                sender.pool.shutdown(wait=True)
+                bad = [row for row in r.emitted.summary()['faults']
+                       if row['eligible'] and not row['within_tolerance']]
+                self.assertEqual(bad, [])
+
     def test_new_android_faults(self):
         s = burst(traffic={"mode": "burst", "count": 400, "window": {"last_minutes": 8}},
                   destinations={"mode": "end_to_end"}, chronosphere={"tenant": "acme-prod"})

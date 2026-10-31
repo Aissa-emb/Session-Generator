@@ -357,6 +357,14 @@ class Planner:
 
     def allocate_batch(self, skeletons):
         exact = [f for f in self.faults if f.quota in ("auto", "exact")]
+        # Backend stories are mutually exclusive. Reserve narrowly filtered
+        # cohorts first: otherwise a broad fault can consume canary slots that
+        # a later fault needs, despite enough eligible stable sessions remaining.
+        # Keep dependent faults after their parents and client fault precedence.
+        backend = sorted((f for f in exact if f.kind == "backend" and not f.with_fault),
+                         key=lambda f: sum(self.eligible(f, sk, set()) and f.rate_at(sk["start_ms"]) > 0
+                                           for sk in skeletons))
+        exact = [f for f in exact if f.kind == "client" and not f.with_fault] + backend + [f for f in exact if f.with_fault]
         loose = [f for f in self.faults if f.quota == "probability"]
         assigned, report = quota.allocate_exact(
             skeletons, [f.raw for f in exact], lambda raw, sk: self.by_id[raw["id"]].rate_at(sk["start_ms"]),

@@ -133,6 +133,23 @@ export default function App() {
     save("sg_workflow_v1", draft);
   }, [draft]);
   useEffect(() => {
+    const spec = savedSpec.data?.spec;
+    if (!spec?.targets) return;
+    // A recovered run may use a corrected saved destination. Carry that
+    // destination into the next draft instead of restoring stale browser IDs.
+    setDraft((d) => ({
+      ...d,
+      apps: spec.targets.map((t: Json) => ({
+        platform: t.platform,
+        appId: t.embrace_app_id,
+        name: t.app_name,
+        region: t.region,
+      })),
+      destination: spec.destinations.mode,
+      tenant: spec.chronosphere?.tenant || "",
+    }));
+  }, [savedSpec.data]);
+  useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [step]);
   useEffect(() => {
