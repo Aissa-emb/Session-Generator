@@ -22,7 +22,15 @@ FORBIDDEN = {"demo", "demos", "fake", "fakes", "faked", "test", "tests", "testin
 SDK_TERMS = {"thread_blockage_sample","perf.thread_blockage_sample", "sample_code", "sample_overhead"}
 SERVICE_NAME = re.compile(r"^[a-z][a-z0-9-]*-(experience-api|service|orchestrator|gateway|worker)$")
 # The platform service names a generated backend may emit besides the conventions above.
-SERVICE_EXCEPTIONS = {"api-gateway"}
+from .causal.registry import SERVICES, PROVENANCE
+SERVICE_EXCEPTIONS = {"api-gateway", *SERVICES}
+PROVENANCE_KEYS = PROVENANCE | {"emb.properties." + k for k in PROVENANCE}
+
+def permitted_provenance(path, text):
+    if text in PROVENANCE_KEYS:
+        return True
+    return (text == "synthetic" and ".deployment.environment.name" in path or
+            text == "session-generator" and ".telemetry.sdk.name" in path)
 # Split words on separators and camelCase; identifiers such as 78S7QA stay one token.
 _SPLIT = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z])(?=[A-Z])")
 EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
@@ -137,7 +145,7 @@ def lint_payloads(deliveries, max_issues=50):
     for d in deliveries:
         payload = d["payload"]
         for path, text in _strings(payload, f"$.{d['target']}.{d['kind']}"):
-            bad = forbidden_in(text)
+            bad = set() if permitted_provenance(path, text) else forbidden_in(text)
             if bad:
                 add("error", path, f"Emitted value \"{text[:80]}\" contains {', '.join(sorted(bad))}.", "forbidden_word")
             if _identifier(path):

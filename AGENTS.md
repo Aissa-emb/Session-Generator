@@ -76,7 +76,7 @@ python3 -m unittest discover -s tests -v
 
 ## What the owner cares about
 
-1. **It must look like real production data.** Viewers must not be able to tell it is synthetic. Never put "demo", "fake", "test", "sample" or similar into session properties, attribute values, service names, IDs, URLs or log text. Use the formats real SDKs and backends produce.
+1. **Causal telemetry provenance (2026-10-31):** The owner explicitly requires synthetic provenance for the new causal scenarios. Allow the documented `demo.*` keys, synthetic identities and the canonical Vantra catalog. Do not conceal simulation or relax secret/PII checks. This supersedes the following historical V1 guidance for causal mode. **Historical V1 realism:** Viewers must not be able to tell it is synthetic. Never put "demo", "fake", "test", "sample" or similar into session properties, attribute values, service names, IDs, URLs or log text. Use the formats real SDKs and backends produce.
 2. **Enterprise realism.** Service names follow enterprise conventions (`<line-of-business>-experience-api`, `*-service`, `*-orchestrator`, `*-gateway`, `*-worker`). The owner rejected names like `travel-bff`. Errors must be believable root causes a real team would debug (connection pool exhaustion, deadlocks, timeouts), with exception types and stack traces in the right language.
 3. **Professional tone** in anything user-facing: no analogies or folksy wording.
 4. **Correctness over guesses.** Payload formats here were taken from the SDK source code and real captures, not invented. Keep it that way: when you add a signal, find how the real SDK emits it first.

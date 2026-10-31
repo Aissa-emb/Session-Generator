@@ -20,6 +20,73 @@ from pydantic import (
 )
 
 
+class Scenario(Enum):
+    healthy = 'healthy'
+    signin_outage = 'signin-outage'
+    slow_history = 'slow-history'
+    contract_regression = 'contract-regression'
+    transfer_response_loss = 'transfer-response-loss'
+    worker_backlog = 'worker-backlog'
+    frontend_regression = 'frontend-regression'
+    connectivity = 'connectivity'
+    travel_provider = 'travel-provider'
+
+
+class Variant(Enum):
+    affected = 'affected'
+    control = 'control'
+    recovered = 'recovered'
+    scheduled = 'scheduled'
+
+
+class Mode(Enum):
+    single = 'single'
+    mixed = 'mixed'
+
+
+class Cache(Enum):
+    cold = 'cold'
+    warm = 'warm'
+
+
+class Network(Enum):
+    wifi = 'wifi'
+    cellular = 'cellular'
+    constrained = 'constrained'
+
+
+class ClientFailure(Enum):
+    handled = 'handled'
+    fatal = 'fatal'
+
+
+class ConnectivityPhase(Enum):
+    pre_send = 'pre_send'
+    post_send = 'post_send'
+
+
+class Region(Enum):
+    us_east_1 = 'us-east-1'
+    eu_west_1 = 'eu-west-1'
+    ap_southeast_2 = 'ap-southeast-2'
+
+
+class Mix(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    healthy: confloat(ge=0.0, le=100.0)
+    hero: confloat(ge=0.0, le=100.0)
+    slow: confloat(ge=0.0, le=100.0)
+    other: confloat(ge=0.0, le=100.0)
+
+
+class Provider(Enum):
+    none = 'none'
+    analytics = 'analytics'
+    support = 'support'
+
+
 class Id(RootModel[constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,62}$')]):
     root: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,62}$')
 
@@ -93,7 +160,7 @@ class Environment(Enum):
     beta = 'beta'
 
 
-class Region(Enum):
+class Region1(Enum):
     us = 'us'
     eu = 'eu'
 
@@ -189,7 +256,7 @@ class Chronosphere(BaseModel):
     )
 
 
-class Mode(Enum):
+class Mode1(Enum):
     sessions_only = 'sessions_only'
     end_to_end = 'end_to_end'
 
@@ -203,7 +270,7 @@ class Destinations(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    mode: Mode
+    mode: Mode1
     backend_logs: bool | None = None
     backend_metrics: bool | None = None
     emit_client_spans: bool | None = Field(
@@ -298,7 +365,7 @@ class Population(BaseModel):
     ios: Ios | None = None
 
 
-class Mode1(Enum):
+class Mode2(Enum):
     live = 'live'
     burst = 'burst'
     backfill = 'backfill'
@@ -344,7 +411,7 @@ class Traffic(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    mode: Mode1
+    mode: Mode2
     rate_per_minute: confloat(le=600.0, gt=0.0) | None = None
     duration_minutes: confloat(ge=0.0, le=10080.0) | None = None
     daily_curve: DailyCurve | None = None
@@ -654,6 +721,43 @@ class IosTarget(BaseModel):
     bundle_id: constr(pattern=r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$') | None = None
 
 
+class Causal(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    scenario: Scenario
+    variant: Variant | None = None
+    mode: Mode | None = None
+    cache: Cache | None = None
+    network: Network | None = None
+    reference: bool | None = None
+    result_count: conint(ge=1, le=100) | None = None
+    client_failure: ClientFailure | None = None
+    connectivity_phase: ConnectivityPhase | None = None
+    retry: bool | None = None
+    partial_results: bool | None = None
+    region: Region | None = None
+    service_release: constr(pattern=r'^[0-9]{4}\.[0-9]{2}\.[0-9]{1,2}$') | None = None
+    incident_start: Timestamp | None = None
+    incident_minutes: confloat(ge=1.0, le=120.0) | None = None
+    cohort_share: Share | None = None
+    mix: Mix | None = None
+    replay_namespace: constr(pattern=r'^[a-f0-9]{32}$') | None = Field(
+        None, description='Exact-ID diagnostic replay. Local dry runs only.'
+    )
+    web_widget: bool | None = Field(
+        None,
+        description='Web-only blocking interaction variant, exclusive with the view-state failure.',
+    )
+    provider: Provider | None = Field(
+        None,
+        description='One consented external client request; no invented provider SERVER spans.',
+    )
+    version: Literal['1.0.0'] | None = Field(
+        None, description='Causal execution model version.'
+    )
+
+
 class Estate(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -696,7 +800,7 @@ class Target(BaseModel):
         description='Name of the app in Embrace; forwarded client spans use lower(name with spaces as underscores)-<platform>-<environment> as service.name.',
     )
     environment: Environment | None = None
-    region: Region | None = None
+    region: Region1 | None = None
     api_domains: ApiDomains | None = None
     otlp_endpoint: constr(max_length=512) | None = None
     android: AndroidTarget | None = None
@@ -712,6 +816,7 @@ class ScenarioSpec(BaseModel):
         ..., description='Schema version of this document.'
     )
     name: constr(max_length=120) | None = None
+    causal: Causal | None = None
     seed: int | None = Field(
         None,
         description='Seed for reproducible output; null draws a fresh seed per run.',

@@ -38,7 +38,7 @@ WEB_TARGET = {
     "environment": "production", "region": "us",
     "api_domains": dict(ANDROID_TARGET["api_domains"]),
     "web": {"sdk_version": "2.31.0", "cdn": "https://static.vantra.com", "router_integration": "route_templates",
-            "sdk_upload_spans": True, "origin_header": {"policy": "none"},
+            "sdk_upload_spans": False, "origin_header": {"policy": "none"},
             "estate": {"retail": {"origin": "https://www.vantra.com", "archetype": "multi_page"},
                        "banking": {"origin": "https://app.vantra.com", "archetype": "single_page"},
                        "travel": {"origin": "https://www.vantra.com", "archetype": "hybrid"}},
@@ -285,6 +285,18 @@ def validate(spec, now_ms=None, lint=True):
     import time
     now_ms = now_ms if now_ms is not None else time.time() * 1000
     issues = [_issue("error", path, message, "schema") for path, message in schema.validate(spec)]
+    causal = spec.get("causal") or {}
+    if causal:
+        if any(spec.get(k) for k in ("client_faults", "backend_faults", "web_performance", "verification_cases", "incidents", "rollouts")):
+            issues.append(_issue("error", "$.causal", "Causal scenarios own their outcomes; remove independent fault/rollout rules.", 'causal_contract'))
+        if causal.get("variant") == "scheduled" and not causal.get("incident_start"):
+            issues.append(_issue("error", "$.causal.incident_start", "Scheduled cohorts require an incident start.", 'causal_contract'))
+        if causal.get("mix") and sum(causal["mix"].values()) <= 0:
+            issues.append(_issue("error", "$.causal.mix", "At least one mixture weight must be positive.", 'causal_contract'))
+        if causal.get('web_widget') and (causal.get('scenario') != 'frontend-regression' or any(t['platform'] != 'web' for t in spec.get('targets', []))):
+            issues.append(_issue('error', '$.causal.web_widget', 'The blocking widget variant requires a web-only frontend regression.', 'causal_contract'))
+        if spec.get('destinations', {}).get('emit_client_spans'):
+            issues.append(_issue('error', '$.destinations.emit_client_spans', 'Causal demos use Network Span Forwarding; duplicate client export is disabled.', 'causal_contract'))
     if issues:
         return issues
     s = normalized(spec)

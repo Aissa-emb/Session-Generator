@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from xcorgen import limits
-from xcorgen.security import post, tenant_url
+from xcorgen.security import post, tenant_url, TransportError
 from . import secrets
 
 
@@ -27,8 +27,10 @@ def unpack(trace):
         common = attrs(rs.get('resource', {}).get('attributes', []))
         for ss in rs.get('scope_spans', rs.get('scopeSpans', [])):
             for sp in ss.get('spans', []):
+                parent=hexid(sp.get('parent_span_id',sp.get('parentSpanId')))
                 spans.append({'trace': hexid(sp.get('trace_id', sp.get('traceId'))), 'id': hexid(sp.get('span_id', sp.get('spanId'))),
-                              'parent': hexid(sp.get('parent_span_id', sp.get('parentSpanId'))),
+                              'parent': parent if parent.strip('0') else '',
+                              'links': {(hexid(l.get('trace_id',l.get('traceId'))),hexid(l.get('span_id',l.get('spanId')))) for l in sp.get('links',[])},
                               'attrs': dict(common, **attrs(sp.get('attributes', [])))})
     return spans
 
@@ -38,14 +40,38 @@ def traces(spec, sessions, token, transport=post):
     expected = {tid: s for s in sessions for tid in s.get('trace_ids', []) if s.get('traces')}
     ids = sorted(expected)
     observed = {}
+    raw_traces = []
+    not_found_queries = 0
+    query_errors = {}
     tenant = (spec.get('chronosphere') or {}).get('tenant')
     if not token or not tenant:
         return {'state': 'needs_action', 'expected': len(ids), 'message': 'Configure the Cortex XCOR token to query every known trace ID.'}
+    def query(trace_ids):
+        nonlocal not_found_queries
+        body = {'query_type': 'TRACE_IDS', 'trace_ids': trace_ids}
+        try:
+            for attempt in range(4):
+                try:
+                    response = json.loads(transport(tenant_url(tenant) + '/api/v1/data/traces', json.dumps(body).encode(),
+                        {'API-Token': token, 'Content-Type': 'application/json'}, max_response_bytes=32 * 1024 * 1024))
+                    break
+                except TransportError as error:
+                    if error.status not in (429,502,503,504):raise
+                    if attempt==3:
+                        query_errors.update({tid:error.status for tid in trace_ids})
+                        return []
+                    time.sleep(2**attempt)
+            return response.get('traces', [])
+        except TransportError as error:
+            if error.status != 404:
+                raise
+            not_found_queries += 1
+            # Some Data API deployments reject a batch if any ID is absent.
+            # Query each ID before concluding that every trace is missing.
+            return [tr for tid in trace_ids for tr in query([tid])] if len(trace_ids) > 1 else []
     for offset in range(0, len(ids), 8):
-        body = {'query_type': 'TRACE_IDS', 'trace_ids': ids[offset:offset + 8]}
-        response = json.loads(transport(tenant_url(tenant) + '/api/v1/data/traces', json.dumps(body).encode(),
-            {'API-Token': token, 'Content-Type': 'application/json'}, max_response_bytes=32 * 1024 * 1024))
-        for tr in response.get('traces', []):
+        for tr in query(ids[offset:offset + 8]):
+            raw_traces.append(tr)
             records = unpack(tr)
             if records:
                 observed[records[0]['trace']] = records
@@ -58,16 +84,36 @@ def traces(spec, sessions, token, transport=post):
         all_ids = {s['id'] for s in spans}
         missing = [s['parent'] for s in spans if s['parent'] and set(s['parent']) != {'0'} and s['parent'] not in all_ids]
         complete = len(roots) == 1 and roots[0]['attrs'].get('service.name') == app and not missing
+        causal=session.get('causal')
+        async_trace=bool(causal and tid not in {r['trace_id'] for r in causal['requests']})
+        if causal:
+            nodes={n['key']:n for n in causal['graph']}
+            required=[n for n in nodes.values() if n['trace_id']==tid and n['service']!='frontend']
+            actual={s['id']:s for s in spans}
+            payload_complete=all(n['span_id'] in actual and actual[n['span_id']]['parent']==
+                (nodes[n['parent']]['span_id'] if n['parent'] else '') for n in required)
+            payload_complete=payload_complete and all({(nodes[k]['trace_id'],nodes[k]['span_id']) for k in n['links']} <= actual[n['span_id']]['links'] for n in required)
+            complete=complete and payload_complete
+        if async_trace:
+            expected_ids={n['span_id'] for n in causal['graph'] if n['trace_id']==tid and n['service']!='frontend'}
+            complete=bool(expected_ids) and payload_complete and not missing
         sampling = {k: v for s in spans for k, v in s['attrs'].items() if k in ('behavior_dataset_slug', 'tail_sampling_rate') or 'sampling' in k or 'dataset' in k}
         row = {'trace_id': tid, 'retained': bool(spans), 'complete': complete, 'missing_parents': missing,
-               'sampling': sampling, 'url': f'https://{tenant}.chronosphere.io/traces/trace-detail/by-id/{tid}'}
+               'query_error':query_errors.get(tid),
+               'kind': 'asynchronous' if async_trace else 'request',
+               'sampling': sampling, 'url': f'https://{tenant}.chronosphere.io/traces/trace-detail/by-id/{tid}' if spans else None}
         rows.append(row)
         g = groups[target['platform'] + ':' + str(session.get('line_of_business'))]
         g['expected'] += 1
         g['retained'] += bool(spans)
         g['complete'] += complete
-    return {'state': 'verified' if ids else 'no_eligible_traces', 'expected': len(ids), 'retained': len(observed),
-            'complete': sum(r['complete'] for r in rows), 'groups': dict(groups), 'traces': rows}
+    from xcorgen.causal.validation import verify_returned_trace
+    causal_rows=[{'session_id':s['session_id'],'platform':s['platform'],
+        'navigation':verify_returned_trace(s['causal'],raw_traces)} for s in sessions if s.get('causal')]
+    return {'state': ('verified' if all(r['complete'] for r in rows) else 'incomplete') if ids else 'no_eligible_traces',
+            'expected': len(ids), 'retained': sum(r['retained'] for r in rows),
+            'complete': sum(r['complete'] for r in rows), 'groups': dict(groups), 'traces': rows,
+            'not_found_queries':not_found_queries, 'query_errors':query_errors, 'causal_sessions':causal_rows}
 
 
 def counted_sessions(sessions):

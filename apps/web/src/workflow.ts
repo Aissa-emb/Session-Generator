@@ -17,7 +17,24 @@ export type Draft = {
   apps: AppTarget[];
   destination: "end_to_end" | "sessions_only";
   tenant: string;
-  story: "standard" | "regression";
+  story: "standard" | "regression" | "causal";
+  causalScenario: string;
+  causalVariant: "affected" | "control" | "recovered" | "scheduled";
+  causalStart: string;
+  causalMinutes: number;
+  causalShare: number;
+  causalRegion: string;
+  causalRelease: string;
+  causalReference: boolean;
+  causalWidget: boolean;
+  causalProvider: string;
+  causalMix: number[];
+  causalMode: "single" | "mixed";
+  causalCache: "cold" | "warm";
+  causalNetwork: "wifi" | "cellular" | "constrained";
+  causalFailure: "handled" | "fatal";
+  causalConnectivity: "pre_send" | "post_send";
+  causalSeed: number;
   regression: string;
   flow: string;
   signals: Record<Signal, boolean>;
@@ -33,6 +50,23 @@ export const defaults: Draft = {
   destination: "end_to_end",
   tenant: "",
   story: "standard",
+  causalScenario: "healthy",
+  causalVariant: "affected",
+  causalMode: "single",
+  causalCache: "cold",
+  causalNetwork: "wifi",
+  causalFailure: "handled",
+  causalConnectivity: "pre_send",
+  causalSeed: 7331,
+  causalStart: "",
+  causalMinutes: 20,
+  causalShare: 50,
+  causalRegion: "us-east-1",
+  causalRelease: "2026.10.2",
+  causalReference: false,
+  causalWidget: false,
+  causalProvider: "none",
+  causalMix: [70,15,10,5],
   regression: "payments",
   flow: "all",
   signals: {
@@ -140,6 +174,14 @@ export function scheduleError(d: Draft) {
     (!Number.isFinite(d.duration) || d.duration < 1 || d.duration > 10080)
   )
     return "Choose a duration between 1 minute and 7 days.";
+  if (d.story === "causal") {
+    if (!Number.isInteger(d.causalSeed) || d.causalSeed < 0) return "Enter a nonnegative whole-number seed.";
+    if (d.causalVariant === "scheduled" && (!d.causalStart || !Number.isFinite(new Date(d.causalStart).getTime()))) return "Choose the incident start time.";
+    if (d.causalMinutes < 1 || d.causalMinutes > 120) return "Choose an incident duration from 1 to 120 minutes.";
+    if (d.causalShare < 0 || d.causalShare > 100) return "Choose a cohort share from 0 to 100%.";
+    if (d.causalMix.some(n => !Number.isFinite(n) || n < 0 || n > 100) || !d.causalMix.some(n => n > 0)) return "Set at least one positive traffic weight.";
+    return "";
+  }
   for (const key of Object.keys(d.signals) as Signal[])
     if (
       d.signals[key] &&
@@ -200,6 +242,21 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
   s.incidents = [];
   s.rollouts = [];
   s.web_performance = [];
+  if (d.story === "causal") {
+    const domain = d.causalScenario === "travel-provider" ? "travel" : "banking";
+    s.name = "Causal demo · " + d.causalScenario + " · " + d.causalVariant;
+    s.population.line_of_business_mix = { retail: 0, banking: Number(domain === "banking"), travel: Number(domain === "travel") };
+    s.seed = d.causalSeed;
+    s.causal = { scenario: d.causalScenario, variant: d.causalVariant, mode: d.causalMode,
+      cache: d.causalCache, network: d.causalNetwork, client_failure: d.causalFailure,
+      connectivity_phase: d.causalConnectivity, region: d.causalRegion, service_release: d.causalRelease,
+      reference: d.causalReference, provider: d.causalProvider,
+      web_widget: d.causalWidget && d.causalScenario === "frontend-regression" && d.apps.every(a=>a.platform==="web"),
+      mix: Object.fromEntries(["healthy","hero","slow","other"].map((k,i)=>[k,d.causalMix[i]])),
+      ...(d.causalVariant === "scheduled" ? {incident_start:new Date(d.causalStart).toISOString(), incident_minutes:d.causalMinutes, cohort_share:d.causalShare/100}: {}) };
+    s.destinations.backend_logs = true;
+    return s;
+  }
   const filters = d.flow === "all" ? {} : { lines_of_business: [d.flow] };
   const add = (
     key: Signal,

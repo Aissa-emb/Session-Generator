@@ -162,7 +162,12 @@ def live(store, job, version):
                         store.update('runs',job['id'],reports_by_version=reports)
                     version = latest
                     cfg = config(store, latest['spec'], job['dry_run'])
+                    if not job['dry_run'] and latest['spec'].get('causal', {}).get('replay_namespace'):
+                        raise ValueError('Exact-ID replay is restricted to local dry runs.')
                     runner = SpecRun(latest['spec'], cfg, persist=True, state_dir=str(store.directory / 'personas' / job['id']), now_ms=now * 1000)
+                    if latest['spec'].get('causal'):
+                        runner._causal_index = counters['sessions']
+                        runner.run_id = latest['spec']['causal'].get('replay_namespace') or job['id']
                     sender = ReceiptSender(store, dict(job, spec_version=latest['version']), latest['spec'], receipt)
                     senders.append(sender)
                     current = latest['version']
@@ -175,12 +180,14 @@ def live(store, job, version):
                     raise ValueError('Generated session failed the realism linter.')
                 runner.record(target, session, faults, deliveries)
                 key = identifier()
-                record = {'index': counters['sessions'], 'run_id': job['id'], 'target': target['id'], 'platform': target['platform'],
+                record = {'index': counters['sessions'], 'run_id': job['id'], 'dry_run': job['dry_run'], 'target': target['id'], 'platform': target['platform'],
                           'app_id': session.app_id, 'session_id': session.user_session_id, 'device_id': getattr(session, 'device_id', session.persona['device_id']),
                           'start_ms': session.start_ms, 'end_ms': session.end_ms, 'line_of_business': session.properties['business_unit'],
                           'faults': faults, 'traces': session.traces, 'trace_ids': expected_trace_ids(session, deliveries),
                           'sdk_sessions': runner.emitted.observations[-1].get('sdk_sessions', []),
                           'spec_version': current, 'part_ids': getattr(session,'sdk_session_ids',[]) + [p.id for p in getattr(session, 'parts', [])]}
+                if hasattr(session, 'causal_evidence'):
+                    record['causal'] = session.causal_evidence
                 pending[key] = {'remaining': len(deliveries), 'ok': True, 'record': record}
                 delivery_summary.annotate(deliveries, record)
                 for ordinal, d in enumerate(deliveries):

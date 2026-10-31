@@ -59,6 +59,9 @@ class Call:
 
 def simulate(session, key, params, start, rng=random):
     """Pick an outcome, build the backend trace and lay out the network phases of the request."""
+    if hasattr(session, "execution"):
+        from .causal.adapter import planned_call
+        return planned_call(session, key, start)
     profile, p = session.profile, session.persona
     ep = profile.endpoints[key]
     weights = dict(ep.outcomes)

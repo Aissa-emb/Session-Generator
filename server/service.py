@@ -130,6 +130,8 @@ class Service:
         if destination and destination != spec['destinations']['mode']:
             raise ValueError('Save the destination on the spec before starting.')
         spec = self.require_valid(spec)
+        if not dry_run and spec.get('causal', {}).get('replay_namespace'):
+            raise ValueError('Exact-ID replay is restricted to local dry runs.')
         if not dry_run and any(t['platform']=='ios' and t['embrace_app_id']=='ios00' for t in spec['targets']):
             raise ValueError('Create the iOS app in Embrace and replace ios00 before live delivery.')
         if not dry_run:

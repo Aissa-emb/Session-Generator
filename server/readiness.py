@@ -3,6 +3,7 @@ import json
 import time
 from pathlib import Path
 from xcorgen import limits, milestones, web_sites
+from xcorgen.causal.registry import SERVICES
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -11,9 +12,9 @@ def setup_kit(target):
     t = target.get('target', target)
     if target.get('kind') == 'chronosphere':
         return {'target': target['id'], 'tenant': target['tenant'], 'items': [
-            {'id': 'retention', 'title': 'Dataset and Allow behavior', 'instructions': 'Include every forwarded app service and the three experience APIs in vantra-end-to-end. Confirm the exact configuration diff before applying it.'}]}
+            {'id': 'retention', 'title': 'Dataset and Allow behavior', 'services':list(SERVICES), 'instructions': 'Include the canonical Vantra services and every forwarded app service in the scoped demo dataset. Preserve existing services and unrelated assignments; inspect the exact configuration diff before applying it.'}]}
     service = limits.forwarded_service_name(t.get('app_name', 'Vantra'), t['platform'], t.get('environment', 'production'))
-    services = [service, 'shop-experience-api', 'banking-experience-api', 'travel-experience-api']
+    services = [service, 'shop-experience-api', 'banking-experience-api', 'travel-experience-api', *SERVICES]
     items = [
         {'id': 'nsf', 'title': 'Network span forwarding', 'instructions': f"Include app {t['embrace_app_id']} with the Cortex XCOR destination and tenant; enable trace links for the organization.", 'domains': list(t['api_domains'].values())},
         {'id': 'retention', 'title': 'Dataset and retention', 'instructions': 'Add these services to vantra-end-to-end with a managed Allow behavior.', 'services': services},

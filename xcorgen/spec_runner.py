@@ -87,6 +87,11 @@ class SpecRun:
         self.planner = Planner(self.spec, rng)
         self.mode = self.spec["destinations"]["mode"]
         self.run_id = datetime.now().strftime("%Y%m%dT%H%M%S") + "-" + hex_id(3, rng)
+        if self.spec.get("causal"):
+            import uuid
+            self.run_id = self.spec["causal"].get("replay_namespace") or uuid.uuid4().hex
+        self._causal_index = 0
+        self.causal_evidence = []
         runtime = Runtime()
         pop = self.spec["population"]
         keys = [catalog.PROFILE_FOR[lob] for lob in catalog.LINES_OF_BUSINESS if pop["line_of_business_mix"].get(lob, 0) > 0]
@@ -143,6 +148,18 @@ class SpecRun:
         return None
 
     def session(self, start_ms, skel=None, fault_ids=None):
+        if self.spec.get("causal"):
+            from .causal.adapter import create
+            targets = list(self.generators)
+            tid = skel["target"] if skel else targets[self._causal_index % len(targets)]
+            target = self.generators[tid][0]
+            session, journey, deliveries = create(target, self.spec, start_ms, self._causal_index, self.run_id)
+            self._causal_index += 1
+            if len(self.causal_evidence) < 120:
+                self.causal_evidence.append(session.causal_evidence)
+            if not limits.trace_eligible(start_ms, self.now_ms):
+                deliveries = strip_traces(session, deliveries)
+            return target, session, journey, deliveries, []
         if skel is None:
             target, gen = self._pick_target()
             skel = self.planner.skeleton(gen, target, start_ms, self.now_ms, self.mode)
@@ -164,7 +181,7 @@ class SpecRun:
         if self.manifest:
             trace_ids = expected_trace_ids(s, deliveries)
             record = {
-                "index": self.session_index, "run_id": self.run_id, "target": target["id"], "platform": target["platform"], "app_id": s.app_id, "session_id": s.user_session_id,
+                "index": self.session_index, "run_id": self.run_id, "dry_run": self.dry_run, "target": target["id"], "platform": target["platform"], "app_id": s.app_id, "session_id": s.user_session_id,
                 "device_id": getattr(s, "device_id", s.persona["device_id"]), "start_ms": s.start_ms, "end_ms": s.end_ms,
                 "planned_start_ms": getattr(s, "planned_start_ms", s.start_ms),
                 "line_of_business": s.properties.get("business_unit"), "faults": fault_ids,
@@ -173,6 +190,10 @@ class SpecRun:
                 "part_ids": sorted({_part_id(d) for d in deliveries
                                     if d.get("fmt") == "envelope" and d["kind"] == "spans"} - {None})
                             + [p.id for p in getattr(s, "parts", [])]}
+            if hasattr(s, "causal_evidence"):
+                record["causal"] = s.causal_evidence
+                record["trace_ids"] = sorted({sp["traceId"] for d in deliveries if d["target"] == "otlp" and d["kind"] == "traces"
+                    for rs in d["payload"]["resourceSpans"] for ss in rs["scopeSpans"] for sp in ss["spans"]})
             if self.journal:
                 self.journal.plan_session(self.session_index, record, deliveries)
             else:
@@ -180,6 +201,9 @@ class SpecRun:
             self.session_index += 1
 
     def open_manifest(self, directory=None, resume=False, dry=False):
+        self.dry_run = dry
+        if self.spec.get("causal", {}).get("replay_namespace") and not dry:
+            raise ValueError("Exact-ID replay is restricted to local dry runs.")
         directory = directory or os.path.join(ROOT, ".runs", self.run_id)
         os.makedirs(directory, mode=0o700, exist_ok=True)
         self.manifest = os.path.join(directory, "manifest.jsonl")
@@ -277,6 +301,12 @@ class SpecRun:
     # --- bounded jobs ----------------------------------------------------------------------------------------
 
     def plan_batch(self):
+        if self.spec.get("causal"):
+            start_ms, end_ms = traffic_window(self.spec, self.now_ms)
+            starts = planned_starts(self.spec, self.spec["traffic"]["count"], start_ms, end_ms, self.rng)
+            targets = list(self.generators)
+            skeletons = [{"target": targets[i % len(targets)], "start_ms": t} for i, t in enumerate(starts)]
+            return skeletons, [[] for _ in starts], {"causal_scenario": self.spec["causal"]["scenario"], "sessions": len(starts)}
         start_ms, end_ms = traffic_window(self.spec, self.now_ms)
         starts = planned_starts(self.spec, self.spec["traffic"]["count"], start_ms, end_ms, self.rng)
         skeletons = []
@@ -312,6 +342,11 @@ class SpecRun:
                 d["due"] += delta_ms
             s.start_ms += delta_ms
             s.end_ms += delta_ms
+            if hasattr(s, "causal_evidence"):
+                s.causal_evidence["base_ms"] += delta_ms
+                for request in s.causal_evidence["frontend_requests"]:
+                    request["start"] += delta_ms
+                    request["end"] += delta_ms
             if s.traces and not limits.trace_eligible(s.start_ms, self.now_ms):
                 deliveries = strip_traces(s, deliveries)
             self.record(target, s, fault_ids, deliveries)
@@ -401,7 +436,7 @@ def expected_trace_ids(session, deliveries):
     requests={r['trace_id'] for r in session.plan.evidence if r.get('first_backend_span_id')}
     exported={sp['traceId'] for d in deliveries if d['target']=='otlp' and d['kind']=='traces'
               for rs in d['payload']['resourceSpans'] for ss in rs['scopeSpans'] for sp in ss['spans']}
-    return sorted(requests & exported) if session.traces else []
+    return sorted(exported if hasattr(session, 'causal_evidence') else requests & exported) if session.traces else []
 
 
 def _part_id(delivery):

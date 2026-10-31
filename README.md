@@ -2,7 +2,7 @@
 
 This project creates realistic Android, iOS and web sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. The guided UI and REST API configure one versioned ScenarioSpec. All of that activity is simulated by the generator; it does not run a real app or backend.
 
-The generator sends session data directly to Embrace using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Embrace's Network Spans Forwarding integration sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the Embrace session timeline.
+The generator sends session data directly to XCOR RUM using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Network Spans Forwarding sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the XCOR RUM session timeline when forwarding and retention are configured.
 
 ## Start Session Generator
 
@@ -21,7 +21,7 @@ After setup, double-click **Start Session Generator.command** in the project fol
 The UI has one four-step workflow:
 
 1. **Destination:** choose Android, iOS and/or web, enter each app's five-character ID and name, then choose sessions only or sessions plus distributed traces. For traces, enter your Chronosphere tenant and API token. The token stays on the server; it is never stored in the browser draft.
-2. **Customize:** select standard traffic or a regression, choose shopping, banking, travel or all journeys, then check the signals to include and set their affected-session percentages.
+2. **Customize:** select standard traffic or a regression and choose the signals to include. **Causal demo** provides nine coordinated banking/travel scenarios, affected/control/recovered cohorts, deterministic seeds, cache/network controls and scheduled incidents.
 3. **Preview:** inspect locally generated timelines, fault rates, web performance and a real backend trace waterfall. Preview sends nothing.
 4. **Send:** choose destination delivery or a **Local test**. A batch stops after its configured count. **Continuous sending** uses an average sessions-per-minute rate for 30 minutes, one hour, two hours or a custom duration. The running view shows a live receipt timeline, fully acknowledged sessions, backend spans, elapsed/remaining time and pause/stop controls. XCOR RUM uploads are counted by complete session; backend logs and metrics do not inflate the span total. Storage is marked unverified because an ingestion acknowledgement does not prove retention. Refreshing restores the current run.
 
@@ -38,7 +38,7 @@ AI/Copilot and MCP controls have been removed from the UI. Their experimental HT
 
 [Owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) lists app forwarding and live checks; [hosting](docs/v2/HOSTING.md) covers authenticated containers and deployment.
 
-Three lines of business are included:
+[Causal telemetry](docs/v2/CAUSAL-TELEMETRY.md) documents the new canonical service catalog, three-platform fixtures, ready-to-run examples, evidence gates and both presenter navigation directions. The existing standard/regression profiles remain available:
 
 | Profile | Brand | What visitors do | Backend |
 | --- | --- | --- | --- |

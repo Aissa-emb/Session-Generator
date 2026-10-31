@@ -93,7 +93,7 @@ class IOSSession(AndroidSession):
     def _log_common(self):
         return {
             "session.id": self.part.id,
-            "log.record.uid": emb_id(),
+            "log.record.uid": emb_id(self.rng),
             "user.id": self.user_id,
             **{"emb.properties." + k: v for k, v in self.properties.items()},
         }
@@ -160,7 +160,7 @@ class IOSSession(AndroidSession):
 
     def _startup(self, cold):
         t = self.t
-        tid, root = hex_id(16), hex_id(8)
+        tid, root = hex_id(16, self.rng), hex_id(8, self.rng)
         self.startup_ms = lat(350, 1100, self.rng) if cold else lat(80, 280, self.rng)
         regression = getattr(getattr(self, "plan", None), "slow_startup", None)
         if regression:
@@ -300,7 +300,7 @@ class IOSSession(AndroidSession):
             self._crash(name, reason, [function])
 
     def _crash(self, exc_type, message, frames):
-        crash_id = emb_id()
+        crash_id = emb_id(self.rng)
         self.part.crash_id = crash_id
         image = 0x100000000
         frame = {
@@ -308,7 +308,7 @@ class IOSSession(AndroidSession):
             "object_addr": image,
             "object_name": "Vantra",
             "symbol_addr": image + 0x1400,
-            "symbol_name": "-[CheckoutResultMapper mapResponse:]",
+            "symbol_name": frames[0] if exc_type == "SwiftFatalError" else "-[CheckoutResultMapper mapResponse:]",
         }
         payload = {
             "report": {
@@ -356,6 +356,12 @@ class IOSSession(AndroidSession):
             },
             "user": {"session_id": self.part.id},
         }
+        if exc_type == "SwiftFatalError":
+            payload["crash"]["error"] = {
+                "type": "mach", "reason": message,
+                "signal": {"signal": 5, "name": "SIGTRAP"},
+                "mach": {"exception": 6, "exception_name": "EXC_BREAKPOINT"},
+            }
         attrs = dict(
             self._log_common(),
             **{
@@ -381,8 +387,8 @@ class IOSSession(AndroidSession):
             "record_id": crash_id,
             "part_id": self.part.id,
             "time_ms": self.t,
-            "exception_type": "NSInvalidArgumentException",
-            "message": "Required response field was unavailable",
+            "exception_type": exc_type,
+            "message": message,
             "frames": [frame["symbol_name"]],
         }
         self._end_part()

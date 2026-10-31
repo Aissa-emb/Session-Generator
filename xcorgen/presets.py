@@ -197,6 +197,12 @@ def catalog_presets(now_ms=None):
         {'targets':[copy.deepcopy(IOS_TARGET)], 'population':{'platform_mix':{'vantra-ios':1}},
          'client_faults':[{'id':'ios-checkout-crash','platform':'ios','type':'ios_crash','rate':.2,
                            'filters':{'lines_of_business':['retail']},'details':{'endpoint':'place_order'}}]})
+    from .causal.registry import SCENARIOS
+    for key, (title, domain, journey, route) in SCENARIOS.items():
+        p['causal-'+key] = (title, 'Causal demos', 'One coherent execution across Android, iOS and web.',
+            {'causal': {'scenario':key,'variant':'affected','mode':'single','cache':'cold','network':'wifi'},
+             'population':{'line_of_business_mix':{k:int(k==domain) for k in ('retail','banking','travel')}},
+             'seed':7331})
     return p
 
 
@@ -217,6 +223,10 @@ def apply(spec, name, now_ms=None):
     presets = catalog_presets(now_ms)
     if name not in presets:
         raise KeyError(f"Unknown preset {name}. Options: {', '.join(sorted(presets))}")
+    if name.startswith('causal-'):
+        spec = copy.deepcopy(spec)
+        for key in ('client_faults','backend_faults','web_performance','incidents','rollouts','verification_cases'):
+            spec[key] = []
     out = merge(spec, presets[name][3])
     out.setdefault("stories", [])
     if name not in out["stories"]:

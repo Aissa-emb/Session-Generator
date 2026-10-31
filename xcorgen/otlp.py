@@ -107,7 +107,9 @@ def _span(s):
     for e in s.get("events", []):
         out += _len(11, _fixed64(1, e["timeUnixNano"]) + _str(2, e["name"]) + _kvs(3, e.get("attributes")))
     for link in s.get("links", []):
-        out += _len(13, _bytes_hex(1, link["traceId"]) + _bytes_hex(2, link["spanId"]) + _kvs(4, link.get("attributes")))
+        out += _len(13, _bytes_hex(1, link["traceId"]) + _bytes_hex(2, link["spanId"]) +
+                    _str(3, link.get('traceState', '')) + _kvs(4, link.get("attributes")) +
+                    _fixed32(6, link.get('flags', 0)))
     if "status" in s:
         st = s["status"] or {}
         out += _len(15, _str(2, st.get("message", "")) + _uint(3, st.get("code", 0)))
@@ -129,8 +131,8 @@ def encode_traces(req):
     for rs in req["resourceSpans"]:
         body = _len(1, _resource(rs["resource"]))
         for ss in rs["scopeSpans"]:
-            body += _len(2, _len(1, _scope(ss["scope"])) + b"".join(_len(2, _span(s)) for s in ss["spans"]))
-        out += _len(1, body)
+            body += _len(2, _len(1, _scope(ss["scope"])) + b"".join(_len(2, _span(s)) for s in ss["spans"]) + _str(3, ss.get('schemaUrl', '')))
+        out += _len(1, body + _str(3, rs.get('schemaUrl', '')))
     return out
 
 
@@ -140,8 +142,8 @@ def encode_logs(req):
     for rl in req["resourceLogs"]:
         body = _len(1, _resource(rl["resource"]))
         for sl in rl["scopeLogs"]:
-            body += _len(2, _len(1, _scope(sl["scope"])) + b"".join(_len(2, _log(r)) for r in sl["logRecords"]))
-        out += _len(1, body)
+            body += _len(2, _len(1, _scope(sl["scope"])) + b"".join(_len(2, _log(r)) for r in sl["logRecords"]) + _str(3, sl.get('schemaUrl', '')))
+        out += _len(1, body + _str(3, rl.get('schemaUrl', '')))
     return out
 
 

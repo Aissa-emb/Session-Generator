@@ -56,11 +56,12 @@ export default function PreviewStep({
     );
   const platforms = Object.keys(data.timelines);
   const selected = platforms.includes(platform) ? platform : platforms[0];
-  const rows = (data.timelines[selected] || [])
+  const causal = data.causal_previews?.[selected];
+  const rows = (causal?.timeline || data.timelines[selected] || [])
     .slice()
     .sort((a: Json, b: Json) => Number(a.start) - Number(b.start));
   const first = Number(rows[0]?.start) || 0;
-  const trace: Json[] = data.trace_waterfall || [];
+  const trace: Json[] = causal?.waterfall || data.trace_waterfall || [];
   const start = Math.min(...trace.map((r) => Number(r.start)));
   const duration = Math.max(
     1,
@@ -108,6 +109,18 @@ export default function PreviewStep({
           {busy ? "Refreshing…" : "Refresh preview"}
         </Button>
       </div>
+      {causal && <Panel title="Scenario evidence" action={<Badge>{causal.evidence.variant}</Badge>}>
+        <div className="review-grid">
+          <div><span>Outcome</span><strong>{causal.evidence.expected_outcome.replaceAll("_", " ")}</strong></div>
+          <div><span>Cause</span><strong>{causal.evidence.causal_node || "Healthy execution"}</strong></div>
+          <div><span>Seed</span><strong>{causal.evidence.seed}</strong></div>
+          <div><span>Evidence</span><strong>Payloads validated · destination unverified</strong></div>
+        </div>
+        <Button onClick={() => {
+          const url=URL.createObjectURL(new Blob([JSON.stringify(data.causal_evidence,null,2)],{type:"application/json"}));
+          const a=document.createElement("a");a.href=url;a.download="scenario-evidence.json";a.click();URL.revokeObjectURL(url);
+        }}>Download evidence</Button>
+      </Panel>}
       {!!data.report.faults.length && (
         <Panel title="Included signals">
           <div className="table-scroll">

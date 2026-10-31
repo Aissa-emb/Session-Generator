@@ -45,7 +45,7 @@ def observe(payloads, traces):
             elif a.get("emb.type") == "perf.network_request" and (a.get("server.address") or "").startswith("api.vantra"):
                 obs["traces"] |= "emb.w3c_traceparent" in a
                 obs["net"].append({"method": a["http.request.method"], "path": urlsplit(a["url.full"]).path,
-                    "status": int(a["http.response.status_code"]) or None, "error_type": a.get("error.type"),
+                    "status": int(a["http.response.status_code"]) if a.get("http.response.status_code") is not None else None, "error_type": a.get("error.type"),
                     "ms": ms, "trace_id": s["traceId"], "start_ms": int(s["startTimeUnixNano"]) / 1e6})
             elif a.get("app.operation"):
                 obs["roots"].setdefault(s["name"], []).append(ms)

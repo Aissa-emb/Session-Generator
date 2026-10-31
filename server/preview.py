@@ -30,6 +30,10 @@ def preview(spec):
     preview_now = time.time() * 1000
     if s['traffic']['mode'] == 'live':
         windows = [specs.incident_window(i) for i in s.get('incidents', [])]
+        causal=s.get('causal',{})
+        if causal.get('variant')=='scheduled':
+            windows.append({'start_ms':specs.parse_time(causal['incident_start'])-60000,
+                'onset_ms':60000,'peak_ms':causal.get('incident_minutes',20)*60000,'recovery_ms':60000})
         start = min([preview_now] + [w['start_ms'] for w in windows])
         end = max([preview_now + 8 * 60000] + [w['start_ms'] + w['onset_ms'] + w['peak_ms'] + w['recovery_ms'] for w in windows])
         if end - start > 24 * 3600000:
@@ -76,10 +80,42 @@ def preview(spec):
                         exception = a
                     if a.get('emb.type') == 'ux.web_vital':
                         vitals.append(a)
+    causal_previews={}
+    for c in run.causal_evidence:
+        if c['platform'] in causal_previews: continue
+        node=next((n for n in c['graph'] if n['key']==c['causal_node']),None)
+        if node and node['service']=='frontend' and node['links']:
+            node=next(n for n in c['graph'] if n['key']==node['links'][0])
+        if not node:
+            from xcorgen.causal.registry import SCENARIOS
+            request=next((r for r in c['requests'] if r['route']==SCENARIOS[c['scenario']][3]),c['requests'][0])
+            node=next(n for n in c['graph'] if n['key']==request['client'])
+        selected_trace=node['trace_id']
+        tree=[];timeline=[]
+        for d in collector.deliveries:
+            p=d['payload']
+            if d.get('fmt')=='envelope':
+                for sp in p.get('data',{}).get('spans',[]):
+                    a={x['key']:x['value'] for x in sp['attributes']}
+                    if a.get('emb.user_session_id')==c['session_id'] or a.get('session.id') in c['part_ids']+[c['session_id']]:
+                        timeline.append({'name':sp['name'],'start':sp['start_time_unix_nano'],'end':sp['end_time_unix_nano'],'id':sp['span_id'],'attributes':a})
+            for rs in p.get('resourceSpans',[]):
+                resource=attrs(rs.get('resource',{}))
+                selected_payload=any(attrs(sp).get('emb.user_session_id')==c['session_id'] for ss in rs['scopeSpans'] for sp in ss['spans'])
+                for ss in rs['scopeSpans']:
+                    for sp in ss['spans']:
+                        a=attrs(sp)
+                        row={'name':sp['name'],'start':sp['startTimeUnixNano'],'end':sp['endTimeUnixNano'],'id':sp['spanId'],
+                            'parent':sp.get('parentSpanId'),'attributes':a,'service':resource.get('service.name'),'trace_id':sp['traceId']}
+                        if d['target']=='otlp' and sp['traceId']==selected_trace:tree.append(row)
+                        elif d['target']=='embrace' and selected_payload:timeline.append(row)
+        causal_previews[c['platform']]={'evidence':c,'timeline':timeline,'waterfall':tree}
     collector.pool.shutdown(wait=True)
     return {'preview_clock': specs.iso(preview_now), 'sample_count': s['traffic']['count'], 'requested_count': requested_count,
             'expected_counts': allocated, 'report': run.emitted.summary(), 'timelines': timelines,
             'trace_waterfall': waterfall, 'vitals': vitals[:1000], 'exception': exception,
+            'causal_evidence': run.causal_evidence[:12],
+            'causal_previews': causal_previews,
             'url_rollup': rollup(urls), 'linter': linter.lint_payloads(collector.deliveries),
             'limits': limits.capabilities(), 'backfill_notes': limits.BACKFILL_NOTES, 'trace_caveat': limits.TRACE_CAVEAT}
 

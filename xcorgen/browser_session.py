@@ -240,8 +240,6 @@ class BrowserSession:
         self._deliver(self.t + self.rng.uniform(80, 600), "embrace", "spans",
                       {"resourceSpans": [{"resource": self.resource, "scopeSpans": scopes}]})
         release_backend(self, self.t, self.rng)
-        if self.web.get("sdk_upload_spans") and reason not in ("background", "user_session_ended"):
-            self.pending_uploads = [(self.t, self.t + 40, f"https://a-{self.app_id}.data.emb-api.com/v2/spans")]
         part.closed = True
 
     def page_view(self, key, **params):
@@ -290,6 +288,14 @@ class BrowserSession:
         self.page["tbd_mix"] = mix
         self._fault_targets(targets)
         self.page["vitals"] = web_vitals.PageVitals(targets, self.rng, self.caps["fractional_time"])
+        if hasattr(self, "execution"):
+            # Causal fixtures budget rendering separately from asynchronous API latency.
+            # Bounded simulated paint work ensures navigation completes before the next action.
+            v = self.page["vitals"]
+            v.ttfb = min(v.ttfb, 450)
+            v.fcp = max(v.ttfb + 30, min(v.fcp, 800))
+            v.lcp = max(v.fcp, min(v.lcp, 1800))
+
         if restore:
             v = self.page["vitals"]
             v.ttfb, v.fcp, v.lcp = 0, self.rng.uniform(20, 80), self.rng.uniform(100, 220)
@@ -785,7 +791,7 @@ class BrowserSession:
             self.pending_origin_latency = None
         c = simulate(self, key, params, start, self.rng)
         failed = c.status is None or c.status >= 400
-        a = {"http.request.method": c.ep.method, "url.full": c.url, "http.response.status_code": c.status or 0,
+        a = {"http.request.method": c.ep.method, "url.full": c.url, "http.response.status_code": c.status,
              "server.address": self.api_host, "server.port": 443, "emb.type": "perf.network_request"}
         propagated = self.traces and self.api_host in self.web["propagation_allow_list"]
         if propagated:
@@ -805,7 +811,7 @@ class BrowserSession:
             self.used_faults.add(rage["id"])
             self.t = self.p(c.end)
             self._rage_clicks()
-        if c.status is None:
+        if c.status is None and not hasattr(self, 'execution'):
             self.exception(family="abort" if c.transport == "cancelled" else "failed_to_fetch")
         if c.status is not None and c.status < 400:
             for name in self.page["def"].measures:
@@ -815,7 +821,7 @@ class BrowserSession:
     def third_party(self, method, url, status=204, opaque=False):
         start = self.t
         self._span("fetch", method, start, start + self.rng.uniform(40, 160), {
-            "http.request.method": method, "url.full": url, "http.response.status_code": 0 if opaque else status,
+            "http.request.method": method, "url.full": url, "http.response.status_code": None if opaque else status,
             "server.address": urlsplit(url).hostname, "server.port": 443, "emb.type": "perf.network_request"}, kind=3)
 
     def client_resource_spans(self, c):
@@ -827,7 +833,7 @@ class BrowserSession:
                 "startTimeUnixNano": self.ns(c.start), "endTimeUnixNano": self.ns(c.end), "flags": 257,
                 "status": {"code": 2 if c.status is None or c.status >= 400 else 0},
                 "attributes": otlp.attrs({"http.request.method": c.ep.method, "url.full": c.url,
-                    "http.response.status_code": c.status or 0, "server.address": self.api_host})}
+                    "http.response.status_code": c.status, "server.address": self.api_host})}
         return {"resource": {"attributes": resource}, "scopeSpans": [{"scope": SDK_SCOPES["fetch"], "spans": [span]}]}
 
     def _deliver(self, due, target, kind, payload):
@@ -847,10 +853,6 @@ class BrowserSession:
         for due, scopes in sorted(batches.items()):
             self._deliver(due, "embrace", "logs", {"resourceLogs": [{"resource": self.resource, "scopeLogs": [
                 {"scope": SDK_SCOPES[k], "logRecords": records} for k, records in scopes.items()]}]})
-            if self.web.get("sdk_upload_spans") and due + 40 < self.t:
-                self._span("fetch", "POST", due, due + 40, {"emb.type": "perf.network_request",
-                    "http.request.method": "POST", "url.full": f"https://a-{self.app_id}.data.emb-api.com/v2/logs",
-                    "http.response.status_code": 200, "server.address": f"a-{self.app_id}.data.emb-api.com", "server.port": 443}, kind=3)
         self.pending_logs = []
 
     def background(self, lo_s=4, hi_s=12):

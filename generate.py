@@ -127,6 +127,7 @@ def spec_main(argv):
     r.add_argument("spec")
     r.add_argument("--dry-run", metavar="DIR", help="write payloads to DIR instead of sending")
     r.add_argument("--seed", type=int)
+    r.add_argument("--matrix", action="store_true", help="run this causal scenario across Android, iOS and web (configure each app ID)")
     r.add_argument("--symbol-receipt", help="Source-map upload receipts from tools/symbols.py")
     r.add_argument("--resume", metavar="RUN_ID", help="resume the frozen plan and skip accepted deliveries")
     r.add_argument("--config", default=os.path.join(ROOT, "config.json"))
@@ -168,6 +169,17 @@ def spec_main(argv):
         print("OK: no realism issues in sampled payloads" if not issues else f"{len(issues)} realism issues")
         return 1 if specs.errors(issues) else 0
     spec = specs.load(a.spec)
+    if a.command == "run" and a.seed is not None:
+        spec["seed"] = a.seed
+    if a.command == "run" and a.matrix:
+        if not spec.get("causal"):
+            ap.error("--matrix requires a causal scenario preset")
+        import copy
+        have = {t["platform"]: t for t in spec["targets"]}
+        spec["targets"] = [have.get(t["platform"], copy.deepcopy(t)) for t in (specs.ANDROID_TARGET, specs.IOS_TARGET, specs.WEB_TARGET)]
+        spec.setdefault("population", {})["platform_mix"] = {t["id"]: 1 for t in spec["targets"]}
+        if spec["traffic"]["mode"] != "live":
+            spec["traffic"]["count"] = max(3, spec["traffic"]["count"])
     if a.command == "validate":
         issues = specs.validate(spec)
         for i in issues:

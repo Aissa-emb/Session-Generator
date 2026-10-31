@@ -4,7 +4,8 @@ import uuid
 
 
 def hex_id(n_bytes, rng=random, upper=False):
-    h = "%0*x" % (n_bytes * 2, rng.getrandbits(n_bytes * 8))
+    identity_rng = getattr(rng, "identity_rng", rng)
+    h = "%0*x" % (n_bytes * 2, identity_rng.getrandbits(n_bytes * 8))
     return h.upper() if upper else h
 
 

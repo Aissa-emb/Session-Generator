@@ -35,6 +35,10 @@ CUSTOM_OK = re.compile(r"^(emb\.properties\.|journey\.|product\.|checkout\.|orde
 # rather than treating them as built-in keys present in the reference capture.
 CUSTOM_TASK_ATTRIBUTES = {"app.operation": "stringValue", "app.fallback.used": "boolValue",
                           "http.response.status_code": "intValue"}
+from xcorgen.causal.registry import PROVENANCE, SERVICES
+CAUSAL_ATTRIBUTES = {k: 'boolValue' if k in ('demo.synthetic','demo.feature.detail_optional','demo.feature.transfer_view') else 'stringValue' for k in PROVENANCE}
+CAUSAL_ATTRIBUTES.update({k:'stringValue' for k in ('response.schema','response.merchant.display_name','view.state','script.origin')})
+CAUSAL_ATTRIBUTES['interaction.processing_ms']='number'
 
 
 GOLDEN = os.path.join(ROOT, "reference", "android-sdk-golden")
@@ -253,6 +257,8 @@ def main(d):
                         r = ref.get(a["key"])
                         if r is None and k[2] == "perf":
                             r = CUSTOM_TASK_ATTRIBUTES.get(a["key"])
+                        if r is None and k[2] in ('perf','sys.exception'):
+                            r = CAUSAL_ATTRIBUTES.get(a['key'])
                         if r is None and not CUSTOM_OK.match(a["key"]):
                             problem(f"{k[1]}/{k[2]}: key not in capture: {a['key']}")
                         elif r is not None and not compatible(vtype(a["value"]), r) and r != "empty":
@@ -285,6 +291,21 @@ def main(d):
         b = browser_spans.get(tid)
         if not b:
             roots = [s for _, s in spans if not s.get("parentSpanId")]
+            all_nodes={(t,s['spanId']):s for t,group in backend.items() for _,s in group}
+            if roots and all(svc in SERVICES for svc,_ in spans) and all(s.get('links') and s['kind'] in (1,5) for s in roots):
+                ids={s['spanId']:s for _,s in spans}
+                for _,s in spans:
+                    a={x['key']:next(iter(x['value'].values())) for x in s['attributes']}
+                    if a.get('demo.synthetic') is not True: problem('async trace lacks synthetic provenance')
+                    parent=ids.get(s.get('parentSpanId'))
+                    if s.get('parentSpanId') and not parent: problem('async trace has missing parent')
+                    if int(s['endTimeUnixNano']) < int(s['startTimeUnixNano']): problem('async negative duration')
+                    if parent and not (int(parent['startTimeUnixNano'])<=int(s['startTimeUnixNano'])<=int(s['endTimeUnixNano'])<=int(parent['endTimeUnixNano'])):
+                        problem('async child outside its synchronous parent')
+                    for link in s.get('links',[]):
+                        cause=all_nodes.get((link['traceId'],link['spanId']))
+                        if not cause or int(cause['endTimeUnixNano']) > int(s['startTimeUnixNano']):problem('async link missing or precedes cause')
+                continue
             if len(roots) == 1 and roots[0]["name"] == "authorization_worker.batch":
                 a = {x["key"]: next(iter(x["value"].values())) for x in roots[0]["attributes"]}
                 if a.get("workload.source") == "scheduled_authorizations" and len(spans) == 52:
@@ -328,7 +349,7 @@ def main(d):
         for msg, n in sorted(problems.items(), key=lambda x: -x[1]):
             print(f"  {n:5d}  {msg}")
         return 1
-    print("OK: payloads match the SDK formats and every backend trace hangs off its client network span")
+    print("OK: SDK payloads and client/worker trace relationships validated")
     return 0
 
 

@@ -601,7 +601,7 @@ export default function App() {
           {step === 1 && (
             <div className="customize-layout">
               <Panel title="Traffic scenario" className="traffic-options">
-                <div className="choice-grid two">
+                <div className="choice-grid">
                   <button
                     className={
                       "choice " + (draft.story === "standard" ? "selected" : "")
@@ -634,6 +634,10 @@ export default function App() {
                     <strong>Regression</strong>
                     <span>A specific failure or slowdown</span>
                   </button>
+                  <button className={"choice " + (draft.story === "causal" ? "selected" : "")}
+                    aria-pressed={draft.story === "causal"} onClick={() => update({ story: "causal" })}>
+                    <strong>Causal demo</strong><span>Connected sessions, traces, and recovery</span>
+                  </button>
                 </div>
                 <div className="form-grid">
                   {draft.story === "regression" && (
@@ -658,7 +662,33 @@ export default function App() {
                       </select>
                     </Field>
                   )}
-                  <Field label="User flow">
+                  {draft.story === "causal" ? <>
+                    <Field label="Scenario"><select value={draft.causalScenario} onChange={e => update({causalScenario:e.target.value})}>
+                      {[["healthy","Healthy account review"],["signin-outage","Sign-in pool timeout"],["slow-history","Slow transaction history"],
+                        ["contract-regression","Transaction detail contract"],["transfer-response-loss","Transfer response lost"],
+                        ["worker-backlog","Transfer worker backlog"],["frontend-regression","Client view-state failure"],
+                        ["connectivity","Connectivity transition"],["travel-provider","Travel provider degradation"]].map(([id,name])=><option key={id} value={id}>{name}</option>)}
+                    </select></Field>
+                    <Field label="Cohort"><select value={draft.causalVariant} onChange={e => update({causalVariant:e.target.value as Draft["causalVariant"]})}>
+                      <option value="affected">Affected</option><option value="control">Healthy control</option><option value="recovered">Recovered</option><option value="scheduled">Scheduled incident</option>
+                    </select></Field>
+                    <Field label="Traffic mix"><select value={draft.causalMode} onChange={e=>update({causalMode:e.target.value as Draft["causalMode"]})}>
+                      <option value="single">Selected story only</option><option value="mixed">Mixed traffic</option>
+                    </select></Field>
+                    <Field label="Cache"><select value={draft.causalCache} onChange={e=>update({causalCache:e.target.value as Draft["causalCache"]})}>
+                      <option value="cold">Cold account cache</option><option value="warm">Warm account cache</option>
+                    </select></Field>
+                    <Field label="Network"><select value={draft.causalNetwork} onChange={e=>update({causalNetwork:e.target.value as Draft["causalNetwork"]})}>
+                      <option value="wifi">Wi-Fi</option><option value="cellular">Cellular</option><option value="constrained">Constrained</option>
+                    </select></Field>
+                    <Field label="Seed"><input type="number" value={draft.causalSeed} onChange={e=>update({causalSeed:Number(e.target.value)})}/></Field>
+                    {draft.causalScenario === "contract-regression" && <Field label="Client failure"><select value={draft.causalFailure} onChange={e=>update({causalFailure:e.target.value as Draft["causalFailure"]})}>
+                      <option value="handled">Handled decoding error</option><option value="fatal">Unsafe native mapper · fatal</option>
+                    </select></Field>}
+                    {draft.causalScenario === "connectivity" && <Field label="Failure boundary"><select value={draft.causalConnectivity} onChange={e=>update({causalConnectivity:e.target.value as Draft["causalConnectivity"]})}>
+                      <option value="pre_send">Before reaching server</option><option value="post_send">After server response</option>
+                    </select></Field>}
+                  </> : <Field label="User flow">
                     <select
                       value={draft.flow}
                       onChange={(e) => update({ flow: e.target.value })}
@@ -669,10 +699,36 @@ export default function App() {
                         </option>
                       ))}
                     </select>
-                  </Field>
+                  </Field>}
                 </div>
               </Panel>
-              <Panel
+              {draft.story === "causal" && <details className="panel">
+                <summary>Scenario parameters</summary>
+                <div className="field-grid">
+                  <Field label="Backend region"><select value={draft.causalRegion} onChange={e=>update({causalRegion:e.target.value})}>
+                    <option>us-east-1</option><option>eu-west-1</option><option>ap-southeast-2</option>
+                  </select></Field>
+                  <Field label="Affected service release"><input value={draft.causalRelease} onChange={e=>update({causalRelease:e.target.value})}/></Field>
+                  <Field label="Timing"><select value={String(draft.causalReference)} onChange={e=>update({causalReference:e.target.value==="true"})}>
+                    <option value="false">Seeded variation</option><option value="true">Exact reference timings</option>
+                  </select></Field>
+                  {draft.apps.some(a=>a.platform==="web") && <Field label="Optional web provider"><select value={draft.causalProvider} onChange={e=>update({causalProvider:e.target.value})}>
+                    <option value="none">None</option><option value="analytics">Consented analytics</option><option value="support">Opened support widget</option>
+                  </select></Field>}
+                  {draft.causalScenario === "frontend-regression" && draft.apps.every(a=>a.platform==="web") && <Field label="Frontend variant"><select value={String(draft.causalWidget)} onChange={e=>update({causalWidget:e.target.value==="true"})}>
+                    <option value="false">View-state failure</option><option value="true">Blocking support interaction</option>
+                  </select></Field>}
+                  {draft.causalVariant === "scheduled" && <>
+                    <Field label="Incident starts"><input type="datetime-local" value={draft.causalStart} onChange={e=>update({causalStart:e.target.value})}/></Field>
+                    <Field label="Incident minutes"><input type="number" min="1" max="120" value={draft.causalMinutes} onChange={e=>update({causalMinutes:Number(e.target.value)})}/></Field>
+                    <Field label="Affected cohort %"><input type="number" min="0" max="100" value={draft.causalShare} onChange={e=>update({causalShare:Number(e.target.value)})}/></Field>
+                  </>}
+                  {draft.causalMode === "mixed" && ["Healthy","Selected story","Slow dependency","Recovered"].map((name,i)=><Field key={name} label={name+" weight"}>
+                    <input type="number" min="0" max="100" value={draft.causalMix[i]} onChange={e=>update({causalMix:draft.causalMix.map((n,j)=>i===j?Number(e.target.value):n)})}/>
+                  </Field>)}
+                </div>
+              </details>}
+              {draft.story !== "causal" && <Panel
                 title="Include in the data"
                 className="signal-options"
                 action={<Badge>{selected.length} selected</Badge>}
@@ -752,7 +808,7 @@ export default function App() {
                     </Field>
                   </div>
                 )}
-              </Panel>
+              </Panel>}
               <Panel title="Sending schedule" className="schedule-options">
                 <div
                   className="segmented"
@@ -923,12 +979,12 @@ export default function App() {
                   </div>
                   <div>
                     <span>User flow</span>
-                    <strong>{flowNames[draft.flow]}</strong>
+                    <strong>{draft.story === "causal" ? draft.causalScenario.replaceAll("-"," ") : flowNames[draft.flow]}</strong>
                   </div>
                   <div className="full">
                     <span>Included signals</span>
                     <strong>
-                      {selected.length
+                      {draft.story === "causal" ? `${draft.causalVariant} · ${draft.causalMode} · seed ${draft.causalSeed}` : selected.length
                         ? selected
                             .map(
                               (k) => `${signalNames[k]} (${draft.rates[k]}%)`,
@@ -980,7 +1036,7 @@ export default function App() {
                 <div className="send-action">
                   <Button
                     kind="primary"
-                    disabled={!online || !!busy || liveBlocked}
+                    disabled={!online || !caps.data || !!busy || liveBlocked}
                     onClick={start}
                   >
                     <PlayIcon />

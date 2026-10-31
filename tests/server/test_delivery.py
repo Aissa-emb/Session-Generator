@@ -138,3 +138,20 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(result['complete'], 3)
         self.assertEqual(result['groups']['android:retail']['expected'], 19)
         self.assertTrue(any(r['sampling'].get('behavior_dataset_slug') == 'vantra-end-to-end' for r in result['traces']))
+
+    def test_missing_trace_batch_falls_back_to_individual_ids(self):
+        from xcorgen.security import TransportError
+        s=spec.default_spec();s['chronosphere']={'tenant':'demo-sandbox'}
+        ids=['1'*32,'2'*32]
+        sessions=[{'target':'vantra-android','line_of_business':'banking','traces':True,'trace_ids':ids}]
+        calls=[]
+        def transport(url,body,headers,**kwargs):
+            requested=json.loads(body)['trace_ids'];calls.append(requested)
+            if len(requested)>1 or requested==ids[1:]:raise TransportError('Not found',status=404)
+            return json.dumps({'traces':[{'resourceSpans':[{'resource':{'attributes':[{'key':'service.name','value':{'stringValue':'vantra-android-production'}}]},
+                'scopeSpans':[{'spans':[{'traceId':ids[0],'spanId':'1'*16,'name':'GET'}]}]}]}]}).encode()
+        result=traces(s,sessions,'credential',transport)
+        self.assertEqual(result['expected'],2)
+        self.assertEqual(result['complete'],1)
+        self.assertEqual(result['state'],'incomplete')
+        self.assertEqual(calls,[ids,ids[:1],ids[1:]])

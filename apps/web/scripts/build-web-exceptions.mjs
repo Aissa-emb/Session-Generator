@@ -15,6 +15,8 @@ const root = path.resolve(
 );
 const sourceRoot = path.join(root, "reference/web-exceptions");
 const families = [
+  "contract_null",
+  "view_state",
   "property_undefined",
   "not_a_function",
   "json_html",

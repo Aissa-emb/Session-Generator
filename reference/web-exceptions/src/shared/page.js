@@ -1,9 +1,12 @@
+import { renderTransactionDetail, buildTransferView } from './transaction.js';
 import { readPrice, formatPrice, buildPriceRows, saveRecentlyViewed, hydrateResults } from './catalog.js';
 import { requestCollection, cancelRequest } from './client.js';
 import { importRoute, loadRouteChunk } from './router.js';
 
 export function renderResults(state) {
   switch (state.operation) {
+    case 'contract_null': return renderTransactionDetail({ merchant: { displayName: null } });
+    case 'view_state': return buildTransferView({ recipient: null });
     case 'property_undefined': return buildPriceRows(state.records, readPrice);
     case 'not_a_function': return buildPriceRows(state.records, formatPrice);
     case 'quota_exceeded': return saveRecentlyViewed(state.recent);

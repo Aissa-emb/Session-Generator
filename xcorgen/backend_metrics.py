@@ -41,11 +41,13 @@ class REDMetrics:
                     a["key"]: next(iter(a["value"].values()))
                     for a in rs["resource"]["attributes"]
                 }
-                key = (resource["service.name"], resource.get("service.version", ""))
                 for scope in rs["scopeSpans"]:
                     for span in scope["spans"]:
                         if span["kind"] != 2:
                             continue
+                        attributes = {a['key']: next(iter(a['value'].values())) for a in span.get('attributes', [])}
+                        protocol = 'rpc' if 'rpc.system' in attributes else 'http'
+                        key = (resource["service.name"], resource.get("service.version", ""), protocol)
                         start, end = int(span["startTimeUnixNano"]), int(
                             span["endTimeUnixNano"]
                         )
@@ -93,13 +95,13 @@ class REDMetrics:
                     },
                 }
                 for name, field in [
-                    ("http.server.request.count", "count"),
-                    ("http.server.request.error.count", "errors"),
+                    (key[2] + ".server.request.count", "count"),
+                    (key[2] + ".server.request.error.count", "errors"),
                 ]
             ]
             metrics.append(
                 {
-                    "name": "http.server.request.duration",
+                    "name": key[2] + ".server.request.duration",
                     "unit": "s",
                     "histogram": {
                         "aggregationTemporality": 2,
@@ -121,7 +123,7 @@ class REDMetrics:
                     "scopeMetrics": [
                         {
                             "scope": {
-                                "name": "io.opentelemetry.http",
+                                "name": "vantra.derived-red",
                                 "version": "1.0.0",
                             },
                             "metrics": metrics,

@@ -9,6 +9,156 @@
   "properties": {
     "spec_version": {"const": "2.0", "description": "Schema version of this document."},
     "name": {"type": "string", "maxLength": 120},
+    "causal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario"
+      ],
+      "properties": {
+        "scenario": {
+          "enum": [
+            "healthy",
+            "signin-outage",
+            "slow-history",
+            "contract-regression",
+            "transfer-response-loss",
+            "worker-backlog",
+            "frontend-regression",
+            "connectivity",
+            "travel-provider"
+          ]
+        },
+        "variant": {
+          "enum": [
+            "affected",
+            "control",
+            "recovered",
+            "scheduled"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "single",
+            "mixed"
+          ]
+        },
+        "cache": {
+          "enum": [
+            "cold",
+            "warm"
+          ]
+        },
+        "network": {
+          "enum": [
+            "wifi",
+            "cellular",
+            "constrained"
+          ]
+        },
+        "reference": {
+          "type": "boolean"
+        },
+        "result_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "client_failure": {
+          "enum": [
+            "handled",
+            "fatal"
+          ]
+        },
+        "connectivity_phase": {
+          "enum": [
+            "pre_send",
+            "post_send"
+          ]
+        },
+        "retry": {
+          "type": "boolean"
+        },
+        "partial_results": {
+          "type": "boolean"
+        },
+        "region": {
+          "enum": [
+            "us-east-1",
+            "eu-west-1",
+            "ap-southeast-2"
+          ]
+        },
+        "service_release": {
+          "type": "string",
+          "pattern": "^[0-9]{4}\\.[0-9]{2}\\.[0-9]{1,2}$"
+        },
+        "incident_start": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "incident_minutes": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 120
+        },
+        "cohort_share": {
+          "$ref": "#/$defs/share"
+        },
+        "mix": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "healthy",
+            "hero",
+            "slow",
+            "other"
+          ],
+          "properties": {
+            "healthy": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "hero": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "slow": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "other": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        },
+        "replay_namespace": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$",
+          "description": "Exact-ID diagnostic replay. Local dry runs only."
+        },
+        "web_widget": {
+          "type": "boolean",
+          "description": "Web-only blocking interaction variant, exclusive with the view-state failure."
+        },
+        "provider": {
+          "enum": [
+            "none",
+            "analytics",
+            "support"
+          ],
+          "description": "One consented external client request; no invented provider SERVER spans."
+        },
+        "version": {
+          "const": "1.0.0",
+          "description": "Causal execution model version."
+        }
+      }
+    },
     "seed": {"type": ["integer", "null"], "description": "Seed for reproducible output; null draws a fresh seed per run."},
     "notes": {"type": "string", "maxLength": 4000, "description": "Operator notes. Never emitted."},
     "stories": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"},

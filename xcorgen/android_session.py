@@ -85,12 +85,12 @@ def view_name(html):
 
 
 class Part:
-    def __init__(self, index, number, start, start_type, cold):
-        self.id = emb_id()
+    def __init__(self, index, number, start, start_type, cold, rng=random):
+        self.id = emb_id(rng)
         self.index, self.number, self.start, self.start_type, self.cold = index, number, start, start_type, cold
         self.end = None
         self.spans, self.events, self.logs = [], [], []
-        self.trace_id, self.span_id = hex_id(16), hex_id(8)
+        self.trace_id, self.span_id = hex_id(16, rng), hex_id(8, rng)
         self.error_logs = 0
         self.crash_id = None
         self.end_type = "state"
@@ -126,7 +126,7 @@ class AndroidSession:
             persona["version_starts"] = 0
         persona["version_starts"] = persona.get("version_starts", 0) + 1
         self.process_id = hex_id(8, rng)
-        self.user_session_id = emb_id()
+        self.user_session_id = emb_id(rng)
         self.previous_user_session_id = persona["previous_user_session_id"]
         self.user_session_number = persona["user_session_number"] + 1
         self.part_number = persona["session_part_number"]
@@ -214,13 +214,13 @@ class AndroidSession:
         a.update({f"emb.properties.{k}": v for k, v in self.properties.items()})
         a.update({"emb.state.network": self.persona["network"],
                   "emb.state.screen-automatic": self.screen["route"] if self.screen else "Initializing",
-                  "log.record.uid": emb_id()})
+                  "log.record.uid": emb_id(self.rng)})
         return a
 
     def _span(self, name, start, end, attrs, status="Unset", trace_id=None, span_id=None, parent=None, events=None):
         a = dict(attrs)
         a.update(self._span_common())
-        span = {"trace_id": trace_id or hex_id(16), "span_id": span_id or hex_id(8),
+        span = {"trace_id": trace_id or hex_id(16, self.rng), "span_id": span_id or hex_id(8, self.rng),
                 "parent_span_id": parent or "0000000000000000", "name": name,
                 "start_time_unix_nano": nanos(start), "end_time_unix_nano": nanos(end), "status": status,
                 "events": events or [], "attributes": kv(a)}
@@ -243,8 +243,9 @@ class AndroidSession:
     def _start_part(self, start_type):
         index = 1 if self.part is None else self.part.index + 1
         self.part_number += 1
-        cold = index == 1 and (self.rng.random() < 0.78 or bool(getattr(getattr(self, "plan", None), "slow_startup", None)))
-        self.part = Part(index, self.part_number, self.t, start_type, cold)
+        cold = index == 1 and (self.forced_cold_start if hasattr(self, 'forced_cold_start') else
+            self.rng.random() < 0.78 or bool(getattr(getattr(self, "plan", None), "slow_startup", None)))
+        self.part = Part(index, self.part_number, self.t, start_type, cold, self.rng)
         if index == 1:
             self._startup(cold)
 
@@ -288,7 +289,7 @@ class AndroidSession:
                    "name": "emb-session", "start_time_unix_nano": nanos(part.start),
                    "end_time_unix_nano": nanos(part.end), "status": "Error" if part.crash_id else "Unset",
                    "events": sorted(part.events, key=lambda e: e["time_unix_nano"]), "attributes": kv(a)}
-        net = {"trace_id": hex_id(16), "span_id": hex_id(8), "parent_span_id": "0000000000000000",
+        net = {"trace_id": hex_id(16, self.rng), "span_id": hex_id(8, self.rng), "parent_span_id": "0000000000000000",
                "name": "emb-network-status", "start_time_unix_nano": nanos(part.start),
                "end_time_unix_nano": nanos(part.end), "status": "Unset", "events": [],
                "attributes": kv(dict({"emb.type": "sys.network_status", "network": self.persona["network"]},
@@ -340,7 +341,7 @@ class AndroidSession:
         rng, mid = self.rng, self.persona["model"]
         slow = 1.0 if any(x in mid for x in ("SM-S9", "Pixel 9", "Pixel 10", "SM-F9", "CPH")) else 1.6
         t0 = self.t
-        tid, root = hex_id(16), hex_id(8)
+        tid, root = hex_id(16, self.rng), hex_id(8, self.rng)
         act = self.app["activity"]
         root_attrs = {"emb.type": "perf", "emb.startup_activity": act}
         if int(self.persona["os_version"]) >= 15:
@@ -505,7 +506,7 @@ class AndroidSession:
         return jtype, jmsg, frames
 
     def _crash(self, jtype, jmsg, frames):
-        crash_id = emb_id()
+        crash_id = emb_id(self.rng)
         self.part.crash_id = crash_id
         self.crash_evidence = {"record_id": crash_id, "part_id": self.part.id, "time_ms": self.t,
                                "exception_type": jtype, "message": jmsg, "frames": frames}

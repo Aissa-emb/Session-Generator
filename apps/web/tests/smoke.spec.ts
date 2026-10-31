@@ -706,3 +706,31 @@ test("web sending needs no stack settings or upload token when maps are not conf
   ).toBeVisible();
   expect(uploads).toBe(0);
 });
+
+test("causal scenarios keep platform evidence and run through the workflow", async ({ page }, testInfo) => {
+  await connect(page, ["android", "ios", "web"]);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "Sessions + distributed traces", exact: false }).click();
+  await page.getByLabel("Chronosphere tenant", { exact: true }).fill("preview-tenant");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Causal demo", exact: false }).click();
+  await page.getByLabel("Scenario", { exact: true }).selectOption("slow-history");
+  await page.getByLabel("Cohort", { exact: true }).selectOption("affected");
+  await page.getByLabel("Number of sessions").fill("9");
+  await page.screenshot({path:testInfo.outputPath("causal-controls.png"),fullPage:true});
+  await page.getByRole("button", { name: "Generate preview", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Scenario evidence" })).toBeVisible({ timeout: 45000 });
+  await expect(page.getByText("history.query", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download evidence" })).toBeVisible();
+  await expect(page.getByText("Payloads validated · destination unverified")).toBeVisible();
+  await expect(page.locator(".preview-stats > div").filter({hasText:"Sessions with traces"})).toContainText("9");
+  for (const name of ["Android", "iOS", "Web"]) {
+    await page.getByRole("group", {name:"Preview platform"}).getByRole("button", {name,exact:true}).click();
+    await expect(page.locator(".waterfall-row").first()).toBeVisible();
+    await expect(page.getByText("history.query",{exact:true})).toBeVisible();
+  }
+  await page.screenshot({path:testInfo.outputPath("causal-preview.png"),fullPage:true});
+  await page.getByRole("button", { name: "Continue to send", exact: true }).click();
+  await expect(page.getByText("slow history", { exact: true })).toBeVisible();
+  await expect(page.getByText("affected · single · seed 7331")).toBeVisible();
+});

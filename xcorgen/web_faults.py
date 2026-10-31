@@ -16,7 +16,7 @@ from .web_sites import content_hash
 # Public family names used by spec validation. Messages and frames live in the
 # browser-captured corpus, not a separate hand-maintained approximation.
 FAMILIES = dict.fromkeys((
-    "property_undefined", "not_a_function", "chunk_load", "webpack_chunk_load",
+    "contract_null", "view_state", "property_undefined", "not_a_function", "chunk_load", "webpack_chunk_load",
     "json_html", "failed_to_fetch", "abort", "quota_exceeded", "hydration", "script_error",
 ))
 # Default handling per family: how the error reaches the SDK.
