@@ -81,7 +81,6 @@ export default function App() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [token, setToken] = useState("");
-  const [symbolToken, setSymbolToken] = useState("");
   const [access, setAccess] = useState("");
   const [dry, setDry] = useState(() => !!read("sg_launch_attempt")?.dry);
   const [now, setNow] = useState(Date.now() / 1000);
@@ -212,23 +211,6 @@ export default function App() {
           setBusy("");
         }
       }
-      if (symbolToken.trim() && draft.apps.some((a) => a.platform === "web")) {
-        setBusy("Saving source-map token");
-        try {
-          await api(
-            "/settings/secrets/symbol_upload",
-            { value: symbolToken.trim() },
-            "PUT",
-          );
-          setSymbolToken("");
-          await settings.refetch();
-        } catch (e) {
-          fail(e);
-          return;
-        } finally {
-          setBusy("");
-        }
-      }
       setStep(1);
     } else if (step === 1) {
       await buildPreview();
@@ -248,7 +230,12 @@ export default function App() {
     setStep(2);
     setPreview(null);
     try {
-      setPreview(await api("/preview", scenario(caps.data, draft)));
+      setPreview(
+        await api(
+          "/preview",
+          scenario(caps.data, draft, !!settings.data?.secrets.symbol_upload),
+        ),
+      );
     } catch (e) {
       fail(e);
     } finally {
@@ -265,7 +252,11 @@ export default function App() {
       if (!attempt) {
         attempt = {
           key: crypto.randomUUID(),
-          spec: scenario(caps.data, draft),
+          spec: scenario(
+            caps.data,
+            draft,
+            !!settings.data?.secrets.symbol_upload,
+          ),
           dry,
         };
         save("sg_launch_attempt", attempt);
@@ -339,12 +330,6 @@ export default function App() {
   );
   const configured = settings.data?.secrets.chronosphere;
   const pending = read("sg_launch_attempt");
-  const symbolsBlocked =
-    !dry &&
-    draft.symbolication &&
-    draft.apps.some((a) => a.platform === "web") &&
-    !settings.data?.secrets.symbol_upload &&
-    !pending;
   const liveBlocked =
     !dry && draft.destination === "end_to_end" && !configured && !pending;
   const runSpec = savedSpec.data?.spec;
@@ -611,42 +596,6 @@ export default function App() {
                   </div>
                 )}
               </Panel>
-              {draft.apps.some((a) => a.platform === "web") && (
-                <Panel title="JavaScript stack traces">
-                  <label className="symbol-option">
-                    <input
-                      type="checkbox"
-                      checked={draft.symbolication}
-                      onChange={(e) =>
-                        update({ symbolication: e.target.checked })
-                      }
-                    />
-                    Resolve original files and lines
-                  </label>
-                  {draft.symbolication && (
-                    <Field
-                      label="Embrace Symbol Upload token"
-                      hint={
-                        settings.data?.secrets.symbol_upload
-                          ? "Saved on server. Maps upload before live delivery."
-                          : "Embrace → Settings → API → Symbol Upload. Required for live web runs."
-                      }
-                    >
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        value={symbolToken}
-                        placeholder={
-                          settings.data?.secrets.symbol_upload
-                            ? "Saved on server"
-                            : "Enter Symbol Upload token"
-                        }
-                        onChange={(e) => setSymbolToken(e.target.value)}
-                      />
-                    </Field>
-                  )}
-                </Panel>
-              )}
             </>
           )}
           {step === 1 && (
@@ -1017,20 +966,6 @@ export default function App() {
                     choose a local test.
                   </p>
                 )}
-                {symbolsBlocked && (
-                  <p className="warning">
-                    Add an Embrace Symbol Upload token in Destination to resolve
-                    JavaScript stacks, or choose a local test.
-                  </p>
-                )}
-                {!dry &&
-                  draft.symbolication &&
-                  draft.apps.some((a) => a.platform === "web") && (
-                    <p className="hint">
-                      Matching source maps upload to Embrace before this run
-                      starts.
-                    </p>
-                  )}
                 {waiting && !busy && (
                   <p className="warning">
                     A start request has an unconfirmed response. Retry it to
@@ -1045,9 +980,7 @@ export default function App() {
                 <div className="send-action">
                   <Button
                     kind="primary"
-                    disabled={
-                      !online || !!busy || liveBlocked || symbolsBlocked
-                    }
+                    disabled={!online || !!busy || liveBlocked}
                     onClick={start}
                   >
                     <PlayIcon />

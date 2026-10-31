@@ -88,6 +88,7 @@ class SymbolsAndRegions(unittest.TestCase):
                         self.assertLessEqual(frame["column"], len(code[frame["line"] - 1]))
                         self.assertEqual(resolve(sm, frame["line"], frame["column"] - 1), frame["original"])
             top = compiled["engines"]["chromium"]["exceptions"]["property_undefined"]["frames"][0]
+            self.assertEqual(top["name"], "readPrice")
             source_index = sm["sources"].index(top["original"]["source"])
             self.assertIn("return record.price.amount", sm["sourcesContent"][source_index].splitlines()[top["original"]["line"] - 1])
         current = assets[0]

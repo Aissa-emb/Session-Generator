@@ -43,7 +43,7 @@ def ready(store, spec):
             missing.append(a["bundle_id"])
     if missing:
         raise ValueError(
-            f"Upload {len(missing)} release source maps before starting a live symbolicated run. Add the Embrace Symbol Upload token in Destination."
+            f"Upload {len(missing)} release source maps before starting a live symbolicated run. Configure the Embrace Symbol Upload token on the server."
         )
 
 
@@ -55,7 +55,7 @@ def upload(svc, spec_id, confirm=False, author="user", transport=None):
     spec = svc.store.get("scenario_specs", spec_id)["spec"]
     token = secrets.get(svc.store, "symbol_upload")
     if not token:
-        raise ValueError("Add the Embrace Symbol Upload token in Destination.")
+        raise ValueError("Configure the Embrace Symbol Upload token on the server.")
     receipts = []
     for t, a in selected(spec):
         key = "symbol:" + t["embrace_app_id"] + ":" + a["bundle_id"]

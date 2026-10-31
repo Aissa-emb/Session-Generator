@@ -10,6 +10,8 @@ The owner replaced the multi-page studio requirements with a four-step workflow:
 
 The UI refinement uses native selects inside the shared `Field` wrapper, with reserved arrow space and consistent keyboard behavior. Keep platform icons/checkmarks contained at 320–1920px and 200% text size. Preview colors identify services consistently, filters operate on actual payload rows, and inspector values come from those rows. Run packet animation denotes worker activity, not verified ingestion; receipt feedback follows actual recorded responses. Preserve reduced-motion and reduced-transparency support.
 
+The owner removed the stack-trace setup/preview sections from the UI. Always generate real captured browser stacks with readable function names. Automatically upload maps before live runs when the server has a symbol-upload credential; without it, use real compiled-file positions and do not block sending on an invisible setting. Original-source resolution in Embrace still requires matching uploaded maps.
+
 ## V2 (branch `v2`)
 
 V2 turns the generator into a product driven by one versioned document, the **ScenarioSpec** (`spec/scenario.schema.json`). The build prompt and the verified feasibility findings are in `docs/v2/V2-BUILD-PROMPT.md` and `docs/v2/V2-SCOPE.md`; read both before V2 work. The prompt's phases: (1) spec and engine, (2) web generator, (3) server and runs, (4) UI, (5) MCP and copilot, (6) destinations, demo preparation and backfill, (7) hosted stream.

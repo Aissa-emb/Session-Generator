@@ -332,22 +332,6 @@ export default function PreviewStep({
           </div>
         </details>
       )}
-      {data.exception && (
-        <details className="panel exception-preview">
-          <summary>
-            JavaScript exception{" "}
-            <span className="secondary">
-              {data.exception["exception.name"] ||
-                data.exception["exception.type"]}
-            </span>
-          </summary>
-          <p>{data.exception["exception.message"]}</p>
-          <pre>
-            {data.exception["exception.stacktrace"] ||
-              "This browser did not attach an application stack."}
-          </pre>
-        </details>
-      )}
       {data.linter.length > 0 && (
         <Panel title="Validation notes">
           {data.linter.map((v: Json, i: number) => (

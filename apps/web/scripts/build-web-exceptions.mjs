@@ -72,6 +72,9 @@ for (const domain of ["storefront", "travel", "money"]) {
     sourcemap: "external",
     sourcesContent: true,
     minify: true,
+    // Keep runtime function names legible even before source-map processing.
+    // Frames still come from executing this exact optimized bundle.
+    keepNames: true,
     format: "iife",
     globalName: "VantraApplication",
     target: "es2022",

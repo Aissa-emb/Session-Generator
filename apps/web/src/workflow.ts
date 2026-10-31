@@ -27,7 +27,6 @@ export type Draft = {
   count: number;
   rate: number;
   duration: number;
-  symbolication: boolean;
 };
 export const defaults: Draft = {
   apps: [{ platform: "android", appId: "", name: "Vantra", region: "us" }],
@@ -57,7 +56,6 @@ export const defaults: Draft = {
   count: 100,
   rate: 10,
   duration: 60,
-  symbolication: true,
 };
 export const flowNames: Record<string, string> = {
   all: "All journeys",
@@ -157,7 +155,7 @@ export function scheduleError(d: Draft) {
     return "Choose a slow-page LCP between 2,500 and 30,000 milliseconds.";
   return "";
 }
-export function scenario(caps: Json, d: Draft): Json {
+export function scenario(caps: Json, d: Draft, symbolication = false): Json {
   const s = structuredClone(caps.default_spec);
   s.name =
     (d.story === "regression" ? "Regression · " : "Standard traffic · ") +
@@ -175,7 +173,9 @@ export function scenario(caps: Json, d: Draft): Json {
     region: a.region,
   }));
   for (const target of s.targets) {
-    if (target.platform === "web") target.web.symbolication = d.symbolication;
+    // Real captured stacks are always emitted. Original-source resolution is
+    // automatic when the server has a symbol-upload credential configured.
+    if (target.platform === "web") target.web.symbolication = symbolication;
   }
   s.population.platform_mix = Object.fromEntries(
     s.targets.map((t: Json) => [t.id, 1]),

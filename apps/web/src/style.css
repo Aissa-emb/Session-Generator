@@ -1759,23 +1759,6 @@ details[open] > summary {
   border-top: 1px solid var(--border);
   padding-top: 16px;
 }
-.exception-preview summary {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.exception-preview p {
-  margin: 16px 0;
-  font-size: 0.875rem;
-}
-.exception-preview pre {
-  font-size: 0.75rem;
-  padding: 16px;
-  background: var(--control);
-  border-radius: 8px;
-  overflow: auto;
-  line-height: 1.7;
-}
 .receipt-tools .field {
   width: 170px;
   max-width: 100%;
@@ -2130,17 +2113,4 @@ details[open] > summary::before {
   input[type="checkbox"]:checked::before {
     border-color: HighlightText;
   }
-}
-
-.symbol-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  cursor: pointer;
-}
-.symbol-option input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--mint);
 }
