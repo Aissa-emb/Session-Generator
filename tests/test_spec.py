@@ -223,12 +223,13 @@ class RunTests(unittest.TestCase):
         crash = next(x for x in rows if x["id"] == "baseline-crash")
         self.assertAlmostEqual(crash["emitted_pct"], 10, delta=.5)
 
-    def test_exact_backend_quotas_reserve_narrow_release_cohorts(self):
+    def test_baseline_exact_counts_across_incident_clocks(self):
         # This clock/seed previously let broad payment stories occupy enough
         # canary sessions to leave only 32 of the requested 33.6 fallbacks.
-        # Exercise the CLI's shared RNG and inspect emitted payloads, not plans.
+        # The third clock also exposed an unassigned PDF render in the slow
+        # band. Exercise the CLI's shared RNG and inspect payloads, not plans.
         s = specs.load(os.path.join(ROOT, 'spec/examples/baseline-burst.json'))
-        for clock in ('2026-10-31T02:20:05.400Z', '2026-10-31T02:24:05.400Z'):
+        for clock in ('2026-10-31T02:20:05.400Z', '2026-10-31T02:24:05.400Z', '2026-10-31T02:57:58.750Z'):
             with self.subTest(clock=clock), tempfile.TemporaryDirectory() as state:
                 random.seed(7331)
                 r = SpecRun(s, load_config(None), persist=False, state_dir=state,
