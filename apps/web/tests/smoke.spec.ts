@@ -285,14 +285,11 @@ test("continuous rate and two-hour duration start a real local worker with pause
       page.locator(".run-status").filter({ hasText: /^Running$/ }),
     ).toBeVisible({ timeout: 45000 });
     await expect(
-      page.getByRole("img", { name: "Generator active", exact: true }),
+      page.getByRole("img", { name: "Live delivery activity", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("progressbar", { name: "Scheduled time elapsed" }),
     ).toHaveAttribute("max", "7200");
-    await expect(
-      page.locator(".run-metrics>div").first().locator("dd"),
-    ).not.toHaveText("0");
     await page.reload();
     await expect(
       page.locator(".run-status").filter({ hasText: /^Running$/ }),
@@ -305,6 +302,10 @@ test("continuous rate and two-hour duration start a real local worker with pause
     await expect(page.locator(".run-status")).toHaveText("Paused", {
       timeout: 90000,
     });
+    // Counts now represent completed RUM delivery, not session creation.
+    await expect(
+      page.locator(".run-metrics>div").first().locator("dd"),
+    ).toHaveText(/^[1-9][\d,]*$/);
     await page.getByRole("button", { name: "Resume", exact: true }).click();
     await expect(page.locator(".run-status")).toHaveText("Running");
     await page.getByRole("button", { name: "Stop", exact: true }).click();

@@ -102,8 +102,13 @@ def manifest_sessions(path):
         finally:
             db.close()
     if path.exists():
-        for line in path.read_text().splitlines():
-            row = json.loads(line)
+        for line in path.read_text().splitlines(keepends=True):
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                if not line.endswith('\n'):
+                    break  # A worker may be midway through appending its last record.
+                raise
             if all(key in row for key in ('target', 'session_id', 'index')):
                 records[(row.get('run_id'), row['index'])] = row
     return list(records.values())

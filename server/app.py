@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from xcorgen import presets, spec as specs
 from xcorgen.security import SecurityError, TransportError
 from .service import Service
-from . import readiness, secrets, verification, copilot, preparation
+from . import readiness, secrets, verification, copilot, preparation, delivery_summary
 from .mcp import build_server, caller
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -264,7 +264,8 @@ def create_app(service=None, enable_integrations=None):
     @app.get('/api/runs/{id}')
     def get_run(id: str):
         run = svc.store.get('runs', id)
-        return dict(run, verifications=svc.store.list_for('verifications', 'run_id', id, limit=50),
+        return dict(run, delivery=delivery_summary.summarize(svc.store, run),
+                    verifications=svc.store.list_for('verifications', 'run_id', id, limit=50),
                     receipts=svc.store.list_for('receipts', 'run_id', id, limit=500))
 
     @app.post('/api/runs/{id}/verify')

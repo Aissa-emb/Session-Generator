@@ -16,7 +16,7 @@ from xcorgen.linter import lint_payloads
 from xcorgen.runner import Sender, append_manifest, load_config
 from xcorgen.spec_runner import SpecRun, curve_factor, expected_trace_ids
 from .store import Store, identifier
-from . import secrets
+from . import secrets, delivery_summary
 
 
 class JobPaused(Exception):
@@ -51,6 +51,7 @@ class ReceiptSender(Sender):
     def _send(self, delivery):
         receipt = super()._send(delivery)
         self.store.put('receipts', dict(receipt, run_id=self.job['id'], delivery_id=delivery.get('_delivery_id'),
+                                      session_receipt=delivery.get('_session_receipt'),
                                       platform=delivery.get('_platform'), spec_version=delivery.get('_spec_version', self.job['spec_version'])))
         if self.callback:
             self.callback(delivery, receipt)
@@ -76,6 +77,15 @@ def bounded(store, job, version):
     run = SpecRun(version['spec'], config(store, version['spec'], job['dry_run']), persist=not job['dry_run'],
                   state_dir=str(store.directory / 'personas' / job['id']), now_ms=now)
     run.open_manifest(str(directory), resume=resume, dry=job['dry_run'])
+    original_record = run.record
+    def record(target, session, faults, deliveries):
+        original_record(target, session, faults, deliveries)
+        delivery_summary.annotate(deliveries, {
+            'target': target['id'], 'platform': target['platform'], 'app_id': session.app_id,
+            'device_id': getattr(session, 'device_id', session.persona['device_id']),
+            'session_id': session.user_session_id,
+            'sdk_sessions': run.emitted.observations[-1].get('sdk_sessions', [])})
+    run.record = record
     sender = ReceiptSender(store, job, version['spec'])
     original = run._deliver
     published_report = False
@@ -172,6 +182,7 @@ def live(store, job, version):
                           'sdk_sessions': runner.emitted.observations[-1].get('sdk_sessions', []),
                           'spec_version': current, 'part_ids': getattr(session,'sdk_session_ids',[]) + [p.id for p in getattr(session, 'parts', [])]}
                 pending[key] = {'remaining': len(deliveries), 'ok': True, 'record': record}
+                delivery_summary.annotate(deliveries, record)
                 for ordinal, d in enumerate(deliveries):
                     d.update(_session_key=key, _platform=target['platform'], _spec_version=current, _delivery_id=key + ':' + str(ordinal))
                     heapq.heappush(heap, (d['due'], next(sequence), sender, d))

@@ -1262,8 +1262,8 @@ table + .hint,
 }
 .run-schedule {
   border-top: 1px solid var(--border);
-  margin-top: 24px;
-  padding-top: 20px;
+  margin-top: 20px;
+  padding-top: 16px;
 }
 .schedule-line,
 .schedule-line > div {
@@ -1508,91 +1508,87 @@ details[open] > summary {
 .connection-details p {
   margin-bottom: 6px;
 }
-.traffic-motion {
-  position: relative;
-  flex: 1 1 120px;
-  min-width: 80px;
-  max-width: 180px;
-  height: 52px;
-  overflow: hidden;
+.delivery-activity {
+  flex: 1 1 200px;
+  min-width: 140px;
+  max-width: 360px;
+  margin: 0 auto;
+  align-self: center;
+  width: 100%;
+}
+.activity-caption,
+.activity-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+.activity-caption {
+  margin-bottom: 5px;
+}
+.delivery-activity.is-active .activity-caption span:last-child {
   color: var(--mint);
 }
-.transport-rails {
-  width: 100%;
-  height: 52px;
-  display: block;
+.activity-lane {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
 }
-.transport-rails path {
-  stroke: #42576e;
-  stroke-width: 1;
-  fill: none;
+.activity-label {
+  color: var(--secondary);
+  font-size: 0.6875rem;
 }
-.transport-rails circle {
-  stroke: #7891a8;
-  stroke-width: 1;
-  fill: #172638;
+.activity-track {
+  height: 26px;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid #40526880;
+  border-right: 1px solid #7896ad;
+  background: repeating-linear-gradient(
+    90deg,
+    #879eb40c 0 1px,
+    transparent 1px 25%
+  );
 }
-.traffic-motion span {
-  --lane: -14px;
+.activity-mark {
   position: absolute;
-  top: 24px;
-  left: 2%;
-  width: 8px;
-  height: 4px;
-  margin-left: -4px;
-  opacity: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 2px 2px 0 0;
+  transform-origin: bottom;
   background: var(--mint);
-  border: 1px solid #c3ffe4a6;
-  border-radius: 1px;
+  opacity: 0.8;
+  transition: left 1s linear;
 }
-.traffic-motion span:nth-of-type(2) {
-  --lane: 0px;
+.activity-mark.problem {
+  background: #e7a477;
 }
-.traffic-motion span:nth-of-type(3) {
-  --lane: 14px;
+.delivery-activity:not(.is-active) .activity-mark {
+  transition: none;
 }
-.traffic-motion.is-active span {
-  animation: traffic-flow 2.8s linear infinite;
+.delivery-activity.is-active .activity-mark {
+  animation: receipt-arrival 450ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
 }
-.traffic-motion.is-active span:nth-of-type(2) {
-  animation-delay: -0.95s;
+.activity-axis {
+  margin: 3px 0 0 46px;
+  font-variant-numeric: tabular-nums;
 }
-.traffic-motion.is-active span:nth-of-type(3) {
-  animation-delay: -1.9s;
+@keyframes receipt-arrival {
+  from {
+    transform: scaleY(0.15);
+    opacity: 0.2;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 0.8;
+  }
 }
-@keyframes traffic-flow {
-  0% {
-    left: 2%;
-    transform: translateY(0);
-    opacity: 0;
-  }
-  8% {
-    opacity: 1;
-  }
-  16% {
-    left: 14.5%;
-    transform: translateY(0);
-  }
-  30% {
-    left: 24.5%;
-    transform: translateY(var(--lane));
-  }
-  70% {
-    left: 75.5%;
-    transform: translateY(var(--lane));
-  }
-  84% {
-    left: 85.5%;
-    transform: translateY(0);
-  }
-  92% {
-    opacity: 1;
-  }
-  100% {
-    left: 98%;
-    transform: translateY(0);
-    opacity: 0;
-  }
+.run-metrics small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .data-toolbar,
@@ -2053,21 +2049,27 @@ details[open] > summary::before {
 @media (max-width: 780px) {
   .run-route {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 60px;
-    gap: 14px 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+  .run-sources,
+  .run-destination {
+    display: grid;
+    align-self: start;
   }
   .run-sources {
     grid-column: 1;
+    grid-row: 1;
   }
   .run-destination {
-    grid-column: 1;
-  }
-  .traffic-motion {
     grid-column: 2;
-    grid-row: 1 / 3;
+    grid-row: 1;
+  }
+  .delivery-activity {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: none;
     min-width: 0;
-    width: 60px;
-    align-self: center;
   }
   .run-actions .button {
     min-width: 0;
@@ -2097,14 +2099,6 @@ details[open] > summary::before {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .traffic-motion.is-active {
-    background: none;
-  }
-  .traffic-motion.is-active .transport-rails path {
-    stroke: var(--mint);
-  }
-}
 @media (forced-colors: active) {
   input[type="checkbox"]:checked {
     background: Highlight;

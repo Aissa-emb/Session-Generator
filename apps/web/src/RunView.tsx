@@ -12,6 +12,7 @@ import {
 } from "@radix-ui/react-icons";
 import { ApiError, Json, number, pretty, time } from "./api";
 import { Button, Field, Modal } from "./ui";
+import DeliveryActivity from "./DeliveryActivity";
 
 const clock = (seconds: number) => {
   const s = Math.max(0, Math.floor(seconds));
@@ -110,28 +111,8 @@ export default function RunView({
       : targets.length > 1
         ? "Multi-platform run"
         : "Your run");
-  // Bounded jobs expose successful payload counts; live jobs expose record counts.
-  // These units must never be silently added together or presented as sessions.
-  const recordCount = counters?.accepted;
-  const payloadCount =
-    counters &&
-    [
-      "embrace_spans",
-      "embrace_logs",
-      "otlp_traces",
-      "otlp_logs",
-      "otlp_metrics",
-    ].some((k) => counters[k] !== undefined)
-      ? [
-          "embrace_spans",
-          "embrace_logs",
-          "otlp_traces",
-          "otlp_logs",
-          "otlp_metrics",
-        ].reduce((n, k) => n + (counters[k] || 0), 0)
-      : undefined;
-  const countUnit =
-    recordCount !== undefined || run?.mode === "live" ? "Records" : "Payloads";
+  const delivery = run?.delivery;
+  const backend = spec?.destinations?.mode === "end_to_end";
   const receipts: Json[] = run?.receipts || [];
   const recentReceipts = receipts.slice(0, 20);
   const visibleReceipts = recentReceipts.filter(
@@ -267,37 +248,22 @@ export default function RunView({
             <span>—</span>
           )}
         </div>
-        <div
-          className={"traffic-motion " + (trafficActive ? "is-active" : "")}
-          role="img"
-          aria-label={
-            trafficActive ? "Generator active" : "Generator activity idle"
-          }
-          title="Generator activity; delivery results appear below"
-        >
-          <svg
-            className="transport-rails"
-            viewBox="0 0 180 52"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <path d="M4 26H26L44 12H136L154 26H176 M4 26H176 M4 26H26L44 40H136L154 26H176" />
-            <circle cx="4" cy="26" r="3" />
-            <circle cx="176" cy="26" r="3" />
-          </svg>
-          <span />
-          <span />
-          <span />
-        </div>
+        <DeliveryActivity
+          key={runId}
+          receipts={receipts}
+          active={trafficActive}
+          now={now}
+          backend={backend}
+        />
         <div className="run-destination">
           <span className="metadata-label">Destination</span>
           <span>
             {run?.dry_run
               ? "Local output only"
               : spec?.destinations?.mode === "end_to_end"
-                ? `Embrace + ${spec.chronosphere?.tenant || "Cortex XCOR"}`
+                ? `XCOR RUM + ${spec.chronosphere?.tenant || "Cortex XCOR"}`
                 : spec
-                  ? "Embrace"
+                  ? "XCOR RUM"
                   : "—"}
           </span>
         </div>
@@ -338,14 +304,31 @@ export default function RunView({
 
       <dl className="run-metrics" aria-label="Run metrics">
         <div>
-          <dt>Sessions generated</dt>
-          <dd>{number(counters?.sessions ?? run?.sessions ?? undefined)}</dd>
+          <dt>Sessions {run?.dry_run ? "generated" : "acknowledged"}</dt>
+          <dd>{number(delivery?.sessions_acknowledged ?? undefined)}</dd>
+          {!run?.dry_run && (
+            <small title="A session is acknowledged when all its RUM uploads succeed. The ingestion API does not confirm durable storage.">
+              Stored ·{" "}
+              {delivery?.sessions_stored == null
+                ? "Not verified"
+                : number(delivery.sessions_stored)}
+            </small>
+          )}
         </div>
         <div>
-          <dt>
-            {countUnit} {run?.dry_run ? "generated" : "acknowledged"}
-          </dt>
-          <dd>{number(recordCount ?? payloadCount)}</dd>
+          <dt>Backend spans {run?.dry_run ? "generated" : "acknowledged"}</dt>
+          <dd>
+            {backend
+              ? number(delivery?.backend_spans_acknowledged ?? undefined)
+              : "—"}
+          </dd>
+          <small>
+            {!backend
+              ? "Not included"
+              : run?.dry_run
+                ? "Local output"
+                : `Stored · ${delivery?.backend_spans_stored == null ? "Not verified" : number(delivery.backend_spans_stored)}`}
+          </small>
         </div>
         <div>
           <dt>Delivery errors</dt>
@@ -358,11 +341,9 @@ export default function RunView({
           <dd>{elapsed === null ? "—" : clock(elapsed)}</dd>
         </div>
       </dl>
-      <p className="metrics-note">
-        {run?.dry_run
-          ? "Local test · nothing is sent."
-          : "API responses · dashboard visibility is separate."}
-      </p>
+      {run?.dry_run && (
+        <p className="metrics-note">Local test · nothing is sent.</p>
+      )}
 
       {run?.mode === "live" && (
         <section className="run-schedule" aria-label="Sending schedule">
@@ -408,7 +389,7 @@ export default function RunView({
             </span>
             {run.ended && <span>Ended {time(run.ended)}</span>}
           </div>
-          {!run.ended && (
+          {!run.ended && (draining || run.status === "paused") && (
             <p className="hint">
               {draining
                 ? run.desired_status === "paused"
@@ -490,7 +471,7 @@ export default function RunView({
                     <td className="receipt-time">{receiptTime(r.time_ms)}</td>
                     <td>
                       {r.target === "embrace"
-                        ? "Embrace"
+                        ? "XCOR RUM"
                         : r.target === "otlp"
                           ? "Cortex XCOR"
                           : r.target}

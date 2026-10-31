@@ -63,6 +63,10 @@ class APITests(unittest.TestCase):
         self.assertEqual(result['status'], 'completed', self.store.events(run['id']))
         self.assertTrue(result['receipts'])
         self.assertTrue(all(r['status'] == 'accepted' for r in result['receipts']))
+        self.assertEqual(result['delivery']['sessions_acknowledged'], 4)
+        self.assertEqual(result['delivery']['backend_spans_acknowledged'], 0)
+        self.assertEqual(result['delivery']['basis'], 'local_output')
+        self.assertTrue(all(r.get('session_receipt') for r in result['receipts']))
         events = self.client.get('/api/runs/' + run['id'] + '/events?once=true')
         self.assertIn('event: progress', events.text)
         cursor = self.store.events(run['id'])[-1]['id']

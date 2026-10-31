@@ -106,6 +106,15 @@ class DeliveryTests(unittest.TestCase):
             self.assertTrue(any(p.startswith('/v2/') for p, _ in requests))
             self.assertTrue(any(p == '/v1/traces' for p, _ in requests))
             self.assertTrue(all(r['http_status'] == 200 for r in store.list('receipts')))
+            from server.delivery_summary import summarize
+            import gzip
+            summary = summarize(store, store.get('runs', run['id']))
+            spans = sum(len(ss['spans']) for p, body in requests if p == '/v1/traces'
+                        for rs in json.loads(gzip.decompress(body))['resourceSpans'] for ss in rs['scopeSpans'])
+            self.assertEqual(summary['sessions_acknowledged'], 3)
+            self.assertEqual(summary['backend_spans_acknowledged'], spans)
+            self.assertGreater(spans, 0)
+            self.assertIsNone(summary['sessions_stored'])
 
     def test_verification_counts_missing_ids_and_checks_root_parent_chain(self):
         s = spec.default_spec()

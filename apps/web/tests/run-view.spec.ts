@@ -17,6 +17,12 @@ async function fixture(page: Page) {
     started: Date.now() / 1000 - 724,
     ended: null,
     counters: { sessions: 134, accepted: 24096, errors: 0 },
+    delivery: {
+      sessions_acknowledged: 128,
+      backend_spans_acknowledged: 8924,
+      sessions_stored: null,
+      backend_spans_stored: null,
+    },
     receipts: Array.from({ length: 8 }, (_, n) => ({
       id: `receipt-${n}`,
       time_ms: Date.now() - n * 3000,
@@ -93,27 +99,34 @@ test("run lifecycle, freshness, missing values and counter units stay truthful",
 }) => {
   const f = await fixture(page);
   await expect(page.locator(".run-metrics")).toContainText(
-    "Records acknowledged",
+    "Sessions acknowledged",
   );
-  await expect(page.locator(".run-metrics")).toContainText("24,096");
+  await expect(page.locator(".run-metrics")).toContainText("8,924");
   await expect(
-    page.getByRole("img", { name: "Generator active", exact: true }),
+    page.getByRole("img", { name: "Live delivery activity", exact: true }),
   ).toBeVisible();
-  expect(
-    await page
-      .locator(".traffic-motion")
-      .evaluate((e) => e.getAnimations({ subtree: true }).length),
-  ).toBe(3);
+  await expect(page.locator(".activity-mark")).toHaveCount(8);
+  await expect(page.locator(".run-metrics")).toContainText(
+    "Backend spans acknowledged",
+  );
+  await expect(page.locator(".run-metrics")).toContainText("128");
+  await expect(page.locator(".run-metrics")).toContainText(
+    "Stored · Not verified",
+  );
+  await expect(page.locator(".run-destination")).toContainText("XCOR RUM");
+  await expect(
+    page.getByRole("cell", { name: "Embrace", exact: true }),
+  ).toHaveCount(0);
   f.offline();
   await expect(page.locator(".run-status")).toHaveText("Last known: Running", {
     timeout: 12000,
   });
-  await expect(page.locator(".run-metrics")).toContainText("24,096");
+  await expect(page.locator(".run-metrics")).toContainText("8,924");
   await expect(page.getByText(/Last received/)).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeDisabled();
-  await expect(page.locator(".traffic-motion.is-active")).toHaveCount(0);
+  await expect(page.locator(".delivery-activity.is-active")).toHaveCount(0);
   await capture(page, "redesign-disconnected-fixture.png");
   f.online();
   f.state.heartbeat = Date.now() / 1000 - 60;
@@ -129,7 +142,7 @@ test("run lifecycle, freshness, missing values and counter units stay truthful",
   await expect(
     page.getByRole("button", { name: "Resume", exact: true }),
   ).toBeEnabled();
-  await expect(page.locator(".traffic-motion.is-active")).toHaveCount(0);
+  await expect(page.locator(".delivery-activity.is-active")).toHaveCount(0);
   await capture(page, "redesign-paused-fixture.png");
   f.state.status = "running";
   f.state.desired_status = "stopped";
@@ -163,10 +176,13 @@ test("run lifecycle, freshness, missing values and counter units stay truthful",
     errors: 0,
   };
   f.state.sessions = 4;
-  await expect(page.locator(".run-metrics")).toContainText(
-    "Payloads acknowledged",
-  );
-  await expect(page.locator(".run-metrics dd").nth(1)).toHaveText("9");
+  f.state.delivery = {
+    sessions_acknowledged: 4,
+    backend_spans_acknowledged: 67,
+  };
+  await expect(page.locator(".run-metrics dd").first()).toHaveText("4");
+  await expect(page.locator(".run-metrics dd").nth(1)).toHaveText("67");
+  delete f.state.delivery;
   f.state.counters = {};
   delete f.state.sessions;
   await expect(page.locator(".run-metrics dd").first()).toHaveText("—");
@@ -235,7 +251,7 @@ test("run layout exposes receipts, scales text, and supports keyboard inspection
     "Vantra Web customer portal with an exceptionally long application name";
   f.spec.chronosphere.tenant =
     "international-customer-experience-tenant-with-a-long-name";
-  f.state.counters.accepted = 9876543210;
+  f.state.delivery.backend_spans_acknowledged = 9876543210;
   await page.reload();
   await expect(page.locator(".run-metrics")).toContainText("9,876,543,210");
   await page.addStyleTag({ content: "html { font-size: 200%; }" });
@@ -268,6 +284,7 @@ test("receipt filters reflect recorded outcomes and new acknowledgements animate
     rejected: 4,
   });
   await expect(page.locator(".receipt-section tbody tr")).toHaveCount(1);
+  await expect(page.locator(".activity-mark.problem")).toHaveCount(1);
   await expect(page.locator(".receipt-section tbody")).toContainText("429");
   await outcome.selectOption("accepted");
   await expect(page.locator(".receipt-section tbody tr")).toHaveCount(8);
@@ -286,7 +303,7 @@ test("receipt filters reflect recorded outcomes and new acknowledgements animate
   await expect(page.locator(".receipt-fresh")).toHaveCount(0);
   expect(
     await page
-      .locator(".traffic-motion")
+      .locator(".delivery-activity")
       .evaluate((el) => el.getAnimations({ subtree: true }).length),
   ).toBe(0);
 });
