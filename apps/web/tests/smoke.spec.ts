@@ -258,6 +258,7 @@ test("lost start response recovers the same run after refresh", async ({
   await page.unroute("**/api/runs");
   await page.reload();
   await expect(page.getByRole("button", { name: "Local test", exact: false })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("Vantra · Android (5nrc3)", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Retry start request" }).click();
   await expect(
     page.getByRole("heading", { name: "Completed", exact: true }),

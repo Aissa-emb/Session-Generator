@@ -116,10 +116,11 @@ export default function App() {
     retry: false,
   });
   const run = job.data as Json | undefined;
+  const specId = run?.spec_id || read("sg_launch_attempt")?.specId;
   const savedSpec = useQuery({
-    queryKey: ["run-spec", run?.spec_id, run?.spec_version],
-    queryFn: () => api(`/specs/${run?.spec_id}?version=${run?.spec_version}`),
-    enabled: !!run?.spec_id,
+    queryKey: ["run-spec", specId, run?.spec_version],
+    queryFn: () => api(`/specs/${specId}${run?.spec_version ? `?version=${run.spec_version}` : ""}`),
+    enabled: !!specId,
     retry: false,
   });
   const online = status.isSuccess && !status.isError;
