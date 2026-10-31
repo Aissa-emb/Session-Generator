@@ -1,6 +1,33 @@
 import { useState } from "react";
+import {
+  MagnifyingGlassIcon,
+  ReloadIcon,
+  CopyIcon,
+  CheckIcon,
+} from "@radix-ui/react-icons";
 import { Json, number, pretty } from "./api";
 import { Badge, Button, Modal, Panel } from "./ui";
+
+const attributes = (row: Json) =>
+  Array.isArray(row.attributes)
+    ? Object.fromEntries(row.attributes.map((a: Json) => [a.key, a.value]))
+    : row.attributes || {};
+const ms = (row: Json) =>
+  Math.max(0, (Number(row.end) - Number(row.start)) / 1e6);
+const colors = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+];
+const hasError = (row: Json) => {
+  const a = attributes(row);
+  return (
+    !!a["error.type"] ||
+    !!a["emb.error_code"] ||
+    Number(a["http.status_code"] || a["http.response.status_code"]) >= 400
+  );
+};
 export default function PreviewStep({
   data,
   busy,
@@ -12,6 +39,9 @@ export default function PreviewStep({
 }) {
   const [platform, setPlatform] = useState("");
   const [detail, setDetail] = useState<Json | null>(null);
+  const [eventFilter, setEventFilter] = useState("");
+  const [traceFilter, setTraceFilter] = useState("");
+  const [copied, setCopied] = useState("");
   if (!data)
     return (
       <Panel>
@@ -36,6 +66,19 @@ export default function PreviewStep({
     1,
     Math.max(...trace.map((r) => Number(r.end))) - start,
   );
+  const services = [...new Set(trace.map((r) => r.service))];
+  const serviceColor = (service: string) =>
+    colors[services.indexOf(service) % colors.length];
+  const events = rows.filter((r: Json) =>
+    r.name.toLowerCase().includes(eventFilter.toLowerCase()),
+  );
+  const spans = trace.filter((r) =>
+    `${r.service} ${r.name}`.toLowerCase().includes(traceFilter.toLowerCase()),
+  );
+  const inspect = (row: Json) => {
+    setCopied("");
+    setDetail(row);
+  };
   return (
     <>
       <div className="preview-stats">
@@ -61,6 +104,7 @@ export default function PreviewStep({
       <div className="section-toolbar">
         <p>This is a local sample of the data you’re about to generate.</p>
         <Button onClick={refresh} disabled={busy}>
+          <ReloadIcon />
           {busy ? "Refreshing…" : "Refresh preview"}
         </Button>
       </div>
@@ -86,9 +130,22 @@ export default function PreviewStep({
                         : f.requested_pct.toFixed(1) + "%"}
                     </td>
                     <td>
-                      {f.emitted_pct == null
-                        ? "Not measurable"
-                        : f.emitted_pct.toFixed(1) + "%"}
+                      <div className="sample-share">
+                        <span>
+                          {f.emitted_pct == null
+                            ? "Not measurable"
+                            : f.emitted_pct.toFixed(1) + "%"}
+                        </span>
+                        {f.emitted_pct != null && (
+                          <span className="share-track" aria-hidden="true">
+                            <i
+                              style={{
+                                width: `${Math.max(0, Math.min(100, f.emitted_pct))}%`,
+                              }}
+                            />
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       {f.emitted_sessions} / {f.eligible}
@@ -120,12 +177,25 @@ export default function PreviewStep({
           </div>
         }
       >
+        <div className="data-toolbar">
+          <label className="search-control">
+            <MagnifyingGlassIcon aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Filter session events"
+              placeholder="Filter events…"
+              value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value)}
+            />
+          </label>
+          <span>{number(events.length)} events</span>
+        </div>
         <div className="timeline">
-          {rows.slice(0, 35).map((r: Json, i: number) => (
+          {events.map((r: Json, i: number) => (
             <button
               key={i}
-              className="timeline-event"
-              onClick={() => setDetail(r)}
+              className={"timeline-event" + (hasError(r) ? " event-error" : "")}
+              onClick={() => inspect(r)}
             >
               <span className="timeline-time">
                 {((Number(r.start) - first) / 1e9).toFixed(2)}s
@@ -137,57 +207,90 @@ export default function PreviewStep({
               </span>
             </button>
           ))}
+          {!events.length && (
+            <p className="empty-data">No events match this filter.</p>
+          )}
         </div>
       </Panel>
       <Panel
         title="Distributed trace"
-        action={<Badge>{trace.length} spans</Badge>}
+        action={
+          <Badge>
+            {services.length} services · {trace.length} spans
+          </Badge>
+        }
       >
         {trace.length ? (
-          <div className="waterfall">
-            <div className="waterfall-header">
-              <span>Service / operation</span>
-              <span>Time · milliseconds</span>
-              <span>Duration</span>
+          <>
+            <div className="data-toolbar">
+              <label className="search-control">
+                <MagnifyingGlassIcon aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label="Filter trace spans"
+                  placeholder="Filter service or operation…"
+                  value={traceFilter}
+                  onChange={(e) => setTraceFilter(e.target.value)}
+                />
+              </label>
+              <span>{(duration / 1e6).toFixed(1)} ms total</span>
             </div>
-            {trace.map((r: Json, i: number) => (
-              <button
-                key={i}
-                className="waterfall-row"
-                onClick={() => setDetail(r)}
-              >
-                <div>
-                  <strong>{r.service}</strong>
-                  <span>{r.name}</span>
-                </div>
-                <div className="waterfall-track">
-                  <i
-                    style={{
-                      left:
-                        Math.max(
-                          0,
-                          ((Number(r.start) - start) / duration) * 100,
-                        ) + "%",
-                      width:
-                        Math.max(
-                          0.6,
-                          ((Number(r.end) - Number(r.start)) / duration) * 100,
-                        ) + "%",
-                      background: [
-                        "var(--chart-1)",
-                        "var(--chart-2)",
-                        "var(--chart-3)",
-                        "var(--chart-4)",
-                      ][i % 4],
-                    }}
-                  />
-                </div>
-                <span>
-                  {((Number(r.end) - Number(r.start)) / 1e6).toFixed(1)} ms
+            <div className="waterfall">
+              <div className="waterfall-header">
+                <span>Service / operation</span>
+                <span className="waterfall-axis">
+                  <span>0</span>
+                  <span>{(duration / 2e6).toFixed(0)} ms</span>
+                  <span>{(duration / 1e6).toFixed(0)} ms</span>
                 </span>
-              </button>
-            ))}
-          </div>
+                <span>Duration</span>
+              </div>
+              {spans.map((r: Json, i: number) => (
+                <button
+                  key={i}
+                  className={
+                    "waterfall-row" + (hasError(r) ? " event-error" : "")
+                  }
+                  onClick={() => inspect(r)}
+                >
+                  <div>
+                    <strong>
+                      <i
+                        className="service-dot"
+                        style={{ background: serviceColor(r.service) }}
+                      />
+                      {r.service}
+                    </strong>
+                    <span>{r.name}</span>
+                  </div>
+                  <div className="waterfall-track">
+                    <i
+                      style={{
+                        left:
+                          Math.max(
+                            0,
+                            ((Number(r.start) - start) / duration) * 100,
+                          ) + "%",
+                        width:
+                          Math.max(
+                            0.6,
+                            ((Number(r.end) - Number(r.start)) / duration) *
+                              100,
+                          ) + "%",
+                        background: serviceColor(r.service),
+                      }}
+                    />
+                  </div>
+                  <span>
+                    {((Number(r.end) - Number(r.start)) / 1e6).toFixed(1)} ms
+                  </span>
+                </button>
+              ))}
+              {!spans.length && (
+                <p className="empty-data">No spans match this filter.</p>
+              )}
+            </div>
+          </>
         ) : (
           <p className="hint">
             This destination includes sessions only. Select sessions and
@@ -229,6 +332,22 @@ export default function PreviewStep({
           </div>
         </details>
       )}
+      {data.exception && (
+        <details className="panel exception-preview">
+          <summary>
+            JavaScript exception{" "}
+            <span className="secondary">
+              {data.exception["exception.name"] ||
+                data.exception["exception.type"]}
+            </span>
+          </summary>
+          <p>{data.exception["exception.message"]}</p>
+          <pre>
+            {data.exception["exception.stacktrace"] ||
+              "This browser did not attach an application stack."}
+          </pre>
+        </details>
+      )}
       {data.linter.length > 0 && (
         <Panel title="Validation notes">
           {data.linter.map((v: Json, i: number) => (
@@ -242,7 +361,69 @@ export default function PreviewStep({
         title={detail?.name || "Payload details"}
         description="Values from the generated sample."
       >
-        <pre>{pretty(detail)}</pre>
+        {detail && (
+          <>
+            <dl className="inspector-grid">
+              <div>
+                <dt>Duration</dt>
+                <dd>{ms(detail).toFixed(2)} ms</dd>
+              </div>
+              {detail.service && (
+                <div>
+                  <dt>Service</dt>
+                  <dd>{detail.service}</dd>
+                </div>
+              )}
+              {detail.id && (
+                <div>
+                  <dt>Span ID</dt>
+                  <dd>
+                    <code>{detail.id}</code>
+                  </dd>
+                </div>
+              )}
+              {detail.trace_id && (
+                <div>
+                  <dt>Trace ID</dt>
+                  <dd>
+                    <code>{detail.trace_id}</code>
+                  </dd>
+                </div>
+              )}
+            </dl>
+            <dl className="attribute-list">
+              {Object.entries(attributes(detail)).map(([key, value]) => (
+                <div key={key}>
+                  <dt>{key}</dt>
+                  <dd>
+                    {typeof value === "object"
+                      ? JSON.stringify(value)
+                      : String(value)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <div className="inspector-actions">
+              <Button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(pretty(detail));
+                    setCopied("Copied");
+                  } catch {
+                    setCopied("Copy unavailable. Use the raw payload below.");
+                  }
+                }}
+              >
+                {copied === "Copied" ? <CheckIcon /> : <CopyIcon />}Copy payload
+              </Button>
+              <span role="status">{copied}</span>
+            </div>
+            <details className="raw-payload">
+              <summary>Raw payload</summary>
+              <pre>{pretty(detail)}</pre>
+            </details>
+          </>
+        )}
       </Modal>
     </>
   );

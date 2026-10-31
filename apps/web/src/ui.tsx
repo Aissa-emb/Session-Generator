@@ -1,6 +1,6 @@
 import { ReactNode, isValidElement, cloneElement, useId, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Cross2Icon } from "@radix-ui/react-icons";
+import { ChevronDownIcon, Cross2Icon } from "@radix-ui/react-icons";
 export function Button({
   children,
   onClick,
@@ -64,10 +64,12 @@ export function Field({
   label,
   children,
   hint,
+  compact = false,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  compact?: boolean;
 }) {
   const id = useId();
   const control =
@@ -78,9 +80,16 @@ export function Field({
         })
       : children;
   return (
-    <label className="field">
-      <span>{label}</span>
-      {control}
+    <label className={"field" + (compact ? " field-compact" : "")}>
+      <span className={compact ? "sr-only" : undefined}>{label}</span>
+      {isValidElement(children) && children.type === "select" ? (
+        <span className="select-control">
+          {control}
+          <ChevronDownIcon className="select-chevron" aria-hidden="true" />
+        </span>
+      ) : (
+        control
+      )}
       {hint && <small id={id}>{hint}</small>}
     </label>
   );

@@ -249,3 +249,44 @@ test("run layout exposes receipts, scales text, and supports keyboard inspection
   ).toBeVisible();
   await capture(page, "redesign-large-text-fixture.png");
 });
+
+test("receipt filters reflect recorded outcomes and new acknowledgements animate once", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  const outcome = page.getByRole("combobox", { name: "Receipt outcome" });
+  await outcome.selectOption("attention");
+  await expect(page.getByText("No receipts match this filter")).toBeVisible();
+  f.state.receipts.unshift({
+    id: "receipt-rejected",
+    time_ms: Date.now(),
+    target: "otlp",
+    kind: "traces",
+    status: "rejected",
+    http_status: 429,
+    accepted: 0,
+    rejected: 4,
+  });
+  await expect(page.locator(".receipt-section tbody tr")).toHaveCount(1);
+  await expect(page.locator(".receipt-section tbody")).toContainText("429");
+  await outcome.selectOption("accepted");
+  await expect(page.locator(".receipt-section tbody tr")).toHaveCount(8);
+  await outcome.selectOption("all");
+  await expect(page.locator(".receipt-section tbody tr")).toHaveCount(9);
+  // A UI clock tick must not replay the acknowledgement feedback.
+  await expect
+    .poll(() =>
+      page
+        .locator(".receipt-fresh")
+        .evaluate((el) => el.getAnimations().length),
+    )
+    .toBe(0);
+  f.state.desired_status = "paused";
+  await expect(page.locator(".run-status")).toHaveText("Pausing");
+  await expect(page.locator(".receipt-fresh")).toHaveCount(0);
+  expect(
+    await page
+      .locator(".traffic-motion")
+      .evaluate((el) => el.getAnimations({ subtree: true }).length),
+  ).toBe(0);
+});

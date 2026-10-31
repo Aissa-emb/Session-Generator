@@ -8,6 +8,8 @@ The owner replaced the multi-page studio requirements with a four-step workflow:
 
 `tools/studio.py` and `Start Session Generator.command` run the local API in a detached owned process. Do not stop the owner's working application server at the end of a coding session. Temporary visual-test servers must still be cleaned up. The old fetch failures were caused by ending the temporary server while its cached page stayed open. Keep truthful offline/reconnect states and idempotent run startup.
 
+The UI refinement uses native selects inside the shared `Field` wrapper, with reserved arrow space and consistent keyboard behavior. Keep platform icons/checkmarks contained at 320–1920px and 200% text size. Preview colors identify services consistently, filters operate on actual payload rows, and inspector values come from those rows. Run packet animation denotes worker activity, not verified ingestion; receipt feedback follows actual recorded responses. Preserve reduced-motion and reduced-transparency support.
+
 ## V2 (branch `v2`)
 
 V2 turns the generator into a product driven by one versioned document, the **ScenarioSpec** (`spec/scenario.schema.json`). The build prompt and the verified feasibility findings are in `docs/v2/V2-BUILD-PROMPT.md` and `docs/v2/V2-SCOPE.md`; read both before V2 work. The prompt's phases: (1) spec and engine, (2) web generator, (3) server and runs, (4) UI, (5) MCP and copilot, (6) destinations, demo preparation and backfill, (7) hosted stream.

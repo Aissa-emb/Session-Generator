@@ -11,7 +11,7 @@ import {
   StopIcon,
 } from "@radix-ui/react-icons";
 import { ApiError, Json, number, pretty, time } from "./api";
-import { Button, Modal } from "./ui";
+import { Button, Field, Modal } from "./ui";
 
 const clock = (seconds: number) => {
   const s = Math.max(0, Math.floor(seconds));
@@ -55,6 +55,7 @@ export default function RunView({
 }) {
   const [receipt, setReceipt] = useState<Json | null>(null);
   const [copyState, setCopyState] = useState("");
+  const [receiptFilter, setReceiptFilter] = useState("all");
   const counters = run?.counters;
   const duration = spec?.traffic?.duration_minutes || 0;
   const elapsed = run?.started
@@ -132,6 +133,14 @@ export default function RunView({
   const countUnit =
     recordCount !== undefined || run?.mode === "live" ? "Records" : "Payloads";
   const receipts: Json[] = run?.receipts || [];
+  const recentReceipts = receipts.slice(0, 20);
+  const visibleReceipts = recentReceipts.filter(
+    (r) =>
+      receiptFilter === "all" ||
+      (receiptFilter === "attention"
+        ? !["accepted", "expired"].includes(r.status) || r.rejected > 0
+        : r.status === "accepted"),
+  );
   const copyId = async () => {
     try {
       await navigator.clipboard.writeText(runId);
@@ -266,6 +275,16 @@ export default function RunView({
           }
           title="Generator activity; delivery results appear below"
         >
+          <svg
+            className="transport-rails"
+            viewBox="0 0 180 52"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path d="M4 26H26L44 12H136L154 26H176 M4 26H176 M4 26H26L44 40H136L154 26H176" />
+            <circle cx="4" cy="26" r="3" />
+            <circle cx="176" cy="26" r="3" />
+          </svg>
           <span />
           <span />
           <span />
@@ -410,11 +429,30 @@ export default function RunView({
       <section className="receipt-section" aria-labelledby="receipts-title">
         <div className="receipt-heading">
           <h2 id="receipts-title">Recent delivery receipts</h2>
-          <span>
-            {receipts.length ? `Last ${Math.min(20, receipts.length)}` : ""}
-          </span>
+          <div className="receipt-tools">
+            {receipts[0]?.time_ms && (
+              <span
+                key={receipts[0].id}
+                className={trafficActive ? "receipt-fresh" : ""}
+              >
+                Updated {receiptTime(receipts[0].time_ms)}
+              </span>
+            )}
+            <Field label="Receipt outcome" compact>
+              <select
+                value={receiptFilter}
+                onChange={(e) => setReceiptFilter(e.target.value)}
+              >
+                <option value="all">All outcomes</option>
+                <option value="attention">Needs attention</option>
+                <option value="accepted">
+                  {run?.dry_run ? "Generated" : "Acknowledged"}
+                </option>
+              </select>
+            </Field>
+          </div>
         </div>
-        {receipts.length ? (
+        {visibleReceipts.length ? (
           <div
             className="table-scroll"
             tabIndex={0}
@@ -440,7 +478,7 @@ export default function RunView({
                 </tr>
               </thead>
               <tbody>
-                {receipts.slice(0, 20).map((r) => (
+                {visibleReceipts.map((r) => (
                   <tr
                     key={r.id}
                     className={
@@ -498,18 +536,22 @@ export default function RunView({
         ) : (
           <div className="empty-receipts">
             <h3>
-              {run
-                ? "No delivery receipts yet"
-                : fetchError
-                  ? "Delivery receipts unavailable"
-                  : "Loading delivery receipts"}
+              {receipts.length
+                ? "No receipts match this filter"
+                : run
+                  ? "No delivery receipts yet"
+                  : fetchError
+                    ? "Delivery receipts unavailable"
+                    : "Loading delivery receipts"}
             </h3>
             <p>
-              {run
-                ? "Receipts appear after the first upload attempt. Sessions may still be in flight."
-                : fetchError
-                  ? "Run details could not be retrieved from the server."
-                  : "Waiting for the server’s run details."}
+              {receipts.length
+                ? "Choose another outcome to view recent deliveries."
+                : run
+                  ? "Receipts appear after the first upload attempt. Sessions may still be in flight."
+                  : fetchError
+                    ? "Run details could not be retrieved from the server."
+                    : "Waiting for the server’s run details."}
             </p>
           </div>
         )}

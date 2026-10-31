@@ -323,7 +323,9 @@ Server checks: `.venv/bin/python -m unittest discover -s tests/server -v` and `.
 
 Build the React UI with `npm --prefix apps/web ci && npm --prefix apps/web run build`, then start the local server as above. Vite development (`npm --prefix apps/web run dev`) proxies API calls to port 8000. The four steps are Destination, Customize, Preview and Send. Choose app IDs and a tenant, select a regression or individual signals, inspect generated payloads, then send a batch or continuous traffic for a finite duration. Running jobs show progress, delivery counts, pause and stop controls. Reloading recovers the run; an unconfirmed start retains its idempotency key for a safe retry. A credential preflight failure returns to an editable workflow before any worker starts. AI and MCP controls are absent from this UI.
 
-The UI bundles Figtree locally and uses the Cortex XCOR dark palette without external fonts or invented logo assets. Generated Zod contracts are checked with `npm --prefix apps/web run schema:check`. Run `npm --prefix apps/web exec -- playwright install chromium` once, then `npm --prefix apps/web test` for isolated local browser checks. No production destinations are used by these tests.
+The UI bundles Source Sans 3 locally and uses the approved Cortex XCOR logo and navy/slate palette. Preview filters find session events and trace operations, with a structured attribute inspector and copyable payloads. Recent delivery receipts can be filtered by outcome. Tactile controls and the branching traffic animation respect reduced-motion preferences; activity stops when the worker is paused or connectivity is uncertain. Packet motion indicates generator activity, while receipt timestamps reflect recorded upload responses.
+
+Generated Zod contracts are checked with `npm --prefix apps/web run schema:check`. Run `npm --prefix apps/web exec -- playwright install chromium` once, then `npm --prefix apps/web test` for isolated local browser checks. No production destinations are used by these tests.
 
 ### Experimental MCP and Copilot APIs
 
