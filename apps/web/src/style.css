@@ -291,6 +291,7 @@ main {
 }
 .panel-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 14px;
@@ -434,6 +435,7 @@ main {
 }
 .platform-picker {
   display: inline-flex;
+  flex-wrap: wrap;
   max-width: 100%;
   gap: 4px;
   padding: 4px;
@@ -450,9 +452,12 @@ main {
   padding: 7px 16px;
   min-height: 36px;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  min-width: 112px;
+  /* Keep each icon/label/check group intact; wrap whole buttons when needed. */
+  flex: 1 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
   justify-content: center;
 }
 .platform-picker button:hover {
@@ -464,7 +469,21 @@ main {
   box-shadow: inset 0 1px #ffffff18;
   color: var(--text);
 }
-.platform-picker button svg:last-child:not(:first-child) {
+.platform-icon,
+.platform-check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+.platform-check {
+  /* Reserve the checkmark slot so selection never shifts the content. */
+  visibility: hidden;
+}
+.platform-picker button[aria-pressed="true"] .platform-check {
+  visibility: visible;
+}
+.platform-check svg {
   width: 14px;
   height: 14px;
 }
@@ -675,6 +694,7 @@ main {
 }
 .workflow-footer {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   align-items: center;
   justify-content: space-between;
@@ -1616,9 +1636,7 @@ details[open] > summary {
     font-size: 0.8125rem;
   }
   .platform-picker button {
-    min-width: 0;
-    flex: 1;
-    padding: 10px;
+    padding: 10px 8px;
   }
   .timeline-event {
     gap: 7px;

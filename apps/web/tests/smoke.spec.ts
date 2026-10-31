@@ -359,6 +359,59 @@ test("laptop and mobile layout stay within the viewport", async ({ page }) => {
   ).toBeTruthy();
 });
 
+test("platform selector keeps icons, labels and checkmarks contained through resizing", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
+  const buttons = page.locator(".platform-picker button");
+  for (const fontSize of [16, 32]) {
+    await page.evaluate((size) => {
+      document.documentElement.style.fontSize = `${size}px`;
+    }, fontSize);
+    for (const width of [390, 640, 780, 781, 1100, 1440, 320, 1920]) {
+      await page.setViewportSize({ width, height: width % 2 ? 900 : 600 });
+      let previous: { box: number[]; icon: number[] }[] | undefined;
+      for (const selection of [[0], [0, 1, 2], [2]]) {
+        // Add before removing so one platform always remains selected.
+        for (const wanted of [true, false]) {
+          for (let i = 0; i < 3; i++) {
+            if (selection.includes(i) !== wanted) continue;
+            if ((await buttons.nth(i).getAttribute("aria-pressed") === "true") !== wanted)
+              await buttons.nth(i).click();
+          }
+        }
+        const layout = await buttons.evaluateAll((items) => items.map((button) => {
+          const rect = button.getBoundingClientRect();
+          const icon = button.querySelector("svg")!.getBoundingClientRect();
+          const contents = [...button.querySelectorAll("svg")].filter((el) => getComputedStyle(el).visibility !== "hidden").map((el) => el.getBoundingClientRect());
+          const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) {
+            if (!walker.currentNode.textContent?.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(walker.currentNode);
+            contents.push(range.getBoundingClientRect());
+          }
+          return {
+            box: [rect.x + scrollX, rect.y + scrollY, rect.width, rect.height].map((v) => Math.round(v * 100) / 100),
+            icon: [icon.x - rect.x, icon.y - rect.y].map((v) => Math.round(v * 100) / 100),
+            contained: contents.every((r) => r.left >= rect.left + 6 && r.right <= rect.right - 6 && r.top >= rect.top + 4 && r.bottom <= rect.bottom - 4),
+          };
+        }));
+        expect(layout.every((item) => item.contained), `${width}px / ${fontSize}px text / ${selection}`).toBeTruthy();
+        const boxes = layout.map(({ box, icon }) => ({ box, icon }));
+        if (previous) expect(boxes, "Selecting a platform must not move its button or icon").toEqual(previous);
+        previous = boxes;
+        const overflow = await page.evaluate(() => [...document.querySelectorAll("body *")].filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && (r.right > innerWidth + 1 || r.left < -1);
+        }).map((el) => `${el.tagName}.${el.className}`));
+        expect(overflow, `${width}px / ${fontSize}px text`).toEqual([]);
+        if (fontSize === 16 && width === 390 && selection.length === 1 && selection[0] === 0)
+          await capture(page, "platform-selector-390.png");
+      }
+    }
+  }
+});
+
 test("continuous duration must be finite and app token is never part of the saved draft", async ({
   page,
 }) => {

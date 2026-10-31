@@ -488,11 +488,13 @@ export default function App() {
                       aria-pressed={draft.apps.some((a) => a.platform === p)}
                       onClick={() => togglePlatform(p)}
                     >
-                      {p === "web" ? <GlobeIcon /> : <MobileIcon />}
-                      {platformName(p)}
-                      {draft.apps.some((a) => a.platform === p) && (
+                      <span className="platform-icon" aria-hidden="true">
+                        {p === "web" ? <GlobeIcon /> : <MobileIcon />}
+                      </span>
+                      <span>{platformName(p)}</span>
+                      <span className="platform-check" aria-hidden="true">
                         <CheckIcon />
-                      )}
+                      </span>
                     </button>
                   ))}
                 </div>
