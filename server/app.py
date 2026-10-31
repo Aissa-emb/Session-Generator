@@ -145,7 +145,7 @@ def create_app(service=None):
     @app.get('/health')
     def health():
         svc.store.list('settings')
-        return {'status': 'ok', 'version': '2.0'}
+        return {'status': 'ok', 'version': '2.0', 'runner_region':os.environ.get('SG_RUNNER_REGION','local')}
 
     @app.get('/api/capabilities')
     def capabilities():
@@ -222,6 +222,21 @@ def create_app(service=None):
     @app.post('/api/specs/{id}/explain')
     def explain(id: str):
         return {'lines': specs.explain(svc.store.get('scenario_specs', id)['spec'])}
+
+    @app.post('/api/regions/plan')
+    def region_plan(value: dict):
+        from xcorgen.regions import plan
+        return plan(svc.require_valid(value['spec']),value['runners'])
+
+    @app.get('/api/specs/{id}/symbols')
+    def symbol_plan(id: str):
+        from .symbols import plan
+        return plan(svc.store.get('scenario_specs',id)['spec'])
+
+    @app.post('/api/specs/{id}/symbols/upload')
+    def upload_symbols(id: str, value: dict, request: Request):
+        from .symbols import upload
+        return upload(svc,id,value.get('confirm',False),request.state.actor)
 
     @app.post('/api/specs/{id}/preview')
     def preview(id: str):
@@ -354,7 +369,7 @@ def create_app(service=None):
 
     @app.post('/api/targets/{id}/probe')
     def probe(id: str, request: Request, value: dict = Body()):
-        return svc.forwarding_probe(id, value['spec_id'], value.get('confirm', False), value.get('dry_run', False), request.state.actor)
+        return svc.forwarding_probe(id, value['spec_id'], value.get('confirm', False), value.get('dry_run', False), request.state.actor, value.get('idempotency_key'))
 
     @app.get('/api/streams')
     def list_streams():
@@ -362,7 +377,7 @@ def create_app(service=None):
 
     @app.post('/api/streams', status_code=201)
     def create_stream(request: Request, value: dict = Body()):
-        return svc.create_stream(value['spec_id'], value['name'], value.get('confirm', False), value.get('dry_run', False), request.state.actor)
+        return svc.create_stream(value['spec_id'], value['name'], value.get('confirm', False), value.get('dry_run', False), request.state.actor, value.get('idempotency_key'))
 
     @app.get('/api/streams/{id}')
     def get_stream(id: str):

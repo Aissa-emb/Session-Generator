@@ -36,7 +36,8 @@ def app_overrides(target, spec):
     """Android app definition for each line of business, from the target."""
     if target["platform"] == "web":
         return {catalog.PROFILE_FOR[lob]: {"api_host": host} for lob, host in target["api_domains"].items()}
-    a = target["android"]
+    a = target["ios"] if target["platform"]=="ios" else target["android"]
+    package=a.get("bundle_id") or a.get("package")
     name = target.get("app_name") or "Vantra"
     versions = []
     for v in a["versions"]:
@@ -49,9 +50,9 @@ def app_overrides(target, spec):
     out = {}
     for lob in catalog.LINES_OF_BUSINESS:
         out[catalog.PROFILE_FOR[lob]] = {
-            "package": a["package"], "app_name": name, "activity": f"{a['package']}.ui.MainActivity",
+            "package": package, "app_name": name, "activity": f"{package}.ui.MainActivity",
             "versions": versions, "ui": a.get("ui_toolkit", "compose"),
-            "user_agent": name.replace(" ", "") + "/{version} (Android {os}; {model}) okhttp/4.12.0",
+            "user_agent": name.replace(" ", "") + ("/{version} ({model}; iOS {os})" if target["platform"]=="ios" else "/{version} (Android {os}; {model}) okhttp/4.12.0"),
             "api_host": target["api_domains"].get(lob),
             "markets": list(props["market"].items()), "entry_points": list(props["entry_point"].items())}
     return out
@@ -97,9 +98,10 @@ class SpecRun:
                             backend_logs=self.spec["destinations"].get("backend_logs", False), persist=persist,
                             platform=target["platform"], shared=True, app_overrides=app_overrides(target, self.spec),
                             pool_options={"returning_share": pop["returning_share"],
-                                          "android_overrides": pop.get("android"), "web_overrides": pop.get("web")}, runtime=runtime,
+                                          "android_overrides": pop.get("android"), "ios_overrides":pop.get("ios"), "web_overrides": pop.get("web")}, runtime=runtime,
                             state_dir=state_dir, web_options={"web": target["web"], "performance": self.spec["web_performance"],
                                 "population": pop.get("web", {}), "app_name": target["app_name"]} if target["platform"] == "web" else None)
+            gen.cross_platform_customers = len({t["platform"] for t in self.spec["targets"]}) > 1
             gen.signed_in_share = pop["signed_in_share"]
             gen.membership_weights = list(pop["session_properties"]["membership_tier"].items())
             gen.verification_queue = [self._case(c) for c in self.spec["verification_cases"]
@@ -108,6 +110,8 @@ class SpecRun:
         mix = pop["platform_mix"]
         self.target_weights = [(tid, mix.get(tid, 0)) for tid in self.generators]
         self.emitted = Emitted(self.spec)
+        from .backend_metrics import REDMetrics
+        self.metrics = REDMetrics()
         self.manifest = None
         self.journal = None
         self.resuming = False
@@ -149,15 +153,23 @@ class SpecRun:
         return target, s, journey, deliveries, fault_ids
 
     def record(self, target, s, fault_ids, deliveries):
+        if self.spec["destinations"].get("backend_metrics") and s.traces:
+            payload = self.metrics.collect(deliveries, self.run_id)
+            if payload["resourceMetrics"]:
+                due = max((d['due'] for d in deliveries), default=s.end_ms)
+                deliveries.append(dict(target="otlp", kind="metrics", payload=payload, due=due,
+                    app_id=s.app_id, device_id=s.persona['device_id'],
+                    _metrics_policy=self.spec['destinations'].get('metrics_policy','aggregated')))
         self.emitted.add(target, s, deliveries)
         if self.manifest:
-            trace_ids = sorted({r["trace_id"] for r in s.plan.evidence}) if s.traces else []
+            trace_ids = expected_trace_ids(s, deliveries)
             record = {
                 "index": self.session_index, "run_id": self.run_id, "target": target["id"], "platform": target["platform"], "app_id": s.app_id, "session_id": s.user_session_id,
                 "device_id": getattr(s, "device_id", s.persona["device_id"]), "start_ms": s.start_ms, "end_ms": s.end_ms,
                 "planned_start_ms": getattr(s, "planned_start_ms", s.start_ms),
                 "line_of_business": s.properties.get("business_unit"), "faults": fault_ids,
                 "verification_case": s.verification_case, "traces": bool(s.traces), "trace_ids": trace_ids,
+                "sdk_sessions": self.emitted.observations[-1].get("sdk_sessions", []),
                 "part_ids": sorted({_part_id(d) for d in deliveries
                                     if d.get("fmt") == "envelope" and d["kind"] == "spans"} - {None})
                             + [p.id for p in getattr(s, "parts", [])]}
@@ -209,10 +221,15 @@ class SpecRun:
     def _acknowledge(self):
         # A crash between append and acknowledgement must not duplicate the session receipt.
         with open(self.manifest) as stream:
-            recorded = {r["index"] for line in stream if (r := json.loads(line)).get("stage") == "sent"}
+            recorded = {r["index"] for line in stream if (r := json.loads(line)).get("stage") in ("sent","expired","partially_expired")}
         for index, record in self.journal.completed():
             if index not in recorded:
-                append_manifest(self.manifest, dict(record, stage="sent", sent_ms=time.time() * 1000))
+                receipts=[json.loads(row[0]) for row in self.journal.db.execute('SELECT receipt FROM deliveries WHERE session_idx=?',(index,)) if row[0]]
+                expired=[r for r in receipts if r['status']=='expired']
+                trace_ids=set(record['trace_ids'])-{tid for r in expired for tid in r.get('trace_ids',[])}
+                app=[r for r in receipts if r['target']=='embrace']
+                stage='expired' if app and all(r['status']=='expired' for r in app) else 'partially_expired' if any(r['status']=='expired' for r in app) else 'sent'
+                append_manifest(self.manifest, dict(record, stage=stage, trace_ids=sorted(trace_ids), traces=bool(trace_ids), expired_payloads=len(expired), sent_ms=time.time()*1000))
             self.journal.acknowledge_session(index)
 
     def _deliver(self, sender, delivery):
@@ -233,7 +250,8 @@ class SpecRun:
                       (age > limits.TRACE_ELIGIBLE_MS or any(now - t > limits.TRACE_ELIGIBLE_MS for t in starts)))
             if expired:
                 receipt = {"status": "expired", "target": delivery["target"], "kind": delivery["kind"],
-                           "http_status": None, "accepted": 0, "rejected": 0, "reason": "outside_ingest_window"}
+                           "http_status": None, "accepted": 0, "rejected": 0, "reason": "outside_ingest_window",
+                           "trace_ids":sorted({sp['traceId'] for rs in delivery['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']})}
                 self.journal.receipt(ident, receipt)
                 append_manifest(self.manifest + ".receipts", dict(receipt, delivery_id=ident))
                 self._acknowledge()
@@ -378,9 +396,17 @@ class SpecRun:
         return started
 
 
+def expected_trace_ids(session, deliveries):
+    """Only network requests with an emitted backend; offline/DNS calls are ineligible."""
+    requests={r['trace_id'] for r in session.plan.evidence if r.get('first_backend_span_id')}
+    exported={sp['traceId'] for d in deliveries if d['target']=='otlp' and d['kind']=='traces'
+              for rs in d['payload']['resourceSpans'] for ss in rs['scopeSpans'] for sp in ss['spans']}
+    return sorted(requests & exported) if session.traces else []
+
+
 def _part_id(delivery):
     span = delivery["payload"]["data"]["spans"][0]
-    return next((a["value"] for a in span["attributes"] if a["key"] == "emb.session_part_id"), None)
+    return next((a["value"] for a in span["attributes"] if a["key"] in ("emb.session_part_id","session.id")), None)
 
 
 def strip_traces(session, deliveries):

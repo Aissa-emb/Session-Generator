@@ -27,6 +27,12 @@ ANDROID_TARGET = {
         {"version": "10.27.3", "version_code": "1027032", "sdk_version": "9.3.1", "released": "2026-10-06", "share": .30},
         {"version": "10.25.1", "version_code": "1025011", "sdk_version": "9.3.0", "released": "2026-09-08", "share": .09}]},
 }
+IOS_TARGET = {
+    'id':'vantra-ios','platform':'ios','embrace_app_id':'ios00','app_name':'Vantra',
+    'environment':'production','region':'us','api_domains':dict(ANDROID_TARGET['api_domains']),
+    'ios':{'bundle_id':'com.vantra.ios','sdk_version':'6.21.0','versions':[
+        {'version':'10.28.0','version_code':'1028004','sdk_version':'6.21.0','share':.7},
+        {'version':'10.27.3','version_code':'1027032','sdk_version':'6.21.0','share':.3}]}}
 WEB_TARGET = {
     "id": "vantra-web", "platform": "web", "embrace_app_id": "kfs9f", "app_name": "Vantra Web",
     "environment": "production", "region": "us",
@@ -113,7 +119,7 @@ def normalized(spec):
         else:
             pop.setdefault(key, value)
     for target in s.get("targets", []):
-        base = ANDROID_TARGET if target.get("platform") == "android" else WEB_TARGET if target.get("platform") == "web" else {}
+        base = ANDROID_TARGET if target.get("platform") == "android" else WEB_TARGET if target.get("platform") == "web" else IOS_TARGET if target.get("platform") == "ios" else {}
         for key, value in base.items():
             if key in ("id", "embrace_app_id"):
                 continue
@@ -289,7 +295,11 @@ def validate(spec, now_ms=None, lint=True):
     for i, t in enumerate(s["targets"]):
         p = f"$.targets[{i}]"
         if t["platform"] == "ios":
-            issues.append(_issue("error", p, "iOS sessions are reserved for a later release.", "unsupported_platform"))
+            shares=sum(v['share'] for v in t['ios']['versions'])
+            if abs(shares-1)>.001:
+                issues.append(_issue('error',p+'.ios.versions','Version shares must sum to 1.','shares'))
+            if t['embrace_app_id']=='ios00':
+                issues.append(_issue('warning',p+'.embrace_app_id','Create an iOS app in Embrace and replace ios00 before live delivery.','owner_setup'))
         if t["platform"] == "android":
             shares = sum(v["share"] for v in t["android"]["versions"])
             if abs(shares - 1) > .01:
@@ -313,8 +323,8 @@ def validate(spec, now_ms=None, lint=True):
         issues.append(_issue("error", "$.chronosphere", "End-to-end runs need a Cortex XCOR tenant and token reference.", "destination"))
     if mode == "sessions_only" and (s["destinations"].get("backend_logs") or s["destinations"].get("emit_client_spans")):
         issues.append(_issue("warning", "$.destinations", "Sessions-only runs send nothing to Cortex XCOR; backend logs and client spans are ignored.", "destination"))
-    if s["destinations"].get("backend_metrics"):
-        issues.append(_issue("error", "$.destinations.backend_metrics", "Backend RED metrics are planned for a later phase.", "unsupported"))
+    if mode == "sessions_only" and s["destinations"].get("backend_metrics"):
+        issues.append(_issue("warning", "$.destinations.backend_metrics", "Sessions-only runs produce no backend metrics.", "destination"))
 
     # Traffic and platform limits.
     t = s["traffic"]
@@ -348,8 +358,11 @@ def validate(spec, now_ms=None, lint=True):
     for dup in sorted({x for x in all_ids if all_ids.count(x) > 1}):
         issues.append(_issue("error", "$", f"Fault ID {dup} is used more than once.", "duplicate_id"))
     android = next((t for t in s["targets"] if t["platform"] == "android"), None)
-    versions = {v["version"] for v in android["android"]["versions"]} if android else set()
+    versions = {v["version"] for t in s["targets"] if t["platform"] in ("android","ios") for v in t[t["platform"]]["versions"]}
     devices = {d[1]: set(d[2]) for d in ANDROID_DEVICES}
+    if "ios" in platforms:
+        from .ios_devices import IOS_DEVICES
+        devices.update({d[0]:set(d[1]) for d in IOS_DEVICES})
     rings_available = bool(s["rollouts"])
     for kind, faults in (("client_faults", s["client_faults"]), ("backend_faults", s["backend_faults"])):
         for i, f in enumerate(faults):
@@ -383,7 +396,7 @@ def validate(spec, now_ms=None, lint=True):
                 bad = set(f.get("endpoints") or []) - set(v["endpoints"].values())
                 if bad:
                     issues.append(_issue("error", f"{p}.endpoints", f"Variant {variant} lands on {', '.join(sorted(set(v['endpoints'].values())))}, not {', '.join(sorted(bad))}.", "variant"))
-                if set(f.get("platforms") or ["android"]) - platforms:
+                if set(f.get("platforms") or platforms) - platforms:
                     issues.append(_issue("error", f"{p}.platforms", "A listed platform has no target.", "no_target"))
                 d = f.get("details", {})
                 if "fallback" in d and not isinstance(d["fallback"], bool):
@@ -508,7 +521,7 @@ def _endpoints_of(fault, lob):
 def _client_details(f, p, lobs):
     issues, d = [], f.get("details", {})
     t = f["type"]
-    if t == "jvm_crash" and "family" in d and d["family"] not in range(5):
+    if t in ("jvm_crash","ios_crash") and "family" in d and d["family"] not in range(5):
         issues.append(_issue("error", f"{p}.details.family", "Crash family must be 0 through 4.", "details"))
     if t == "main_thread_blockage":
         lo, hi = d.get("min_ms", 6000), d.get("max_ms", 12000)
@@ -519,6 +532,9 @@ def _client_details(f, p, lobs):
         if bad:
             issues.append(_issue("error", f"{p}.details.kinds", f"Unknown failure kinds: {', '.join(sorted(bad))}.", "details"))
     if t == "slow_startup":
+        lo,hi=d.get('min_ms',4200),d.get('max_ms',7500)
+        if not (0 < lo <= hi <= (9500 if f.get('platform')=='ios' else 120000)):
+            issues.append(_issue('error',p+'.details','Startup bounds must increase and stay within the SDK capture limit (iOS 9.5 seconds).','details'))
         if d.get("phase", "application_init") not in catalog.STARTUP_PHASES:
             issues.append(_issue("error", f"{p}.details.phase", f"Phase must be one of {', '.join(catalog.STARTUP_PHASES)}.", "details"))
         if d.get("min_ms", 4200) < 4000:
@@ -537,7 +553,7 @@ def _client_details(f, p, lobs):
             issues.append(_issue("error", f"{p}.details.status", "HTTP errors need a 4xx or 5xx status.", "details"))
         if not d.get("endpoint") or not any(d["endpoint"] in JOURNEY_ORDER[lob] for lob in lobs):
             issues.append(_issue("error", f"{p}.details.endpoint", "Name the endpoint the error lands on.", "details"))
-    if d.get("endpoint") and t in ("jvm_crash", "network_failure", "handled_exception"):
+    if d.get("endpoint") and t in ("jvm_crash", "ios_crash", "network_failure", "handled_exception"):
         if not any(d["endpoint"] in JOURNEY_ORDER[lob] for lob in lobs):
             issues.append(_issue("error", f"{p}.details.endpoint", f"{d['endpoint']} is not an endpoint of {', '.join(sorted(lobs))}.", "details"))
     return issues

@@ -59,7 +59,7 @@ PLATFORM_LIMITS = [
      "enforced_as": "Readiness checks report retention per line of business and platform."},
     {"id": "metrics_lateness", "platform": "cortex_xcor",
      "text": "Raw metric points are accepted up to 2 hours late, aggregated points only a few minutes late, and "
-             "points more than 1 minute in the future are rejected.", "enforced_as": "Metrics are not emitted yet."},
+             "points more than 1 minute in the future are rejected.", "enforced_as": "Metric timestamps are checked again before POST: raw ≤2 hours old, aggregated ≤2 minutes old, future ≤1 minute. Expired exports are recorded and skipped."},
     {"id": "forwarding_requirements", "platform": "cortex_xcor_rum",
      "text": "Only perf.network_request spans are forwarded, only for apps included in network span forwarding "
              "with a Cortex XCOR destination and for domains on the forwarding list. Forwarding is decided once, at "

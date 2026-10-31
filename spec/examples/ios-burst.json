@@ -1,0 +1,112 @@
+{
+  "spec_version": "2.0",
+  "name": "Vantra Android",
+  "seed": null,
+  "targets": [
+    {
+      "id": "vantra-ios",
+      "platform": "ios",
+      "embrace_app_id": "ios00",
+      "app_name": "Vantra",
+      "environment": "production",
+      "region": "us",
+      "api_domains": {
+        "retail": "api.vantrashop.com",
+        "banking": "api.vantramoney.com",
+        "travel": "api.vantratravel.com"
+      },
+      "ios": {
+        "bundle_id": "com.vantra.ios",
+        "sdk_version": "6.21.0",
+        "versions": [
+          {
+            "version": "10.28.0",
+            "version_code": "1028004",
+            "sdk_version": "6.21.0",
+            "share": 0.7
+          },
+          {
+            "version": "10.27.3",
+            "version_code": "1027032",
+            "sdk_version": "6.21.0",
+            "share": 0.3
+          }
+        ]
+      }
+    }
+  ],
+  "chronosphere": null,
+  "destinations": {
+    "mode": "sessions_only"
+  },
+  "population": {
+    "line_of_business_mix": {
+      "retail": 1,
+      "banking": 1,
+      "travel": 1
+    },
+    "signed_in_share": 0.82,
+    "returning_share": 0.45,
+    "journey_depth": {
+      "retail": 0.23,
+      "banking": 0.18,
+      "travel": 0.23
+    },
+    "session_properties": {
+      "market": {
+        "US": 1
+      },
+      "membership_tier": {
+        "standard": 62,
+        "plus": 29,
+        "premium": 9
+      },
+      "entry_point": {
+        "home_tab": 55,
+        "push_notification": 15,
+        "deep_link": 12,
+        "widget": 6,
+        "search": 12
+      }
+    },
+    "platform_mix": {
+      "vantra-ios": 1
+    }
+  },
+  "traffic": {
+    "mode": "burst",
+    "count": 120,
+    "window": {
+      "last_minutes": 6
+    }
+  },
+  "client_faults": [
+    {
+      "id": "ios_crash",
+      "type": "ios_crash",
+      "platform": "ios",
+      "rate": 0.1
+    },
+    {
+      "id": "slow_startup",
+      "type": "slow_startup",
+      "platform": "ios",
+      "rate": 0.2
+    },
+    {
+      "id": "main_thread_blockage",
+      "type": "main_thread_blockage",
+      "platform": "ios",
+      "rate": 0.3
+    },
+    {
+      "id": "network_failure",
+      "type": "network_failure",
+      "platform": "ios",
+      "rate": 0.1
+    }
+  ],
+  "backend_faults": [],
+  "incidents": [],
+  "rollouts": []
+}

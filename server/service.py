@@ -13,6 +13,7 @@ from xcorgen.security import SecurityError, post, tenant_url
 from .scenario_models import ScenarioSpec
 from .store import Store, identifier
 from . import readiness, secrets
+from .locks import serialized
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_INPUT = 1024 * 1024
@@ -25,10 +26,10 @@ class Service:
         self.processes = {}
 
     def capabilities(self):
-        return {'platforms': ['android', 'web'], 'faults': catalog.describe(), 'limits': limits.capabilities(),
+        return {'runner_region':os.environ.get('SG_RUNNER_REGION','local'), 'regional_runners':{'plan_endpoint':'/api/regions/plan','geography':'Location comes from each deployed runner egress IP.'}, 'platforms': ['android', 'web', 'ios'], 'faults': catalog.describe(), 'limits': limits.capabilities(),
                 'browser_matrix': web_capabilities.MATRIX, 'trace_caveat': limits.TRACE_CAVEAT,
                 'backfill_notes': limits.BACKFILL_NOTES, 'demo_preparation': {'steps':['readiness','session history','recent traces','live stream'], 'prepare_ahead_default_minutes':120, 'recommend_prepare_ahead_after_minutes':120}, 'default_spec': specs.default_spec(),
-                'web_target': specs.WEB_TARGET, 'schema': json.loads((ROOT / "spec/scenario.schema.json").read_text())}
+                'web_target': specs.WEB_TARGET, 'ios_target':specs.IOS_TARGET, 'schema': json.loads((ROOT / "spec/scenario.schema.json").read_text())}
 
     def validate(self, value):
         if len(json.dumps(value)) > MAX_INPUT:
@@ -61,6 +62,9 @@ class Service:
         active = [r for r in self.store.list('runs') if r['spec_id'] == id and r['status'] in ('running', 'queued', 'paused')]
         if any(r['mode'] == 'live' for r in active) and checked['traffic']['mode'] != 'live':
             raise ValueError('A running stream must keep live traffic mode; create a separate bounded scenario.')
+        if any(not r['dry_run'] for r in active):
+            from .symbols import ready
+            ready(self.store, checked)
         return self.store.save_spec(checked, author, id, expected_version if expected_version is not None else current['version'])
 
     def create_target(self, value):
@@ -107,6 +111,7 @@ class Service:
             raise ValueError('Preview could not produce valid payloads. Review the scenario and server diagnostics.')
         return json.loads(proc.stdout)
 
+    @serialized("run-launch")
     def start_run(self, spec_id, mode=None, destination=None, confirm=False, dry_run=False, author='user', idempotency_key=None):
         if confirm is not True:
             raise ValueError('Starting a run requires confirm: true after reviewing its scenario, destination and size.')
@@ -125,6 +130,11 @@ class Service:
         if destination and destination != spec['destinations']['mode']:
             raise ValueError('Save the destination on the spec before starting.')
         spec = self.require_valid(spec)
+        if not dry_run and any(t['platform']=='ios' and t['embrace_app_id']=='ios00' for t in spec['targets']):
+            raise ValueError('Create the iOS app in Embrace and replace ios00 before live delivery.')
+        if not dry_run:
+            from .symbols import ready
+            ready(self.store,spec)
         live = spec['traffic']['mode'] == 'live'
         active = [r for r in self.store.list('runs') if r['mode'] == 'live' and r['status'] in ('queued', 'running', 'paused')]
         for target in spec['targets']:
@@ -144,7 +154,7 @@ class Service:
              'destination': spec['destinations']['mode'], 'status': 'queued', 'desired_status': 'running', 'dry_run': dry_run,
              'started': None, 'ended': None, 'trace_eligible_from': None, 'manifest_path': str(directory / 'manifest.jsonl'),
              'targets': [t['id'] for t in spec['targets']], 'author': author, 'idempotency_key': idempotency_key,
-             'report': {}, 'counters': {}, 'trace_caveat': limits.TRACE_CAVEAT})
+             'runner_region':os.environ.get('SG_RUNNER_REGION','local'), 'report': {}, 'counters': {}, 'trace_caveat': limits.TRACE_CAVEAT})
         self.store.event(id, 'queued', caller=author)
         for t in spec['targets']:
             try:
@@ -189,16 +199,25 @@ class Service:
             raise KeyError('Incident was not found')
         return self.patch_spec(run['spec_id'], [{'op': 'remove', 'path': f'/incidents/{index}'}], author, current['version'])
 
-    def create_stream(self, spec_id, name, confirm=False, dry_run=False, author='user'):
+    @serialized('stream-create')
+    def create_stream(self, spec_id, name, confirm=False, dry_run=False, author='user', idempotency_key=None):
+        if idempotency_key:
+            if not isinstance(idempotency_key,str) or len(idempotency_key)>100:
+                raise ValueError('Invalid idempotency key.')
+            prior=next((s for s in self.store.list('streams') if s.get('idempotency_key')==idempotency_key and s.get('author')==author),None)
+            if prior:
+                if (prior['spec_id'],prior['name'],prior['dry_run']) != (spec_id,name,dry_run):
+                    raise ValueError('Idempotency key belongs to a different stream request.')
+                return prior
         saved = self.store.get('scenario_specs', spec_id)
         if saved['spec']['traffic']['mode'] != 'live':
             raise ValueError('A stream requires a live scenario.')
         if not isinstance(name, str) or not 1 <= len(name) <= 100:
             raise ValueError('Stream name must be 1–100 characters.')
-        run = self.start_run(spec_id, confirm=True, dry_run=dry_run, author=author) if confirm is True else None
+        run = self.start_run(spec_id, confirm=True, dry_run=dry_run, author=author, idempotency_key='stream:'+idempotency_key if idempotency_key else None) if confirm is True else None
         return self.store.put('streams', {'name': name, 'spec_id': spec_id, 'run_id': run['id'] if run else None,
             'targets': [t['id'] for t in saved['spec']['targets']], 'status': 'running' if run else 'paused',
-            'dry_run': dry_run, 'authorized': confirm is True, 'author': author})
+            'dry_run': dry_run, 'authorized': confirm is True, 'author': author, 'idempotency_key':idempotency_key})
 
     def control_stream(self, id, action, confirm=False, author='user'):
         stream = self.store.get('streams', id)

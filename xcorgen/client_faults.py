@@ -18,6 +18,9 @@ CLASSES = {
 
 
 def fault(s, fatal=False):
+    if getattr(s,"platform",None)=="ios":
+        s.exception("NSInvalidArgumentException","Required response field was unavailable",handled=not fatal)
+        return
     family = s.plan.crash_family if fatal else 3
     exception, message, method, line = FAMILIES[family]
     cls = CLASSES[s.profile.key][family]
@@ -61,6 +64,9 @@ def followup(s):
     failed = next(((key, status) for key, status, _ in reversed(s.calls) if status is None or status >= 400), None)
     if failed is None or not hasattr(s, "_crash"):
         return
+    if getattr(s,"platform",None)=="ios":
+        s.exception("NSError","Request failed",handled=True)
+        return
     from .android_session import kv, nanos
     from .catalog import NETWORK_FAILURES
     key, status = failed
@@ -100,7 +106,9 @@ def blockage(s):
                         f"{package}.{s.profile.key}.ResultStore.awaitRefresh(ResultStore.kt:94)"],
         "layout": [f"{package}.{s.profile.key}.ResultAdapter.bindItems(ResultAdapter.kt:138)",
                    "android.view.ViewRootImpl.performTraversals(ViewRootImpl.java:4019)"]}[cause]
-    if hasattr(s, "_crash"):
+    if hasattr(s,"native_blockage"):
+        s.native_blockage(duration)
+    elif hasattr(s, "_crash"):
         from .android_session import kv, nanos
         events = [{"name": "perf.thread_blockage_sample", "time_unix_nano": nanos(start + offset),
                    "attributes": kv({"emb.type": "perf.thread_blockage_sample", "sample_code": 0,

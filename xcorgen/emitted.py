@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+from pathlib import Path
 
 from . import catalog
 from .personas import DEVICE_TIERS
@@ -57,11 +58,13 @@ def observe(platform, envelopes, traces):
                                           if e["name"] == "emb-breadcrumb")
                 if first is None or span["start_time_unix_nano"] < first[0]:
                     first = (span["start_time_unix_nano"], env)
-                obs.update(lob=a.get("emb.properties.business_unit"), ring=a.get("emb.properties.release_ring", "stable"),
-                           session_id=a.get("emb.user_session_id"), start_ms=int(a.get("emb.user_session_start_ts", 0)))
+                obs.setdefault("sdk_sessions", []).append({"id": a.get("session.id", a.get("emb.user_session_id")), "start_ms": span["start_time_unix_nano"] / 1e6})
+                if span["start_time_unix_nano"] == first[0]:
+                    obs.update(lob=a.get("emb.properties.business_unit"), ring=a.get("emb.properties.release_ring", "stable"),
+                           session_id=a.get("emb.user_session_id",a.get("session.id")), start_ms=int(a.get("emb.user_session_start_ts",span["start_time_unix_nano"]/1e6)))
             elif a.get("emb.type") == "perf.thread_blockage":
                 obs["blockage"] = True
-            elif span["name"] == "emb-app-startup-cold":
+            elif span["name"] in ("emb-app-startup-cold","emb-app-startup"):
                 obs["cold_start_ms"] = dur
             elif a.get("emb.type") == "perf.network_request":
                 method, _, path = span["name"][4:].partition(" ")
@@ -73,7 +76,7 @@ def observe(platform, envelopes, traces):
                 obs["roots"].setdefault(span["name"], []).append(dur)
         for log in data.get("logs", []):
             a = _attrs(log)
-            obs["crash"] |= a.get("emb.type") == "sys.android.crash"
+            obs["crash"] |= a.get("emb.type") in ("sys.android.crash","sys.ios.crash")
             if a.get("emb.type") == "sys.exception" and a.get("emb.exception_handling") == "handled":
                 obs["handled"].add(a.get("exception.type"))
             elif a.get("emb.type") == "sys.log":
@@ -150,7 +153,7 @@ def affected(fault, obs):
             elif "client" in ev and _client_hit(ev["client"], n):
                 return True
         return False
-    if t == "jvm_crash":
+    if t in ("jvm_crash","ios_crash"):
         return obs["crash"]
     if t == "main_thread_blockage":
         return obs["blockage"]
@@ -175,7 +178,7 @@ def affected(fault, obs):
 def eligible(fault, obs, by_id, results):
     if fault.kind == "client" and fault.raw.get("platform") not in ("any", obs["platform"]):
         return False
-    if fault.kind == "backend" and obs["platform"] not in fault.raw.get("platforms", ["android", "web"]):
+    if fault.kind == "backend" and obs["platform"] not in fault.raw.get("platforms", ["android", "web", "ios"]):
         return False
     if obs.get("lob") not in fault.lobs:
         return False
@@ -192,14 +195,16 @@ def eligible(fault, obs, by_id, results):
         for dim, key in (("web_releases", "app_version"), ("browser_families", "browser"), ("device_types", "device_type")):
             if flt.get(dim) and obs.get(key) not in flt[dim]:
                 return False
-        if flt.get("browser_versions") and not any(obs["browser_version"] == v or obs["browser_version"].startswith(v + ".") for v in flt["browser_versions"]):
+        bounds=flt.get('browser_versions') or {}
+        major=int(obs['browser_version'].split('.')[0])
+        if not bounds.get('min',0) <= major <= bounds.get('max',9999):
             return False
         if fault.type in ("layout_instability", "interaction_latency", "soft_navigation_slowness") and obs["browser"] not in ("chrome", "edge", "samsung_internet"):
             return False
         if fault.type == "chunk_load_failures":
             from .browser_session import releases
             from .spec import parse_time
-            target = next(t for t in fault.spec["targets"] if t["platform"] == "web")
+            target = next(t for t in fault.spec["targets"] if t["platform"] == "web" and (not obs.get("target_id") or t["id"] == obs["target_id"]))
             rs = [r for r in releases(target["web"], obs["start_ms"]) if not r.get("deployed") or parse_time(r["deployed"]) <= obs["start_ms"]]
             if obs["app_version"] == max(rs, key=lambda r: r.get("deployed", ""))["version"]:
                 return False
@@ -249,6 +254,7 @@ class Emitted:
             obs = observe_web([d["payload"] for d in deliveries if d["target"] == "embrace"], traces)
         else:
             obs = observe(target["platform"], envelopes, traces)
+        obs["target_id"] = target["id"]
         obs["verification_case"] = getattr(session, "verification_case", None)
         # The spec's rate applies at the session's planned time (it differs only for sessions moved back
         # so they had finished by send time).
@@ -289,6 +295,9 @@ class Emitted:
                 spans = [ms for o in elig if hits[o["session_id"]] for ms in o["roots"].get(f.details["span"], [])]
                 row.update(requested_p50_ms=f.details["p50_ms"], requested_p95_ms=f.details["p95_ms"],
                            emitted_p50_ms=round(percentile(spans, .5) or 0), emitted_p95_ms=round(percentile(spans, .95) or 0))
+            if f.filters.get('connections'):
+                row.update(within_tolerance=None, requested_pct=None, emitted_pct=None, delta_pp=None,
+                    verification_limit='The browser SDK reports effective connection speed, not the physical link type. Connection-filtered quotas cannot be independently verified from payloads.')
             rows.append(row)
         sessions = len(population)
         segments = {}
@@ -310,7 +319,7 @@ class Emitted:
             if v["requested_p75"]:
                 v["delta_pct"] = round(100 * (v["p75"] / v["requested_p75"] - 1), 2)
                 v["within_tolerance"] = abs(v["delta_pct"]) <= 10 if v["count"] >= 30 else None
-        return {"sessions": sessions, "verification_sessions": len(self.observations) - sessions,
+        return {"sdk_sessions": sum(len(o.get("sdk_sessions", [])) if o["platform"] == "ios" else 1 for o in population), "sessions": sessions, "verification_sessions": len(self.observations) - sessions,
                 "sessions_with_traces": sum(o["traces"] for o in population), "faults": rows, "web_vitals": vitals,
                 "exception_groups": [dict(zip(("release", "name", "message", "stack", "handling"), k), count=n)
                                      for k, n in exceptions.items()]}
@@ -321,6 +330,9 @@ class Emitted:
                  + (f", {s['verification_sessions']} verification sessions excluded" if s["verification_sessions"] else "") + ")",
                  f"  {'fault':<28} {'type':<22} {'eligible':>8} {'requested':>10} {'emitted':>9} {'delta':>7}  result"]
         for r in s["faults"]:
+            if r.get('verification_limit'):
+                lines.append(f"  {r['id']:<28} {r['verification_limit']}")
+                continue
             if r["eligible"]:
                 verdict = "ok" if r.get("within_tolerance") else "OUT OF TOLERANCE"
                 lines.append(f"  {r['id']:<28} {(r['variant'] or r['type']):<22} {r['eligible']:>8} {r['requested_pct']:>9.2f}% "
@@ -337,13 +349,21 @@ def from_dry_run(directory, spec):
     """Rebuild per-session observations from a dry-run directory."""
     report = Emitted(spec)
     by_session, traces, web_payloads = {}, {}, []
+    manifest = os.path.join(directory, "manifest.jsonl")
+    owners = {}
+    if os.path.exists(manifest):
+        for line in Path(manifest).read_text().splitlines():
+            record = json.loads(line)
+            owners.update({part: record["session_id"] for part in record.get("part_ids", [])})
     for fn in sorted(glob.glob(os.path.join(directory, "*.json"))):
-        doc = json.load(open(fn))
+        doc = json.loads(Path(fn).read_text())
         if doc.get("fmt") == "envelope":
             env = doc["payload"]
             sid = None
             for item in env["data"].get("spans", []) + env["data"].get("logs", []):
-                sid = _attrs(item).get("emb.user_session_id")
+                a = _attrs(item)
+                sid = a.get("emb.user_session_id", a.get("session.id"))
+                sid = owners.get(sid, sid)
                 if sid:
                     break
             by_session.setdefault(sid, []).append(env)
@@ -371,14 +391,14 @@ def from_dry_run(directory, spec):
     cases, planned = set(), {}
     manifest = os.path.join(directory, "manifest.jsonl")
     if os.path.exists(manifest):
-        for line in open(manifest):
+        for line in Path(manifest).read_text().splitlines():
             rec = json.loads(line)
             if rec.get("verification_case"):
                 cases.add(rec["session_id"])
             if rec.get("planned_start_ms"):
                 planned[rec["session_id"]] = rec["planned_start_ms"]
     for sid, envelopes in by_session.items():
-        obs = observe("android", envelopes, traces)
+        obs = observe(envelopes[0]["resource"].get("sdk_platform", "android"), envelopes, traces)
         obs["verification_case"] = sid if sid in cases else None
         obs["planned_start_ms"] = planned.get(sid, obs.get("start_ms"))
         report.observations.append(obs)

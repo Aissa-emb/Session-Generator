@@ -1,6 +1,6 @@
 # Security boundaries
 
-This is an outbound telemetry generator, not a banking, shopping, or travel server. SQL, Redis commands, authentication flows, and stack traces in profiles are strings describing fictional telemetry. They are not executed against databases or real customer accounts. The generator does not expose a network listener. Its configuration and local checkout must be trusted.
+This is an outbound telemetry generator, not a banking, shopping, or travel server. SQL, Redis commands, authentication flows, and stack traces in profiles are strings describing fictional telemetry. They are not executed against databases or real customer accounts. The CLI has no listener; the V2 control server has the authenticated boundary described below. Its configuration and local checkout must be trusted.
 
 ## Credentials
 
@@ -53,3 +53,10 @@ MCP HTTP requires bearer authentication on loopback and remotely; Host/Origin de
 Preparation plans have no outbound effect until an explicit boolean `confirm: true`. Live readiness and credentials are checked before the first stage; local dry runs identify their readiness as simulated. Stage idempotency keys and process locks prevent duplicate starts after orchestration interruption. A cancellation is serialized with stage transitions and requests a stop on every created job. Resuming uncertain telemetry delivery remains blocked by the delivery journal.
 
 The container runs as UID 10001, requires API authentication by default, exposes loopback through Compose and uses a read-only root filesystem with a private persistent state volume. A local administrative CLI bootstraps the first token; there is no public bootstrap endpoint. Build context exclusions omit credentials and outputs, and explicit COPY instructions include only source/assets. Container smoke tests disable networking entirely. Structured logs whitelist operational IDs/counters and omit bodies/headers. Active authorized streams may restart with new sessions after a crash; incomplete deliveries are not replayed.
+
+
+Source maps upload only to the fixed SDK endpoint `https://dsym-store.emb-api.com/v2/store/sourcemap`, using the official gzipped JSON multipart shape. The symbol token is a multipart field, never a URL, header log, process argument or saved receipt. Confirmation is required; acknowledged bundle IDs are persisted before live symbolicated jobs can start. Bundle IDs use non-security MD5 to match the Web CLI. Tests substitute the transport and decode the multipart body locally.
+
+Regional connection plans contain only URLs, region labels and environment-variable names for bearer tokens. Remote endpoints require TLS and disallow redirects and URL credentials. Applying a plan needs confirmation and defaults to dry jobs; `--live` is a separate explicit choice. Receipt files are private and atomically replaced. Run and stream creation serialize idempotency checks across control processes. Regions must use independent state volumes.
+
+The placeholder iOS app ID cannot be used for live delivery. Metrics have a second freshness check immediately before transport and record expired exports without retrying them. The protobuf check compares trace, log and metric exports against the official definitions.

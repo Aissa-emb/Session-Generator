@@ -29,6 +29,10 @@ CLIENT_FAULTS = {
     "slow_root_span": {"platforms": ("android", "web"), "supported": ("android", "web"),
                        "summary": "A named business root span reaches a target p50 and p95 duration."},
 }
+CLIENT_FAULTS['ios_crash']={'platforms':('ios',),'supported':('ios',),'fatal':True,'summary':'Native NSException crash with an Apple SDK session and deferred KSCrash report.'}
+for _native in ('network_failure','http_error','slow_root_span','slow_startup','main_thread_blockage'):
+    for _field in ('platforms','supported'):
+        CLIENT_FAULTS[_native][_field] += ('ios',)
 for _web in ("js_exception", "chunk_load_failures", "poor_web_vitals", "lcp_regression", "layout_instability",
              "interaction_latency", "slow_server_response", "soft_navigation_slowness", "rage_clicks",
              "page_abandonment"):

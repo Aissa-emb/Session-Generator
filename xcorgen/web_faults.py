@@ -94,22 +94,23 @@ def exception(family, engine, release, page_bundle, vendor_bundle, chunk_url=Non
     message = messages[engine].format(chunk=chunk_url or "", chunk_id=chunk_id or "")
     if family == "script_error":
         return ctor, name, message, ""
+    from .web_symbols import frame
     seed = f"{family}:{release}:{page_bundle}"
-    fn, caller, react = _minified(seed + ":fn"), _minified(seed + ":caller"), _minified(seed + ":react")
-    line, col = _position(seed + ":fn")
-    vline, vcol = _position(seed + ":vendor", 3)
+    fn, line, col = frame(family)
+    caller, cline, ccol = frame(family, "caller")
+    react, vline, vcol = frame(family, "framework")
     if where == "api":
-        frames = [(fn, page_bundle, line, col), (f"async {caller}", page_bundle, *_position(seed + ":caller"))]
+        frames = [(fn, page_bundle, line, col), (f"async {caller}", page_bundle, cline, ccol)]
         if family in ("failed_to_fetch", "abort"):
-            frames = [("window.fetch", vendor_bundle, vline, vcol)] + frames
+            frames = [("q", vendor_bundle, 7, 22)] + frames
         if family == "json_html":
             frames = [("JSON.parse", None, 0, 0)] + frames
     elif where == "router":
-        frames = [(fn, vendor_bundle, vline, vcol), (f"async {caller}", page_bundle, line, col)]
+        frames = [(fn, vendor_bundle, line, col), (f"async {caller}", page_bundle, cline, ccol)]
     elif where == "framework":
-        frames = [(react, vendor_bundle, vline, vcol), (_minified(seed + ":commit"), vendor_bundle, *_position(seed + ":c2", 3))]
+        frames = [(fn, vendor_bundle, line, col), (react, vendor_bundle, vline, vcol)]
     else:
-        frames = [(fn, page_bundle, line, col), ("Array.map", None, 0, 0), (caller, page_bundle, *_position(seed + ":caller")),
+        frames = [(fn, page_bundle, line, col), ("Array.map", None, 0, 0), (caller, page_bundle, cline, ccol),
                   (react, vendor_bundle, vline, vcol)]
     stack = _frames(engine, frames)
     if engine == "chromium":

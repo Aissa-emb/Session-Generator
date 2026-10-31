@@ -162,7 +162,7 @@ class Fault:
             pages = web_pages(self, lob)
             if pages:
                 return WEB_PAGE_ENDPOINTS[lob].get(pages[0].key)
-        if self.type == "jvm_crash":
+        if self.type in ("jvm_crash","ios_crash"):
             if d.get("endpoint"):
                 return d["endpoint"]
             family = self.family(skel, rng)
@@ -247,7 +247,7 @@ class Planner:
             return False
         if f.kind == "client" and f.raw.get("platform") not in ("any", skel["platform"]):
             return False
-        if f.kind == "backend" and skel["platform"] not in (f.raw.get("platforms") or ["android", "web"]):
+        if f.kind == "backend" and skel["platform"] not in (f.raw.get("platforms") or ["android", "web", "ios"]):
             return False
         flt = f.filters
         checks = (("app_versions", skel["app_version"]), ("os_versions", skel["os_version"]),
@@ -264,6 +264,10 @@ class Planner:
                 return False
             if not web_pages(f, skel["lob"]):
                 return False
+            bounds=flt.get('browser_versions') or {}
+            major=int(skel['persona']['browser_version'].split('.')[0])
+            if not bounds.get('min',0) <= major <= bounds.get('max',9999):
+                return False
             target = next(t for t in self.spec["targets"] if t["id"] == skel["target"])
             if f.type == "soft_navigation_slowness" and target["web"]["estate"][skel["lob"]]["archetype"] == "multi_page":
                 return False
@@ -273,7 +277,7 @@ class Planner:
                 if skel["app_version"] == newest:
                     return False
             for dim, key in (("web_releases", "app_version"), ("browser_families", "browser"),
-                             ("browser_versions", "browser_version"), ("device_types", "kind"), ("connections", "connection")):
+                             ("device_types", "kind"), ("connections", "connection")):
                 value = skel["app_version"] if key == "app_version" else skel["persona"].get(key)
                 if flt.get(dim) and value not in flt[dim]:
                     return False
@@ -425,7 +429,7 @@ class Planner:
                     if f.type == "cache_outage" and d.get("fallback") is False:
                         a["primary"] = "mobile"
                 handled_followup = d.get("handled_followup", handled_followup)
-            elif f.type == "jvm_crash":
+            elif f.type in ("jvm_crash","ios_crash"):
                 a["client_fault"] = "crash"
                 a["crash_family"] = f.family(skel, self.rng)
                 a["crash_details"] = {k: d[k] for k in ("endpoint", "on_failure_only", "exception", "message", "method",
@@ -447,7 +451,8 @@ class Planner:
                     a["primary"] = a["primary"] if a["incident"] else d["story"]
                     handled_followup = d.get("handled_followup", handled_followup)
             elif f.type == "slow_startup":
-                a["slow_startup"] = {k: d[k] for k in ("min_ms", "max_ms", "phase") if k in d}
+                a["slow_startup"] = dict(min_ms=4200, max_ms=7500)
+                a["slow_startup"].update({k: d[k] for k in ("min_ms", "max_ms", "phase") if k in d})
             elif f.type == "slow_root_span":
                 a["slow_root_span"] = {"span": d["span"], "p50_ms": d["p50_ms"], "p95_ms": d["p95_ms"]}
             elif f.type == "http_error":

@@ -43,3 +43,13 @@ test('preparation plan stays local until its reviewed confirmation',async({page,
  await expect(page.getByText('Exact scenarios and projected evidence')).toBeVisible();await expect(page.getByRole('button',{name:'Start preparation',exact:true})).toBeDisabled();
  const plans=await(await request.get('/api/preparations')).json();expect(plans[0].status).toBe('planned');await page.keyboard.press('Escape');
 });
+
+
+test('iOS preview shows native session timeline and owner app setup gate',async({page})=>{
+ await page.goto('/');
+ await page.getByRole('button',{name:'iOS',exact:true}).first().click();
+ await page.getByRole('button',{name:'Preview scenario',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Inspect before you send.'})).toBeVisible();
+ await expect(page.getByText('emb-session',{exact:true})).toBeVisible();
+ await expect(page.getByText('Create an iOS app in Embrace and replace ios00 before live delivery.')).toBeVisible();
+});

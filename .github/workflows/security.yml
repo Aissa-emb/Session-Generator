@@ -54,11 +54,18 @@ jobs:
           python3 generate.py run spec/examples/android-web-end-to-end.json --dry-run out/both --quiet --seed 7331
           python3 tools/check_output.py out/both
           python3 generate.py lint out/both
+          python3 generate.py run spec/examples/ios-burst.json --dry-run out/ios --quiet --seed 7331
+          python3 tools/check_output.py out/ios
+          python3 generate.py report out/ios spec/examples/ios-burst.json
+          python3 generate.py run spec/examples/backend-red-metrics.json --dry-run out/red --quiet --seed 7331
+          python3 tools/check_output.py out/red
       - name: Server dependencies and generated contract
         run: |
           python3 -m venv .venv
           .venv/bin/python -m pip install -r server/requirements.txt
           .venv/bin/python tools/generate_models.py --check
+          .venv/bin/python -m pip install opentelemetry-proto==1.38.0
+          .venv/bin/python tools/check_protobuf.py out/red
       - name: API, job and receiver integration tests
         run: .venv/bin/python -m unittest discover -s tests/server -v
       - name: UI contract, build and dependency audit

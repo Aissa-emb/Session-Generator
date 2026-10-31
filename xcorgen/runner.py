@@ -1,6 +1,7 @@
 """Config, senders and scheduling for generated sessions and traces."""
 
 import gzip
+import copy
 import heapq
 import itertools
 import json
@@ -22,6 +23,7 @@ from .util import uuid4, weighted
 from .security import (SecurityError, TransportError, post, read_token_file,
                        require_private_file, tenant_url, validate_endpoint, validate_headers)
 from .android_session import AndroidSession, SessionEnded, shift_envelope
+from .ios_session import IOSSession
 from .web_session import WebSession, shift
 from .scenarios import Plan, Runtime
 from .journeys import JOURNEYS
@@ -103,6 +105,34 @@ def app_id_for(cfg, profile_key):
     return apps.get(profile_key) or apps.get("default")
 
 
+def fresh_delivery(delivery, now_ms):
+    """Apply ingest physics at the last possible moment, including live stop/flush."""
+    from .limits import TRACE_ELIGIBLE_MS
+    d=delivery
+    if d['kind']=='metrics':
+        from .backend_metrics import timely
+        return d if timely(d['payload'],now_ms,d.get('_metrics_policy','aggregated')) else None
+    if d['target']=='otlp':
+        spans=[sp for rs in d['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']]
+        logs=[row for rs in d['payload'].get('resourceLogs',[]) for ss in rs['scopeLogs'] for row in ss['logRecords']]
+        times=[int(sp['startTimeUnixNano'])/1e6 for sp in spans]+[int(row['timeUnixNano'])/1e6 for row in logs]
+        return None if any(not -TRACE_ELIGIBLE_MS <= now_ms-t <= TRACE_ELIGIBLE_MS for t in times) else d
+    native=d.get('fmt')=='envelope'
+    spans=d['payload'].get('data',{}).get('spans',[]) if native else [sp for rs in d['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']]
+    logs=d['payload'].get('data',{}).get('logs',[]) if native else [row for rs in d['payload'].get('resourceLogs',[]) for ss in rs['scopeLogs'] for row in ss['logRecords']]
+    start='start_time_unix_nano' if native else 'startTimeUnixNano'
+    logtime='time_unix_nano' if native else 'timeUnixNano'
+    times=[int(sp[start])/1e6 for sp in spans]+[int(row[logtime])/1e6 for row in logs]
+    if times and all(now_ms-t>24*3600000 for t in times):return None
+    if any(now_ms-int(sp[start])/1e6>TRACE_ELIGIBLE_MS for sp in spans):
+        d=copy.deepcopy(d)
+        spans=d['payload'].get('data',{}).get('spans',[]) if native else [sp for rs in d['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']]
+        for sp in spans:
+            if now_ms-int(sp[start])/1e6>TRACE_ELIGIBLE_MS:
+                sp['attributes']=[a for a in sp.get('attributes',[]) if a['key'] not in ('emb.w3c_traceparent','emb.forward_telemetry')]
+    return d
+
+
 class Sender:
     """Posts Embrace payloads and backend OTLP data; or writes them to disk in dry-run mode."""
 
@@ -111,7 +141,7 @@ class Sender:
         self.pool = ThreadPoolExecutor(max_workers=workers)
         self.pending_slots = threading.BoundedSemaphore(workers * 4)
         self.lock = threading.Lock()
-        self.stats = {"embrace_spans": 0, "embrace_logs": 0, "otlp_traces": 0, "otlp_logs": 0, "errors": 0}
+        self.stats = {"embrace_spans": 0, "embrace_logs": 0, "otlp_traces": 0, "otlp_logs": 0, "otlp_metrics": 0, "errors": 0}
         self.counter = itertools.count(1)
         self.last_errors = []
         self.strict_receipts = False
@@ -148,6 +178,10 @@ class Sender:
                        sp["traceId"] for rs in d["payload"].get("resourceSpans", [])
                        for ss in rs["scopeSpans"] for sp in ss["spans"]})}
         try:
+            if not self.dry:
+                d=fresh_delivery(d,receipt['time_ms'])
+                if d is None:
+                    return dict(receipt,status='expired',reason='outside_ingest_window')
             if self.dry:
                 n = next(self.counter)
                 with open(os.path.join(self.dry, f"{n:05d}-{key}.json"), "w") as f:
@@ -159,6 +193,9 @@ class Sender:
             else:
                 receipt["http_status"] = getattr(self._post_otlp(d), "status", 200)
             receipt["accepted"] = sum(len(ss.get("spans", ss.get("logRecords", []))) for rs in d["payload"].get("resourceSpans", d["payload"].get("resourceLogs", [])) for ss in rs.get("scopeSpans", rs.get("scopeLogs", []))) or len(d["payload"].get("data", {}).get("spans", d["payload"].get("data", {}).get("logs", [])))
+            if d['kind'] == 'metrics':
+                from .backend_metrics import points
+                receipt['accepted'] = sum(1 for _ in points(d['payload']))
             with self.lock:
                 self.stats[key] += 1
                 if not self.dry and self.cfg.get("generation", {}).get("manifest_path"):
@@ -204,7 +241,7 @@ class Sender:
         if self.encoding == "json":
             body, ctype = json.dumps(d["payload"], separators=(",", ":")).encode(), "application/json"
         else:
-            enc = otlp.encode_traces if d["kind"] == "traces" else otlp.encode_logs
+            enc = {"traces":otlp.encode_traces,"logs":otlp.encode_logs,"metrics":otlp.encode_metrics}[d["kind"]]
             body, ctype = enc(d["payload"]), "application/x-protobuf"
         resp = self._post(f"{self.otlp_base}/v1/{d['kind']}", body, dict(self.otlp_headers, **{"Content-Type": ctype}))
         rejected, _ = otlp.partial_success(resp or b"", json_body=self.encoding == "json")
@@ -231,7 +268,7 @@ class Generator:
         self.profiles = [load(k) for k in profile_keys]
         self.cfg, self.incident, self.emit_client_spans = cfg, incident, emit_client_spans
         self.backend_logs, self.persist, self.platform = backend_logs, persist, platform
-        self.session_cls = AndroidSession if platform == "android" else WebSession
+        self.session_cls = {"android":AndroidSession,"ios":IOSSession,"web":WebSession}[platform]
         self.web_options = web_options
         if platform == "web" and web_options is not None:
             from .browser_session import BrowserSession
@@ -299,7 +336,7 @@ class Generator:
         journey = JOURNEYS[profile.key]
         incident = selection.get("incident") or (self.incident if self.incident in profile.incidents else None)
         kwargs = {"shared": True} if profile.key in self.shared else {}
-        if self.platform == "android":
+        if self.platform in ("android","ios"):
             if self.app_overrides.get(profile.key):
                 kwargs["app"] = self.app_overrides[profile.key]
             if skeleton and skeleton.get("version"):
@@ -382,6 +419,9 @@ class Generator:
                                         [("standard", 62), ("plus", 29), ("premium", 9)])
         p["traits"] = traits
         p["user_id"] = uuid4() if random.random() < getattr(self, "signed_in_share", 0.82) else None
+        if p["user_id"] and getattr(self, "cross_platform_customers", False) and random.random() < .3:
+            from uuid import uuid5, NAMESPACE_URL
+            p["user_id"] = str(uuid5(NAMESPACE_URL, "https://vantra.com/customer/" + str(random.randrange(64))))
 
     def save(self):
         if not self.persist:
@@ -393,7 +433,7 @@ class Generator:
 def describe(s, journey, tenant):
     errors = [c for c in s.calls if c[1] is None or c[1] >= 400]
     p = s.persona
-    device = p["model"] if p.get("platform") == "android" else p["kind"]
+    device = p["model"] if p.get("platform") in ("android","ios") else p["kind"]
     line = (f"{s.profile.key:<9} {journey:<20} {device:<22} parts={s.part.index:<2} api={len(s.calls):<3} "
             f"errors={len(errors):<2} {s.start_ms / 1000:.0f}->{s.end_ms / 1000:.0f} user_session={s.user_session_id}")
     if tenant and s.calls:

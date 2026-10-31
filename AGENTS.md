@@ -62,7 +62,7 @@ python3 -m unittest discover -s tests -v
 
 `spec/examples/live-end-to-end.json` is the V2 equivalent of the LaunchAgent (Baseline, 10 sessions per minute, end to end). Do not point the LaunchAgent at this branch until the owner approves; it runs from `~/xcor-demo-generator`. Non-dry runs write an owner-only manifest to `.runs/<run id>/manifest.jsonl` and lint a preflight sample first; any realism error blocks sending.
 
-**Not built yet:** web targets are rejected by validation (the V1 web generator raises Android exception families in JavaScript stacks and must not reach `kfs9f`); backend types `cache_outage`, `rate_limited`, `kafka_consumer_lag` and `deploy_regression` are rejected until their builders exist; backfill resume after interruption; the server, UI, MCP, copilot and readiness checks.
+**Implementation status:** handoff phases 4.1–4.9 are implemented on `v2`. The remaining gates are owner configuration, live forwarding/dashboard acceptance, a real Anthropic key and any deployment/cut-over approval. Read `docs/v2/OWNER-ACCEPTANCE.md`, `LATER-FEATURES.md` and `HOSTING.md`. Older deployment/backlog notes below describe V1 history; the phase-specific notes at the end supersede them.
 
 ## What the owner cares about
 
@@ -208,3 +208,14 @@ Handoff 4.7 adds durable preparation plans and a checklist in the studio. Each s
 ### V2 hosted streams
 
 Handoff 4.8 adds a multi-stage, non-root Docker image, hardened local Compose configuration, local-only token bootstrap and network-disabled container acceptance. Authorized active streams recover after restart; paused/stopped streams do not. Graceful shutdown drains then pauses managed streams. Operational logs use an explicit field allowlist. The live worker preserves cumulative counters across process restart. `HOSTING.md` documents private deployment, actual egress-based geography and an owner-approved cut-over; the existing LaunchAgent remains untouched.
+
+
+### V2 later capabilities and final audit
+
+Handoff 4.9 adds `IOSSession` and device/contract checks, `backend_metrics.py` with cumulative service RED exports, `regions.py` plus regional plan/apply tooling, and real executable JS bundles/maps in `web_symbols.py`. Source-map upload is explicitly confirmed and recorded before live symbolication; no upload occurred during development. Shared customer identities span platforms without adding nondeterministic resume state. Browser major-version ranges and lazy chunks without part rollover now work; UserTiming includes SDK mark logs.
+
+Apple SDK source `a2e0e5c33766ea35b5ba85dcc983b29145fd384b` (6.21.0): envelope version `1.0`; `session.id` rather than Android user-session attributes; lowercase span status, omitted root parent, links arrays; string log nanoseconds. NSF emits `emb.w3c_traceparent` without Android's `emb.forward_telemetry`. Startup is `sys.startup`; thread samples use the exact SDK term `thread_blockage_sample`, narrowly allowlisted by the realism linter. Apple foreground sessions are separate SDK sessions and verification accounts for them. The iOS app must be created by the owner.
+
+Web source correction: `_EmbraceFileBundleIDs` maps captured injection stack strings to bundle IDs, not URL keys. Use a map debugId without hyphens, or the original JS MD5 before snippet injection. The upload host is `dsym-store.emb-api.com`, not the app ingest host. Source code and exact-source tests govern these details.
+
+Server visitor pools are per job, eliminating concurrent writers. Start idempotency and stream-limit checks share an OS lock; streams also have creation idempotency. Live reports state their process/version scope and retain completed version reports. Tests use temporary state and local transports. Never change `~/xcor-demo-generator` or restart its LaunchAgent without owner approval, even though the older workflow section lists restart as a historical step.

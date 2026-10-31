@@ -608,18 +608,18 @@ class AndroidSession:
         return self.deliveries
 
 
-ENVELOPE_TIME_KEYS = ("start_time_unix_nano", "end_time_unix_nano", "time_unix_nano")
+ENVELOPE_TIME_KEYS = ("start_time_unix_nano", "end_time_unix_nano", "time_unix_nano", "process_start_time")
 
 
 def shift_envelope(obj, delta_ns):
     """Shift every timestamp in an Embrace envelope (integer nanoseconds; user session start in ms)."""
     if isinstance(obj, dict):
         for k, v in obj.items():
-            if k in ENVELOPE_TIME_KEYS and isinstance(v, int):
-                obj[k] = v + delta_ns
+            if k in ENVELOPE_TIME_KEYS and (isinstance(v,int) or isinstance(v,str) and v.isdigit()):
+                obj[k] = str(int(v)+delta_ns) if isinstance(v,str) else v+delta_ns
             elif k == "key" and v == "emb.user_session_start_ts":
                 obj["value"] = str(int(obj["value"]) + delta_ns // 1_000_000)
-            elif k == "key" and v == "last_known_time_unix_nano":
+            elif k == "key" and v in ("last_known_time_unix_nano","emb.heartbeat_time_unix_nano"):
                 obj["value"] = str(int(obj["value"]) + delta_ns)
             elif k == "key" and v == "account.snapshot_as_of_ms":
                 obj["value"] = str(int(obj["value"]) + delta_ns // 1_000_000)

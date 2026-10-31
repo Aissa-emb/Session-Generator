@@ -210,7 +210,11 @@ def main(d):
         doc = json.load(open(fn))
         p = doc["payload"]
         if doc.get("fmt") == "envelope":
-            check_envelope(doc, problem, browser_spans, devices)
+            if p.get('resource',{}).get('sdk_platform')=='ios':
+                from xcorgen.ios_contract import check as check_ios
+                check_ios(doc,problem,browser_spans,devices)
+            else:
+                check_envelope(doc, problem, browser_spans, devices)
             continue
         if doc["target"] == "embrace":
             # V2 uses the current SDK lifecycle; V1's historical adapter remains checked by its capture.

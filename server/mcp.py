@@ -42,6 +42,21 @@ def build_server(svc):
         return readiness.setup_kit(svc.store.get('targets', target_id))
 
     @mcp.tool(annotations=read, structured_output=True)
+    def plan_regions(spec: dict, runners: list[dict]) -> dict[str, Any]:
+        from xcorgen.regions import plan
+        return plan(svc.require_valid(spec),runners)
+
+    @mcp.tool(annotations=read, structured_output=True)
+    def plan_source_maps(spec_id: str) -> dict[str, Any]:
+        from .symbols import plan
+        return plan(svc.store.get('scenario_specs',spec_id)['spec'])
+
+    @mcp.tool(structured_output=True)
+    def upload_source_maps(spec_id: str, confirm: bool = False) -> dict[str, Any]:
+        from .symbols import upload
+        return upload(svc,spec_id,confirm,caller.get())
+
+    @mcp.tool(annotations=read, structured_output=True)
     def list_presets() -> list[dict[str, Any]]:
         return presets.listing()
 

@@ -14,7 +14,7 @@ from xcorgen import limits, spec as specs
 from xcorgen.journal import RunJournal
 from xcorgen.linter import lint_payloads
 from xcorgen.runner import Sender, append_manifest, load_config
-from xcorgen.spec_runner import SpecRun, curve_factor
+from xcorgen.spec_runner import SpecRun, curve_factor, expected_trace_ids
 from .store import Store, identifier
 from . import secrets
 
@@ -74,7 +74,7 @@ def bounded(store, job, version):
         now = j.get('plan')['now_ms']
         j.close()
     run = SpecRun(version['spec'], config(store, version['spec'], job['dry_run']), persist=not job['dry_run'],
-                  state_dir=str(store.directory / 'personas'), now_ms=now)
+                  state_dir=str(store.directory / 'personas' / job['id']), now_ms=now)
     run.open_manifest(str(directory), resume=resume, dry=job['dry_run'])
     sender = ReceiptSender(store, job, version['spec'])
     original = run._deliver
@@ -113,17 +113,21 @@ def live(store, job, version):
             counters['payloads'] += 1
             counters['accepted'] += r['accepted']
             counters['rejected'] += r['rejected']
-            counters['errors'] += r['status'] != 'accepted'
+            counters['errors'] += r['status'] not in ('accepted','expired')
             p = counters['platforms'].setdefault(d['_platform'], {'payloads': 0, 'accepted': 0, 'rejected': 0, 'errors': 0})
             p['payloads'] += 1
             p['accepted'] += r['accepted']
             p['rejected'] += r['rejected']
-            p['errors'] += r['status'] != 'accepted'
+            p['errors'] += r['status'] not in ('accepted','expired')
             session = pending[d['_session_key']]
             session['remaining'] -= 1
-            session['ok'] &= r['status'] == 'accepted'
+            session['ok'] &= r['status'] in ('accepted','expired')
+            if r['status']=='expired' and r['target']=='otlp' and r['kind']=='traces':
+                session['record']['trace_ids']=sorted(set(session['record']['trace_ids'])-set(r.get('trace_ids',[])))
+            if r['status']=='expired' and r['target']=='embrace':
+                session['app_expired']=True
             if session['remaining'] == 0:
-                append_manifest(job['manifest_path'], dict(session['record'], stage='sent' if session['ok'] else 'delivery_failed', sent_ms=time.time() * 1000))
+                append_manifest(job['manifest_path'], dict(session['record'], stage='partially_expired' if session.get('app_expired') else 'sent' if session['ok'] else 'delivery_failed', sent_ms=time.time() * 1000))
                 del pending[d['_session_key']]
             store.update('runs', job['id'], counters=copy.deepcopy(counters), heartbeat=time.time())
             store.event(job['id'], 'progress', counters=copy.deepcopy(counters))
@@ -142,9 +146,13 @@ def live(store, job, version):
                 raise JobPaused()
             if desired == 'running' and not stop and not expired and now >= next_start:
                 if current != latest['version']:
+                    if runner is not None:
+                        reports=store.get('runs',job['id']).get('reports_by_version',{})
+                        reports[str(current)]=runner.emitted.summary()
+                        store.update('runs',job['id'],reports_by_version=reports)
                     version = latest
                     cfg = config(store, latest['spec'], job['dry_run'])
-                    runner = SpecRun(latest['spec'], cfg, persist=True, state_dir=str(store.directory / 'personas'), now_ms=now * 1000)
+                    runner = SpecRun(latest['spec'], cfg, persist=True, state_dir=str(store.directory / 'personas' / job['id']), now_ms=now * 1000)
                     sender = ReceiptSender(store, dict(job, spec_version=latest['version']), latest['spec'], receipt)
                     senders.append(sender)
                     current = latest['version']
@@ -160,15 +168,16 @@ def live(store, job, version):
                 record = {'index': counters['sessions'], 'run_id': job['id'], 'target': target['id'], 'platform': target['platform'],
                           'app_id': session.app_id, 'session_id': session.user_session_id, 'device_id': getattr(session, 'device_id', session.persona['device_id']),
                           'start_ms': session.start_ms, 'end_ms': session.end_ms, 'line_of_business': session.properties['business_unit'],
-                          'faults': faults, 'traces': session.traces, 'trace_ids': sorted({r['trace_id'] for r in session.plan.evidence}) if session.traces else [],
-                          'spec_version': current, 'part_ids': [p.id for p in getattr(session, 'parts', [])]}
+                          'faults': faults, 'traces': session.traces, 'trace_ids': expected_trace_ids(session, deliveries),
+                          'sdk_sessions': runner.emitted.observations[-1].get('sdk_sessions', []),
+                          'spec_version': current, 'part_ids': getattr(session,'sdk_session_ids',[]) + [p.id for p in getattr(session, 'parts', [])]}
                 pending[key] = {'remaining': len(deliveries), 'ok': True, 'record': record}
                 for ordinal, d in enumerate(deliveries):
                     d.update(_session_key=key, _platform=target['platform'], _spec_version=current, _delivery_id=key + ':' + str(ordinal))
                     heapq.heappush(heap, (d['due'], next(sequence), sender, d))
                 counters['sessions'] += 1
                 runner.save()
-                store.update('runs', job['id'], report=runner.emitted.summary(), heartbeat=now)
+                store.update('runs', job['id'], report=runner.emitted.summary(), report_scope='current process segment of scenario version '+str(current), heartbeat=now)
                 rate = latest['spec']['traffic']['rate_per_minute'] * curve_factor(latest['spec'], now)
                 next_start = now + random.expovariate(max(.001, rate) / 60)
             while heap and (stop or heap[0][0] <= time.time() * 1000):

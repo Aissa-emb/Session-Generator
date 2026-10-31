@@ -97,6 +97,7 @@ class BrowserSession:
         self.part = self.page = None
         self.parts, self.history, self.pending_logs, self.log_records = [], [], [], []
         self.ended, self.engaged = False, True
+        self.page_count = 0
         self.navigation_id = rng.randint(3000, 9000) if persona["chromium"] else 0
         self.last_click, self.rage_window, self.used_faults = None, [], set()
         self.resource = self._resource()
@@ -251,6 +252,7 @@ class BrowserSession:
         url = self.origin + definition.path(params)
         if self.page and url == self.page["url"]:
             return
+        self.page_count += 1
         hard = self.page is None or self.archetype == "multi_page" or (
             self.archetype == "hybrid" and definition.render == "server")
         nav_type, restore = "navigate", None
@@ -394,6 +396,11 @@ class BrowserSession:
         pg["lcp_parts"] = lcp_parts
         latest = html_end
         for i, (url, initiator, size, ratio, blocking) in enumerate(web_sites.first_party(self.cdn, self.lob, self.app_version, pg["def"])):
+            if self.web.get('symbolication') and initiator=='script':
+                from .web_symbols import bundle
+                import gzip
+                raw=bundle(url,self.app_version)['bundle'].encode()
+                size=len(gzip.compress(raw,mtime=0));ratio=len(raw)/size
             st = html_end + 4 + i * 2
             cached = self.user_session_number > 1 and rng.random() < .75
             en = st + (rng.uniform(2, 5) if cached else rng.uniform(30, 120))
@@ -526,6 +533,13 @@ class BrowserSession:
     def _bundle(self, chunk=None):
         return web_sites.bundle_url(self.cdn, self.lob, self.app_version, chunk or self.page["def"].chunk)
 
+    def _bundle_ids(self):
+        if not self.web.get("symbolication"):
+            return "{}"
+        from .web_symbols import bundle_ids
+        urls = [r[0] for r in web_sites.first_party(self.cdn,self.lob,self.app_version,self.page['def']) if r[1]=='script']
+        return bundle_ids(urls+[self._bundle(),self._bundle('vendor')],self.app_version,self.caps['engine'])
+
     def _slow_script(self):
         fault = self._has_fault("third_party_blocking")
         interaction = self._has_fault("interaction_latency")
@@ -542,7 +556,7 @@ class BrowserSession:
         polyfill = self.caps["soft_navigation_polyfill"] and self.last_click is not None
         if native or polyfill:
             start = self.last_click["time"]
-            end = self.t + v.fcp if native else self.t
+            end = self.t + (max(v.fcp, v.lcp) if self._has_fault("soft_navigation_slowness") else v.fcp) if native else self.t
             a = {"emb.soft_navigation.source": "performance_observer" if native else "polyfill",
                  "emb.soft_navigation.start_time": self.p(start - pg["document_zero"]),
                  "emb.soft_navigation.duration": self.p(end - start)}
@@ -640,7 +654,7 @@ class BrowserSession:
         self.part.events.append({"name": "click", "timeUnixNano": self.ns(self.t), "droppedAttributesCount": 0,
                                  "attributes": otlp.attrs({"emb.type": "ux.tap", "view.name": view, "tap.coords": f"{x},{y}"})})
         click = {"time": self.t, "selector": selector, "tag": tag, "x": x, "y": y,
-                 "duration": self.page["vitals"].inp}
+                 "duration": self.page["vitals"].inp, "html": element_html}
         self.page["clicks"].append(click)
         self.last_click = click
         if not self.page.get("first_interaction"):
@@ -683,7 +697,7 @@ class BrowserSession:
         for f in self.page["faults"]:
             if f["id"] in self.used_faults or f["type"] not in ("js_exception", "chunk_load_failures"):
                 continue
-            if f["type"] == "chunk_load_failures" and len(self.parts) == 1:
+            if f["type"] == "chunk_load_failures" and self.page_count == 1:
                 continue
             self.used_faults.add(f["id"])
             d = f["details"]
@@ -697,8 +711,10 @@ class BrowserSession:
                 self._rage_clicks()
 
     def _rage_clicks(self):
+        control = (self.last_click or {}).get('html', '<button class="btn btn-primary">Retry</button>')
+        selector = (self.last_click or {}).get('selector')
         for _ in range(3):
-            self.click('<button class="btn btn-primary">Continue</button>')
+            self.click(control, selector)
         self._flush_rage()
 
     def exception(self, exc_type=None, message=None, handled=False, function=None, family=None, handling=None, **attrs):
@@ -710,7 +726,7 @@ class BrowserSession:
         a = dict(attrs, **{"emb.type": "sys.exception", "exception.type": ctor, "exception.name": name,
             "exception.message": msg, "exception.stacktrace": stack, "emb.exception_cause": "",
             "emb.exception_handling": handling, "emb.exception_number": self.exception_number,
-            "emb.js_file_bundle_ids": "{}", "emb.state": "foreground"})
+            "emb.js_file_bundle_ids": self._bundle_ids(), "emb.state": "foreground"})
         if handling != "handled":
             self.part.unhandled += 1
         self._log("logs", "emb-exception", a, msg, severity=17, text="ERROR")
@@ -729,6 +745,10 @@ class BrowserSession:
         if name in self.page["measures"]:
             return
         self.page["measures"].add(name)
+        for suffix, stamp in (("start", start), ("end", end)):
+            self._log("user", "emb-user-timing", {"emb.type":"ux.user_timing", "emb.user_timing.name":name+"."+suffix,
+                "emb.user_timing.start_time":self.p(stamp-self.page["document_zero"]),
+                "emb.user_timing.duration":0, "emb.user_timing.entry_type":"mark"}, timestamp=stamp)
         self._span("user", name, start, end, {"emb.type": "ux.user_timing", "emb.instrumentation": "user_timing",
             "emb.user_timing.entry_type": "measure", "emb.user_timing.start_time": self.p(start - self.page["document_zero"]),
             "emb.user_timing.duration": self.p(end - start)})

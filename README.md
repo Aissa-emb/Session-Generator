@@ -31,7 +31,7 @@ python3 generate.py run my-spec.json                              # sends
 
 > Cortex XCOR accepts trace data only for the last 10 minutes, so distributed traces cannot be backfilled. Traces are generated from the moment this run starts; sessions dated earlier are sent to Cortex XCOR RUM without trace links. For a fuller trace history, start the run at least two hours before the demo.
 
-`python3 generate.py capabilities` prints every platform limit, fault type and backfill rule. Examples are in `spec/examples/`: `live-end-to-end.json` is the always-on Baseline stream, `baseline-burst.json` an 8-minute burst and `verification-plan.json` the V1 verification cases. The web generator, server, UI, MCP server and copilot follow in later phases (see `docs/v2/V2-BUILD-PROMPT.md`).
+`python3 generate.py capabilities` prints every platform limit, fault type and backfill rule. Examples are in `spec/examples/`: `live-end-to-end.json` is the always-on Baseline stream, `baseline-burst.json` an 8-minute burst and `verification-plan.json` the V1 verification cases. The web and iOS generators, server, scenario studio, MCP, key-gated Copilot, preparation workflows and container are implemented. See [owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) for the configuration and live checks that still require owner action.
 
 ## One app, three lines of business
 
@@ -304,3 +304,16 @@ REST: `POST /api/preparations/preview`, then `POST /api/preparations/{id}/start`
 ### Container hosting
 
 `docker compose up --build -d` starts the non-root control server with persistent state and loopback-only access. Bootstrap an access token with `docker compose exec generator python -m server.admin create-token --name 'Workspace owner'`. Follow [HOSTING.md](docs/v2/HOSTING.md) for private VM access, mounted secrets, stream restart behavior, multiple regions and the owner-approved LaunchAgent cut-over. CI builds the image and exercises the actual authenticated HTTP API, dry-run receipts and stream controls in a container with networking disabled.
+
+
+### iOS, RED metrics, regions and symbolication
+
+`spec/examples/ios-burst.json` exercises native crashes, freezes, slow startup and network errors against the Apple SDK 6.21 wire contract. Replace `ios00` with a newly created iOS app ID before live delivery; the server and CLI enforce this. iOS foreground sessions have separate `session.id` values, so reports show both journey and SDK-session counts. Verification counts each iOS SDK session at its own timestamp.
+
+Enable `destinations.backend_metrics` to export cumulative request/error counters and duration histograms from emitted SERVER spans. `metrics_policy` defaults to `aggregated` (two-minute maximum lateness); `raw` allows two hours. Both refuse points more than one minute ahead. These metrics cover recent traced traffic; they do not manufacture two hours of backend history. [LATER-FEATURES.md](docs/v2/LATER-FEATURES.md) documents names, resets and source references.
+
+Regional plans split total rates/counts, derive separate seeds and dispatch to independently hosted authenticated servers. They preserve a private local receipt file and idempotency keys for retries. Location follows each server's actual egress IP. See the exact planning/apply commands in [LATER-FEATURES.md](docs/v2/LATER-FEATURES.md).
+
+Set `target.web.symbolication=true` to emit stack-to-bundle-ID mappings. Connections reviews and uploads the generated executable release bundles and source maps, using the write-only symbol token and explicit confirmation. Live runs reject missing maps. The CLI equivalent is `tools/symbols.py`; uploads are never part of local tests. Exceptions use real mapped positions whether symbolication is enabled or not.
+
+Live report tables describe the current process segment of the current scenario version; cumulative delivery counters remain separate, and completed version reports are retained. Visitor state is isolated per job to prevent concurrent writers from corrupting device history. Connection-link filters allocate correctly but cannot be independently verified from SDK payloads: browsers expose effective speed, not whether a connection is fiber, cable, Wi-Fi or cellular. Such report rows are explicitly marked unverified.

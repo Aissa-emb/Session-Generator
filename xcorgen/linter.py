@@ -12,13 +12,14 @@ import json
 import re
 
 from .personas import ANDROID_DEVICES
+from .ios_devices import IOS_DEVICES
 
 FORBIDDEN = {"demo", "demos", "fake", "fakes", "faked", "test", "tests", "testing", "tester", "testers", "testid",
              "sample", "samples", "synthetic", "synthetics", "mock", "mocks", "mocked", "mocking", "dummy", "dummies",
              "placeholder", "lorem", "ipsum", "foobar", "sandbox", "simulated", "simulation", "generated", "generator",
              "fixture", "fixtures", "staging", "qa"}
 # Names defined by the SDKs themselves; real production payloads contain them.
-SDK_TERMS = {"perf.thread_blockage_sample", "sample_code", "sample_overhead"}
+SDK_TERMS = {"thread_blockage_sample","perf.thread_blockage_sample", "sample_code", "sample_overhead"}
 SERVICE_NAME = re.compile(r"^[a-z][a-z0-9-]*-(experience-api|service|orchestrator|gateway|worker)$")
 # The platform service names a generated backend may emit besides the conventions above.
 SERVICE_EXCEPTIONS = {"api-gateway"}
@@ -150,7 +151,13 @@ def lint_payloads(deliveries, max_issues=50):
                     add("error", path, "Emitted value contains a card number.", "pii")
         if d.get("fmt") == "envelope":
             r = payload["resource"]
-            if (r.get("device_model"), r.get("os_version")) not in devices:
+            if r.get('sdk_platform')=='ios':
+                from .ios_contract import check
+                check(d,lambda message:add('error','$.ios',message,'ios_contract'))
+                allowed={(x[0],v) for x in IOS_DEVICES for v in x[1]}
+            else:
+                allowed=devices
+            if (r.get("device_model"), r.get("os_version")) not in allowed:
                 add("error", "$.resource", f"{r.get('device_model')} never shipped Android {r.get('os_version')}.", "device_os")
             for span in payload["data"].get("spans", []):
                 a = _vals(span["attributes"])
@@ -159,7 +166,7 @@ def lint_payloads(deliveries, max_issues=50):
                         add("error", span["name"], "Network request with zero or negative duration.", "duration")
                     code = a.get("http.response.status_code")
                     failed = code is None or int(code) >= 400
-                    if (span["status"] == "Error") != failed:
+                    if (span["status"].lower() == "error") != failed:
                         add("error", span["name"], "Network span status does not match its HTTP status.", "status")
         elif d["target"] == "embrace":
             from .web_contract import check

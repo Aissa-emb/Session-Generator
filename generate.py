@@ -127,6 +127,7 @@ def spec_main(argv):
     r.add_argument("spec")
     r.add_argument("--dry-run", metavar="DIR", help="write payloads to DIR instead of sending")
     r.add_argument("--seed", type=int)
+    r.add_argument("--symbol-receipt", help="Source-map upload receipts from tools/symbols.py")
     r.add_argument("--resume", metavar="RUN_ID", help="resume the frozen plan and skip accepted deliveries")
     r.add_argument("--config", default=os.path.join(ROOT, "config.json"))
     r.add_argument("--quiet", action="store_true")
@@ -193,6 +194,8 @@ def run_spec(a, spec):
         _random.seed(seed)
     cfg = load_config(a.config if os.path.exists(a.config) else None)
     s = specs.normalized(spec)
+    if not a.dry_run and any(t["platform"] == "ios" and t["embrace_app_id"] == "ios00" for t in s["targets"]):
+        sys.exit("Create an iOS app in Cortex XCOR RUM and replace ios00 before live delivery.")
     if s["destinations"]["mode"] == "end_to_end" and not a.dry_run:
         ch = s.get("chronosphere") or {}
         cfg["chronosphere"]["tenant"] = ch.get("tenant")
@@ -222,6 +225,15 @@ def run_spec(a, spec):
     for issue in run.issues:
         print(f"{issue['severity']}: {issue['path']}: {issue['message']}", file=sys.stderr)
     if not a.dry_run:
+        from xcorgen.web_symbols import assets
+        required={(t['embrace_app_id'],asset['bundle_id']) for t in s['targets'] if t['platform']=='web' and t['web'].get('symbolication') for asset in assets(t)}
+        if required:
+            from pathlib import Path
+            import json
+            receipts=json.loads(Path(a.symbol_receipt).read_text()) if a.symbol_receipt else []
+            accepted={(r['app_id'],r['bundle_id']) for r in receipts if 200<=r['http_status']<300}
+            if not required <= accepted:
+                sys.exit('Upload the release source maps first and pass --symbol-receipt with their receipts.json.')
         # Preflight: generate a sample without sending and lint it; any realism error blocks the run.
         preview = SpecRun(spec, cfg, persist=False, state_dir=os.path.join(ROOT, ".state", "preflight"))
         sample = []
@@ -244,6 +256,10 @@ def run_spec(a, spec):
           f"{st['embrace_logs']} log payloads, {st['otlp_traces']} backend trace exports, {st['errors']} errors"
           + (f" (written to {a.dry_run})" if a.dry_run else f"; manifest {run.manifest}"))
     print(run.emitted.table())
+    from pathlib import Path
+    report_dir=Path(run.manifest).parent/'reports'
+    report_dir.mkdir(exist_ok=True)
+    (report_dir/'emitted.json').write_text(__import__('json').dumps(run.emitted.summary(),indent=2)+'\n')
     for e in sender.last_errors:
         print(f"  ! {e}", file=sys.stderr)
     return 1 if st["errors"] else 0

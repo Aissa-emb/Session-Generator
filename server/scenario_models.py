@@ -194,6 +194,11 @@ class Mode(Enum):
     end_to_end = 'end_to_end'
 
 
+class MetricsPolicy(Enum):
+    aggregated = 'aggregated'
+    raw = 'raw'
+
+
 class Destinations(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -204,6 +209,10 @@ class Destinations(BaseModel):
     emit_client_spans: bool | None = Field(
         None,
         description='Advanced: send the client span to Chronosphere directly. Only for apps without network span forwarding.',
+    )
+    metrics_policy: MetricsPolicy | None = Field(
+        'aggregated',
+        description='Conservative 2-minute lateness for aggregation rules; raw allows 2 hours. Only recent traced traffic generates metrics.',
     )
 
 
@@ -256,6 +265,17 @@ class Web(BaseModel):
     third_party_bloat: confloat(ge=0.0, le=10.0) | None = None
 
 
+class Ios(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    device_weights: Weights | None = Field(
+        None,
+        description='Relative weights by Apple model identifier; unlisted catalog devices keep their default weight.',
+    )
+    os_version_mix: Weights | None = None
+
+
 class Population(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -275,6 +295,7 @@ class Population(BaseModel):
     session_properties: SessionProperties | None = None
     android: Android | None = None
     web: Web | None = None
+    ios: Ios | None = None
 
 
 class Mode1(Enum):
@@ -426,11 +447,13 @@ class Type(Enum):
     soft_navigation_slowness = 'soft_navigation_slowness'
     rage_clicks = 'rage_clicks'
     page_abandonment = 'page_abandonment'
+    ios_crash = 'ios_crash'
 
 
 class Platform1(Enum):
     android = 'android'
     web = 'web'
+    ios = 'ios'
     any = 'any'
 
 
@@ -505,6 +528,7 @@ class Type1(Enum):
 class Platform2(Enum):
     android = 'android'
     web = 'web'
+    ios = 'ios'
 
 
 class BlastRadius(BaseModel):
@@ -621,6 +645,15 @@ class VerificationCase(BaseModel):
     rollout_phase: RolloutPhase | None = None
 
 
+class IosTarget(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    sdk_version: constr(pattern=r'^[0-9]+\.[0-9]+\.[0-9]+$') | None = None
+    versions: list[Version] | None = Field(None, max_length=12, min_length=1)
+    bundle_id: constr(pattern=r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$') | None = None
+
+
 class Estate(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -645,6 +678,10 @@ class WebTarget(BaseModel):
     )
     origin_header: OriginHeader | None = None
     propagation_allow_list: list[Hostname] | None = None
+    symbolication: bool | None = Field(
+        False,
+        description='Emit bundle IDs for executable release assets. Upload all maps with explicit confirmation before live exceptions.',
+    )
 
 
 class Target(BaseModel):
@@ -652,7 +689,7 @@ class Target(BaseModel):
         extra='forbid',
     )
     id: Id
-    platform: Platform = Field(..., description='ios is reserved for a later release.')
+    platform: Platform
     embrace_app_id: constr(pattern=r'^[A-Za-z0-9]{5}$')
     app_name: constr(min_length=1, max_length=64) | None = Field(
         None,
@@ -664,6 +701,7 @@ class Target(BaseModel):
     otlp_endpoint: constr(max_length=512) | None = None
     android: AndroidTarget | None = None
     web: WebTarget | None = None
+    ios: IosTarget | None = None
 
 
 class ScenarioSpec(BaseModel):

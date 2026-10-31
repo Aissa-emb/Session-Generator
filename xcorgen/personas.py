@@ -183,11 +183,12 @@ def _new_android_persona(profile_key, rng, overrides=None):
 
 class PersonaPool:
     def __init__(self, profile_key, state_dir, size=600, rng=random, platform="web", returning_share=None,
-                 android_overrides=None, web_overrides=None):
+                 android_overrides=None, web_overrides=None, ios_overrides=None):
         self.profile_key, self.rng, self.platform = profile_key, rng, platform
         # Steady-state share of returning visitors; V1 settles at 45% returning.
         self.new_floor = 1 - returning_share if returning_share is not None else 0.55
         self.android_overrides = android_overrides
+        self.ios_overrides = ios_overrides
         self.web_overrides = web_overrides
         self.path = os.path.join(state_dir, f"personas-{profile_key}{'' if platform == 'web' else '-' + platform}.json")
         self.size = size
@@ -209,6 +210,8 @@ class PersonaPool:
         if len(self.personas) < self.size and (not fresh or self.rng.random() < p_new):
             if self.platform == "android":
                 p = _new_android_persona(self.profile_key, self.rng, self.android_overrides)
+            elif self.platform == "ios":
+                p = _new_ios_persona(self.profile_key,self.rng,self.ios_overrides)
             else:
                 p = _new_persona(self.profile_key, self.rng, self.web_overrides)
             make_user(p)
@@ -231,3 +234,17 @@ class PersonaPool:
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
+
+
+from .ios_devices import IOS_DEVICES
+DEVICE_TIERS.update({d[0]:d[4] for d in IOS_DEVICES})
+
+def _new_ios_persona(profile_key,rng,overrides=None):
+    overrides=overrides or {}
+    d=weighted([(d,(overrides.get('device_weights') or {}).get(d[0],d[5])) for d in IOS_DEVICES],rng)
+    p=_new_android_persona(profile_key,rng)
+    versions=overrides.get('os_version_mix') or {}
+    version=weighted([(v,versions.get(v,0)) for v in d[1]],rng) if any(versions.get(v,0)>0 for v in d[1]) else rng.choice(d[1])
+    p.update(platform='ios',manufacturer='Apple',model=d[0],os_version=version,screen=d[2],disk_total=int(d[3]*1e9*.9),kind='tablet' if d[0].startswith('iPad') else 'mobile')
+    p.pop('os_code',None);p.pop('soc',None)
+    return p

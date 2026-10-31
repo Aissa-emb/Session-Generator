@@ -51,8 +51,9 @@ def preview(spec):
         p = d['payload']
         if d.get('fmt') == 'envelope':
             rows = p.get('data', {}).get('spans', [])
-            if rows and 'android' not in timelines:
-                timelines['android'] = [{'name': sp['name'], 'start': sp.get('start_time_unix_nano'), 'end': sp.get('end_time_unix_nano'), 'attributes': sp.get('attributes', [])} for sp in rows]
+            platform=p.get('resource',{}).get('sdk_platform','android')
+            if rows and platform not in timelines:
+                timelines[platform] = [{'name': sp['name'], 'start': sp.get('start_time_unix_nano'), 'end': sp.get('end_time_unix_nano'), 'attributes': sp.get('attributes', [])} for sp in rows]
             continue
         for rs in p.get('resourceSpans', []):
             resource = attrs(rs.get('resource', {}))

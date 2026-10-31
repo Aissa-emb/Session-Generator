@@ -51,7 +51,7 @@ def traces(spec, sessions, token, transport=post):
     rows, groups = [], defaultdict(lambda: {'expected': 0, 'retained': 0, 'complete': 0})
     for tid, session in expected.items():
         spans = observed.get(tid, [])
-        target = targets[session['target']]
+        target = session.get('_target') or targets[session['target']]
         app = limits.forwarded_service_name(target['app_name'], target['platform'], target['environment'])
         roots = [s for s in spans if not s['parent'] or set(s['parent']) == {'0'}]
         all_ids = {s['id'] for s in spans}
@@ -69,12 +69,27 @@ def traces(spec, sessions, token, transport=post):
             'complete': sum(r['complete'] for r in rows), 'groups': dict(groups), 'traces': rows}
 
 
+def counted_sessions(sessions):
+    """Apple foreground sessions are separate SDK sessions; Android/web use user sessions."""
+    for row in sessions:
+        if row.get("platform") == "ios" and row.get("sdk_sessions"):
+            for part in row["sdk_sessions"]:
+                yield dict(row, start_ms=part["start_ms"], session_id=part["id"])
+        else:
+            yield row
+
+
 async def verify(store, run):
     spec = store.spec_version(run['spec_id'], run['spec_version'])['spec']
     path = Path(run['manifest_path'])
     sessions = []
     if path.exists():
         sessions = [r for line in path.read_text().splitlines() if (r := json.loads(line)).get('stage') == 'sent']
+    versions={}
+    for row in sessions:
+        number=row.get('spec_version',run['spec_version'])
+        if number not in versions:versions[number]=store.spec_version(run['spec_id'],number)['spec']
+        row['_target']=next(t for t in versions[number]['targets'] if t['id']==row['target'])
     mature = [s for s in sessions if s['end_ms'] <= time.time() * 1000 - limits.FORWARDING_REFRESH_MS]
     token = secrets.get(store, 'chronosphere')
     if not token and (spec.get('chronosphere') or {}).get('token_ref'):
@@ -82,7 +97,7 @@ async def verify(store, run):
         token = resolve(spec['chronosphere']['token_ref'])
     import asyncio
     result = {'run_id': run['id'], 'checked_at': time.time(), 'settling_sessions': len(sessions) - len(mature),
-              'chronosphere': await asyncio.to_thread(traces, spec, mature, token) if run['destination'] == 'end_to_end' else {'state': 'sessions_only'},
+              'chronosphere': await asyncio.to_thread(traces, spec, mature, token) if any(s.get('traces') for s in mature) else {'state': 'sessions_only'},
               'backfill_notes': limits.BACKFILL_NOTES, 'trace_caveat': limits.TRACE_CAVEAT}
     calls = []
     for target in spec['targets']:
@@ -100,7 +115,7 @@ async def verify(store, run):
     else:
         result['embrace'] = {'state': 'needs_action', 'message': 'Add an Embrace API token or run these read-only MCP calls and attach the results.',
                              'calls': [{'tool': n, 'arguments': a} for n, a in calls]}
-    result['planned_hourly_counts'] = dict(__import__('collections').Counter(str(int(s['start_ms'] // 3600000)) for s in sessions))
+    result['planned_hourly_counts'] = dict(__import__('collections').Counter(str(int(s['start_ms'] // 3600000)) for s in counted_sessions(sessions)))
     result['expected_vitals'] = run.get('report', {}).get('web_vitals', [])
     return store.put('verifications', result)
 
@@ -112,7 +127,7 @@ def compare_observations(store, run, observations):
     path = Path(run['manifest_path'])
     sessions = [r for line in path.read_text().splitlines() if (r := json.loads(line)).get('stage') == 'sent']
     from collections import Counter
-    planned = Counter((s['target'], int(s['start_ms'] // 3600000)) for s in sessions)
+    planned = Counter((s['target'], int(s['start_ms'] // 3600000)) for s in counted_sessions(sessions))
     hourly = []
     for item in observations.get('hourly_counts', []):
         key = (item['target'], int(item['hour_start_ms'] // 3600000))

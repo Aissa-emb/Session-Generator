@@ -192,6 +192,11 @@ def catalog_presets(now_ms=None):
     for f in shared["backend_faults"]:
         f["platforms"] = ["android", "web"]
     p["shared-payments-app-and-web"] = ("Shared payments outage in app and web", "Stories", "One payments dependency fails checkouts on Android and the website.", shared)
+    from .spec import IOS_TARGET
+    p['ios-checkout-crash'] = ('iOS checkout crash', 'iOS', 'Native checkout mapping crashes on iPhone and iPad; requires an iOS app ID.',
+        {'targets':[copy.deepcopy(IOS_TARGET)], 'population':{'platform_mix':{'vantra-ios':1}},
+         'client_faults':[{'id':'ios-checkout-crash','platform':'ios','type':'ios_crash','rate':.2,
+                           'filters':{'lines_of_business':['retail']},'details':{'endpoint':'place_order'}}]})
     return p
 
 
