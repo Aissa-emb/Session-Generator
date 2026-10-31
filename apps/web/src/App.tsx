@@ -1074,7 +1074,7 @@ export default function App() {
                       {runSpec?.targets
                         ?.map(
                           (a: Json) =>
-                            a.app_name + " · " + platformName(a.platform),
+                            `${a.app_name} · ${platformName(a.platform)} (${a.embrace_app_id})`,
                         )
                         .join(", ") || "Your applications"}
                     </span>
@@ -1104,7 +1104,9 @@ export default function App() {
                   </div>
                   <div>
                     <span>
-                      {run?.dry_run ? "Records generated" : "Records accepted"}
+                      {run?.dry_run
+                        ? "Records generated"
+                        : "Records acknowledged by APIs"}
                     </span>
                     <strong>
                       {number(
@@ -1126,6 +1128,11 @@ export default function App() {
                     <strong>{clock(elapsed)}</strong>
                   </div>
                 </div>
+                <p className="hint">
+                  {run?.dry_run
+                    ? "Generated locally. No data was sent to Embrace or Cortex XCOR."
+                    : "Upload acknowledgements only: these records include individual spans and logs across Embrace and Cortex XCOR. They are not a count of sessions visible in Embrace. Dashboard visibility requires a separate check."}
+                </p>
                 {run?.mode === "live" && (
                   <div className="run-progress">
                     <div>
@@ -1242,7 +1249,8 @@ export default function App() {
                           <th>Destination</th>
                           <th>Type</th>
                           <th>Status</th>
-                          <th>Accepted</th>
+                          <th>HTTP response</th>
+                          <th>Records acknowledged</th>
                           <th>Rejected</th>
                         </tr>
                       </thead>
@@ -1252,6 +1260,10 @@ export default function App() {
                             <td>{r.target}</td>
                             <td>{r.kind}</td>
                             <td>{r.status}</td>
+                            <td>
+                              {r.http_status ??
+                                (run.dry_run ? "Local only" : "No response")}
+                            </td>
                             <td>{number(r.accepted)}</td>
                             <td>{number(r.rejected)}</td>
                           </tr>
