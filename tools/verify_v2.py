@@ -10,7 +10,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from xcorgen import spec, secrets
 from xcorgen.runner import load_config
-from server.verification import traces
+from server.verification import manifest_sessions, traces
 
 
 def main():
@@ -28,11 +28,7 @@ def main():
         if (s.get("chronosphere") or {}).get("token_ref")
         else cfg["chronosphere"].get("api_token")
     )
-    records = [
-        r
-        for line in Path(a.manifest).read_text().splitlines()
-        if (r := json.loads(line)).get("stage") == "sent"
-    ]
+    records = manifest_sessions(a.manifest)
     mature = [
         r
         for r in records

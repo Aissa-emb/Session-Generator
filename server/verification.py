@@ -2,6 +2,7 @@
 import base64
 import json
 import re
+import sqlite3
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -79,12 +80,39 @@ def counted_sessions(sessions):
             yield row
 
 
+def manifest_sessions(path):
+    """Keep every known session, including CLI live rows and failed delivery attempts.
+
+    A terminal record supersedes its planned record, including removal of expired
+    trace IDs. Transport failures must never shrink the verification denominator.
+    """
+    records = {}
+    path = Path(path)
+    journal = path.with_name('run.sqlite3')
+    if journal.is_symlink():
+        raise ValueError('Run journal must not be a symbolic link.')
+    if journal.exists():
+        # Interrupted bounded runs can have known IDs only in the durable plan.
+        # Opening read-only never resumes or acknowledges their deliveries.
+        db = sqlite3.connect(journal.resolve().as_uri() + '?mode=ro', uri=True)
+        try:
+            for record, in db.execute('SELECT record FROM sessions ORDER BY idx'):
+                row = json.loads(record)
+                records[(row.get('run_id'), row['index'])] = dict(row, stage='planned')
+        finally:
+            db.close()
+    if path.exists():
+        for line in path.read_text().splitlines():
+            row = json.loads(line)
+            if all(key in row for key in ('target', 'session_id', 'index')):
+                records[(row.get('run_id'), row['index'])] = row
+    return list(records.values())
+
+
 async def verify(store, run):
     spec = store.spec_version(run['spec_id'], run['spec_version'])['spec']
     path = Path(run['manifest_path'])
-    sessions = []
-    if path.exists():
-        sessions = [r for line in path.read_text().splitlines() if (r := json.loads(line)).get('stage') == 'sent']
+    sessions = manifest_sessions(path)
     versions={}
     for row in sessions:
         number=row.get('spec_version',run['spec_version'])
@@ -115,7 +143,7 @@ async def verify(store, run):
     else:
         result['embrace'] = {'state': 'needs_action', 'message': 'Add an Embrace API token or run these read-only MCP calls and attach the results.',
                              'calls': [{'tool': n, 'arguments': a} for n, a in calls]}
-    result['planned_hourly_counts'] = dict(__import__('collections').Counter(str(int(s['start_ms'] // 3600000)) for s in counted_sessions(sessions)))
+    result['planned_hourly_counts'] = dict(__import__('collections').Counter(str(int(s['start_ms'] // 3600000)) for s in counted_sessions(sessions) if s.get('stage') == 'sent'))
     result['expected_vitals'] = run.get('report', {}).get('web_vitals', [])
     return store.put('verifications', result)
 

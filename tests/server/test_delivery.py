@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from pathlib import Path
 import tempfile
 import threading
 import time
@@ -10,7 +11,7 @@ from unittest.mock import patch
 from server import worker
 from server.service import Service
 from server.store import Store
-from server.verification import traces
+from server.verification import manifest_sessions, traces
 from xcorgen import spec
 
 
@@ -22,6 +23,36 @@ class NoDNS(HTTPServer):
 
 
 class DeliveryTests(unittest.TestCase):
+    def test_cli_live_and_failed_deliveries_remain_in_verification_denominator(self):
+        s = spec.default_spec()
+        s['chronosphere'] = {'tenant': 'demo-sandbox'}
+        rows = [{'provenance': 'generated', 'spec': s}]
+        for index, stage in enumerate((None, 'delivery_failed', 'partially_expired', 'sent')):
+            row = {'index': index, 'run_id': 'run', 'session_id': str(index),
+                   'target': 'vantra-android', 'line_of_business': 'retail',
+                   'traces': True, 'trace_ids': [f'{index + 1:032x}']}
+            if stage:
+                row['stage'] = stage
+            rows.append(row)
+        # A completed expiry supersedes a previously known trace, without
+        # treating an unrelated failed delivery as an expired trace.
+        rows.append(dict(rows[-1], stage='expired', trace_ids=[], traces=False))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'manifest.jsonl'
+            path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            from xcorgen.journal import RunJournal
+            journal = RunJournal(directory)
+            pending = dict(rows[1], index=4, session_id='4', trace_ids=[f'{5:032x}'])
+            journal.plan_session(4, pending, [{'payload': {}}])
+            journal.begin('4:0')
+            journal.close()
+            records = manifest_sessions(path)
+        result = traces(s, records, 'local-only', lambda *args, **kwargs: b'{"traces": []}')
+        self.assertEqual(len(records), 5)
+        self.assertEqual(result['expected'], 4)
+        self.assertEqual(result['complete'], 0)
+        self.assertEqual({row['trace_id'] for row in result['traces']}, {f'{i:032x}' for i in (1, 2, 3, 5)})
+
     def test_burst_sends_only_to_local_receivers_and_records_status(self):
         requests = []
         class Handler(BaseHTTPRequestHandler):
