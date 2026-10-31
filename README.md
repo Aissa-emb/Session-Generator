@@ -1,8 +1,22 @@
-# XCOR demo data generator
+# Session Generator V2
 
-This project creates realistic demo sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. All of that activity is simulated by the generator; it does not run a real app or backend.
+This project creates realistic Android, iOS and web sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. The scenario studio, API, MCP and optional Copilot configure one versioned ScenarioSpec. All of that activity is simulated by the generator; it does not run a real app or backend.
 
 The generator sends session data directly to Embrace using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Embrace's Network Spans Forwarding integration sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the Embrace session timeline.
+
+## Start the local studio
+
+Use Python 3.12+ and Node.js 22+ for the control server and UI. The core CLI remains dependency-free.
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r server/requirements.txt
+npm --prefix apps/web ci
+npm --prefix apps/web run build
+.venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000`. Preview a scenario, save it, and review a dry run before configuring live delivery. [Owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) lists the required app setup and live checks; [hosting](docs/v2/HOSTING.md) covers authenticated containers and deployment. Copilot is disabled until an Anthropic key is configured.
 
 Three lines of business are included:
 
@@ -14,7 +28,7 @@ Three lines of business are included:
 
 ## V2: runs described by a ScenarioSpec
 
-On the `v2` branch, a run is described by one JSON document, the ScenarioSpec (`spec/scenario.schema.json`): targets, population, traffic (live, burst or backfill), client faults, backend faults, incidents, rollouts and the destination mode. The same document will be edited by the web UI, the REST API, MCP clients and the copilot.
+On the `v2` branch, a run is described by one JSON document, the ScenarioSpec (`spec/scenario.schema.json`): targets, population, traffic (live, burst or backfill), client faults, backend faults, incidents, rollouts and the destination mode. The web UI, REST API, MCP clients and copilot all edit the same document.
 
 ```bash
 python3 generate.py preset list                                   # Android, backend and story presets
@@ -39,15 +53,17 @@ When several profiles use the same Embrace Android app ID (the default config do
 
 | Line of business | Session property | API domain | Backend in Chronosphere |
 | --- | --- | --- | --- |
-| Shop (Northline profile) | `business_unit = retail` | `api.vantrashop.com` | `northline` services |
-| Money (Corvia profile) | `business_unit = banking` | `api.vantramoney.com` | `corvia` services |
-| Travel (Vantra profile) | `business_unit = travel` | `api.vantratravel.com` | `vantra` services |
+| Shop (Northline profile) | `business_unit = retail` | `api.vantrashop.com` | `shop-experience-api` and retail services |
+| Money (Corvia profile) | `business_unit = banking` | `api.vantramoney.com` | `banking-experience-api` and banking services |
+| Travel (Vantra profile) | `business_unit = travel` | `api.vantratravel.com` | `travel-experience-api` and travel services |
 
 Filter or group by the `business_unit` session property in Embrace to split the three. Every session also carries `market`, `membership_tier` (standard, plus, premium) and `entry_point` (home_tab, push_notification, deep_link, widget, search), plus properties for its line of business: `experiment.checkout_v3` for retail, `customer.segment` and `mfa.method` for banking, `experiment.flex_dates` for travel. Most users stay signed in across the app, and the same person can shop, bank and book travel on different days.
 
 With a separate app ID per profile, each profile keeps its own brand, package and API domain instead.
 
-## Always-on mode
+## Existing V1 LaunchAgent
+
+This existing deployment uses the separate `~/xcor-demo-generator` checkout. Migrating it to V2 requires owner approval after live acceptance; the V2 server does not change it.
 
 The generator runs as a macOS LaunchAgent (`~/Library/LaunchAgents/local.xcor-demo-generator.plist`): it starts at login, restarts if it exits, and targets 10 sessions per minute total across all three profiles. It pauses while the Mac sleeps and catches up on wake. Status lines go to `logs/generator.log` every 10 minutes. Add `--diurnal` only when an hourly traffic curve is wanted.
 
@@ -89,7 +105,7 @@ To change the rate or add an incident, edit the arguments in the plist, then sto
 
    `CHRONOSPHERE_API_TOKEN` overrides token-file settings. Inline `chronosphere.api_token` is supported for existing installations, but a config containing credentials or custom OTLP headers must have owner-only permissions. The trace inspection tool uses the same credential loading rules. The ingestion token should have only trace-write permission; use a separate identity for administrative changes.
 
-Python 3.10+ only; there are no packages to install.
+The core CLI needs Python 3.10+ and no third-party packages. The V2 server and UI use the separate dependencies in the local studio setup above.
 
 ## Run
 

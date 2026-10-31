@@ -7,6 +7,7 @@ useDefault = true
 description = "The literal emb.w3c_traceparent attribute name in these SDK fixtures is not a credential"
 condition = "AND"
 paths = ['''^reference/web-sdk-2\.31\.0-capture/(03|06|08)-spans\.json$''',
-         '''^reference/web-sdk-2\.29-sample/web_2_29_0_sample\.scrubbed\.jsonl$''']
+         '''^reference/web-sdk-2\.29-sample/web_2_29_0_sample\.scrubbed\.jsonl$''',
+         '''^tests/test_send_time\.py$''']
 regexTarget = "secret"
 regexes = ['''^emb\.w3c_traceparent$''']
