@@ -144,8 +144,15 @@ class Service:
         if specs.errors(preview['linter']):
             raise ValueError('Realism lint blocks this run.')
         if not dry_run and spec['destinations']['mode'] == 'end_to_end':
-            token = secrets.get(self.store, 'chronosphere')
-            if not token and not (spec.get('chronosphere') or {}).get('token_ref'):
+            from xcorgen.secrets import resolve
+            from xcorgen.security import validate_headers
+            try:
+                token = secrets.get(self.store, 'chronosphere') or resolve((spec.get('chronosphere') or {}).get('token_ref'))
+                if token:
+                    validate_headers({'API-Token': token})
+            except SecurityError:
+                raise ValueError('The Cortex XCOR token could not be read. Save it again in Destination, or check its configured token reference. No run was started.') from None
+            if not token:
                 raise ValueError('An end-to-end run requires the Cortex XCOR token.')
         id = identifier()
         directory = self.store.directory / 'runs' / id

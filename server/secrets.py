@@ -48,6 +48,18 @@ def get(store, name):
         ref = store.get('settings', 'secret:' + name)['ref']
     except KeyError:
         return None
+    if sys.platform == 'darwin' and ref.startswith('keychain:'):
+        # Read with the same native API used by save(). The security CLI has a
+        # different Keychain access identity and can block on a desktop prompt.
+        import keyring
+        service, _, account = ref.removeprefix('keychain:').partition('/')
+        try:
+            value = keyring.get_password(service, account)
+        except keyring.errors.KeyringError:
+            raise SecurityError('The saved Keychain credential could not be read.') from None
+        if not value:
+            raise SecurityError('The saved Keychain credential was not found.')
+        return value
     return resolve(ref)
 
 

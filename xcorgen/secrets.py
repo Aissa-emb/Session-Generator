@@ -25,9 +25,10 @@ def resolve(token_ref):
         return read_token_file(rest)
     if scheme == "keychain":
         service, _, account = rest.partition("/")
-        args = ["/usr/bin/security", "find-generic-password", "-s", service, "-w"]
+        args = ["/usr/bin/security", "find-generic-password", "-s", service]
         if account:
-            args[3:3] = ["-a", account]
+            args.extend(["-a", account])
+        args.append("-w")
         try:
             out = subprocess.run(args, capture_output=True, text=True, timeout=10, check=True)  # nosec B603
         except (OSError, subprocess.SubprocessError):

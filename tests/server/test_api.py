@@ -80,6 +80,37 @@ class APITests(unittest.TestCase):
         self.assertEqual(result.status_code, 200, result.text)
         self.assertGreater(spec.parse_time(result.json()['preview_clock']), time.time()*1000)
 
+    def test_unreadable_live_token_is_correctable_before_any_run_is_created(self):
+        from xcorgen.security import SecurityError
+        self.spec['destinations'] = {'mode': 'end_to_end'}
+        self.spec['chronosphere'] = {'tenant': 'demo-sandbox'}
+        saved = self.save()
+        body = {'spec_id': saved['id'], 'confirm': True, 'idempotency_key': 'credential-retry'}
+        with patch('server.secrets.get', side_effect=SecurityError('private diagnostic')):
+            response = self.client.post('/api/runs', json=body)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIn('No run was started', response.text)
+        self.assertIn('Destination', response.text)
+        self.assertNotIn('private diagnostic', response.text)
+        self.assertEqual(self.store.list('runs'), [])
+        with patch('server.secrets.get', return_value='local-fixture'):
+            result = self.client.post('/api/runs', json=body)
+        self.assertEqual(result.status_code, 201, result.text)
+        self.assertEqual(len(self.store.list('runs')), 1)
+        # A retry recovers the accepted run even if credentials later become unavailable.
+        with patch('server.secrets.get', side_effect=SecurityError('private diagnostic')):
+            recovered = self.client.post('/api/runs', json=body)
+        self.assertEqual(recovered.json()['id'], result.json()['id'])
+
+    def test_invalid_spec_token_reference_cannot_start_a_live_worker(self):
+        self.spec['destinations'] = {'mode': 'end_to_end'}
+        self.spec['chronosphere'] = {'tenant': 'demo-sandbox', 'token_ref': 'env:SG_MISSING_FIXTURE_TOKEN'}
+        saved = self.save()
+        with patch('server.secrets.get', return_value=None), patch.dict(os.environ, {}, clear=True):
+            response = self.client.post('/api/runs', json={'spec_id': saved['id'], 'confirm': True})
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(self.store.list('runs'), [])
+
     def test_tokens_are_hashed_revocable_and_not_listed_in_clear(self):
         result = self.client.post('/api/settings/tokens', json={'name': 'Desktop'}).json()
         token = result['token']
@@ -104,6 +135,24 @@ class APITests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/specs', json=self.spec, headers={'Origin': 'https://untrusted.invalid'}).status_code, 403)
         self.assertEqual(self.client.get('/health', headers={'Host': 'untrusted.invalid'}).status_code, 400)
         self.assertEqual(self.client.post('/api/specs', content='x' * (1024 * 1024 + 1)).status_code, 413)
+
+    def test_macos_saved_token_is_read_with_the_same_native_keychain_api(self):
+        from server import secrets
+        from xcorgen.security import SecurityError
+        import keyring
+        with patch('server.secrets.sys.platform', 'darwin'), patch.dict(os.environ, {}, clear=True), \
+             patch('keyring.set_password') as save, patch('keyring.get_password', return_value='local-fixture') as get, \
+             patch('server.secrets.resolve') as command_lookup:
+            secrets.save(self.store, 'chronosphere', 'local-fixture')
+            self.assertEqual(secrets.get(self.store, 'chronosphere'), 'local-fixture')
+            save.assert_called_once_with('Session-Generator', 'chronosphere', 'local-fixture')
+            get.assert_called_once_with('Session-Generator', 'chronosphere')
+            command_lookup.assert_not_called()
+            for result in (None, keyring.errors.KeyringError('private diagnostic')):
+                get.return_value, get.side_effect = (None, result) if isinstance(result, Exception) else (result, None)
+                with self.assertRaises(SecurityError) as raised:
+                    secrets.get(self.store, 'chronosphere')
+                self.assertNotIn('private diagnostic', str(raised.exception))
 
     def test_readiness_requires_evidence_and_exports_exact_service(self):
         target = self.client.post('/api/targets', json={'target': spec.WEB_TARGET}).json()
