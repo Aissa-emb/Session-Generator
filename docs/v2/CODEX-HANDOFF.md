@@ -1,5 +1,7 @@
 # Handoff: finish Session-Generator V2
 
+> Current status: phases 4.1–4.9 were completed. The owner subsequently requested a simpler four-step UI, no AI/MCP UI, and finite continuous sending. See the current UI direction in `AGENTS.md` and the start/workflow instructions in `README.md`; those newer requirements supersede this document’s original studio/Copilot design. Tenant configuration and live acceptance remain owner-controlled.
+
 You are taking over an unfinished build. Assume you know nothing about this project. This document explains what the product is, how every existing part works, exactly what is done, and exactly what you must build, in order, until **all of V2 is complete**. Read it fully before changing anything, then read the files it tells you to read.
 
 Repository: `https://github.com/Aissa-emb/Session-Generator` (private). Work on branch **`v2`**. A local checkout is at `~/Session-Generator-V2` on the owner's Mac (macOS, Python 3.14, Node 25, `gh` authenticated as `Aissa-emb`). If you start from a fresh clone, run `git checkout v2`.

@@ -73,6 +73,7 @@ jobs:
           npm --prefix apps/web ci
           npm --prefix apps/web run schema:check
           npm --prefix apps/web run build
+          .venv/bin/python -m tools.check_studio
           npm --prefix apps/web audit --audit-level=high
       - name: Browser acceptance
         run: |

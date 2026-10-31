@@ -175,7 +175,9 @@ def live(store, job, version):
                 for ordinal, d in enumerate(deliveries):
                     d.update(_session_key=key, _platform=target['platform'], _spec_version=current, _delivery_id=key + ':' + str(ordinal))
                     heapq.heappush(heap, (d['due'], next(sequence), sender, d))
-                counters['sessions'] += 1
+                with lock:
+                    counters['sessions'] += 1
+                    store.update('runs', job['id'], counters=copy.deepcopy(counters), heartbeat=now)
                 runner.save()
                 store.update('runs', job['id'], report=runner.emitted.summary(), report_scope='current process segment of scenario version '+str(current), heartbeat=now)
                 rate = latest['spec']['traffic']['rate_per_minute'] * curve_factor(latest['spec'], now)

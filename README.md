@@ -1,10 +1,10 @@
 # Session Generator V2
 
-This project creates realistic Android, iOS and web sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. The scenario studio, API, MCP and optional Copilot configure one versioned ScenarioSpec. All of that activity is simulated by the generator; it does not run a real app or backend.
+This project creates realistic Android, iOS and web sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. The guided UI and REST API configure one versioned ScenarioSpec. All of that activity is simulated by the generator; it does not run a real app or backend.
 
 The generator sends session data directly to Embrace using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Embrace's Network Spans Forwarding integration sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the Embrace session timeline.
 
-## Start the local studio
+## Start Session Generator
 
 Use Python 3.12+ and Node.js 22+ for the control server and UI. The core CLI remains dependency-free.
 
@@ -13,10 +13,30 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r server/requirements.txt
 npm --prefix apps/web ci
 npm --prefix apps/web run build
-.venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8000
+python3 tools/studio.py start --open
 ```
 
-Open `http://127.0.0.1:8000`. Preview a scenario, save it, and review a dry run before configuring live delivery. [Owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) lists the required app setup and live checks; [hosting](docs/v2/HOSTING.md) covers authenticated containers and deployment. Copilot is disabled until an Anthropic key is configured.
+After setup, double-click **Start Session Generator.command** in the project folder, or use the start command above. The server runs in the background after the terminal closes. It reuses an existing server and never replaces another application on the port. No LaunchAgent is installed or changed.
+
+The UI has one four-step workflow:
+
+1. **Destination:** choose Android, iOS and/or web, enter each app's five-character ID and name, then choose sessions only or sessions plus distributed traces. For traces, enter your Chronosphere tenant and API token. The token stays on the server; it is never stored in the browser draft.
+2. **Customize:** select standard traffic or a regression, choose shopping, banking, travel or all journeys, then check the signals to include and set their affected-session percentages.
+3. **Preview:** inspect locally generated timelines, fault rates, web performance and a real backend trace waterfall. Preview sends nothing.
+4. **Send:** choose destination delivery or a **Local test**. A batch stops after its configured count. **Continuous sending** uses an average sessions-per-minute rate for 30 minutes, one hour, two hours or a custom duration. The running view shows activity, counts, elapsed/remaining time and pause/stop controls. Refreshing restores the current run.
+
+Continuous traffic uses randomized intervals around the chosen average. Keep the server running and the Mac awake. Pausing stops new sessions and drains in-flight sessions; the scheduled end time stays fixed. At the duration limit, new sessions stop and pending payloads finish. Stopping flushes pending deliveries. API acceptance is not proof of dashboard visibility.
+
+```sh
+python3 tools/studio.py status
+python3 tools/studio.py stop  # Stop active/paused runs in the UI first.
+```
+
+The server log is `.state/studio/server.log`. If the UI reports the server is offline, start it again and click **Reconnect**. Choices are saved on this device. Unconfirmed start requests retain an idempotency key, so retrying does not create a duplicate job.
+
+AI/Copilot and MCP controls have been removed from the UI. Their experimental HTTP endpoints are disabled by default; the legacy implementation remains behind `SG_ENABLE_EXPERIMENTAL=1` for future development. No model key is needed for this workflow.
+
+[Owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) lists app forwarding and live checks; [hosting](docs/v2/HOSTING.md) covers authenticated containers and deployment.
 
 Three lines of business are included:
 
@@ -28,7 +48,7 @@ Three lines of business are included:
 
 ## V2: runs described by a ScenarioSpec
 
-On the `v2` branch, a run is described by one JSON document, the ScenarioSpec (`spec/scenario.schema.json`): targets, population, traffic (live, burst or backfill), client faults, backend faults, incidents, rollouts and the destination mode. The web UI, REST API, MCP clients and copilot all edit the same document.
+On the `v2` branch, a run is described by one JSON document, the ScenarioSpec (`spec/scenario.schema.json`): targets, population, traffic (live, burst or backfill), client faults, backend faults, incidents, rollouts and the destination mode. The web workflow and REST API build the same document.
 
 ```bash
 python3 generate.py preset list                                   # Android, backend and story presets
@@ -45,7 +65,7 @@ python3 generate.py run my-spec.json                              # sends
 
 > Cortex XCOR accepts trace data only for the last 10 minutes, so distributed traces cannot be backfilled. Traces are generated from the moment this run starts; sessions dated earlier are sent to Cortex XCOR RUM without trace links. For a fuller trace history, start the run at least two hours before the demo.
 
-`python3 generate.py capabilities` prints every platform limit, fault type and backfill rule. Examples are in `spec/examples/`: `live-end-to-end.json` is the always-on Baseline stream, `baseline-burst.json` an 8-minute burst and `verification-plan.json` the V1 verification cases. The web and iOS generators, server, scenario studio, MCP, key-gated Copilot, preparation workflows and container are implemented. See [owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) for the configuration and live checks that still require owner action.
+`python3 generate.py capabilities` prints every platform limit, fault type and backfill rule. Examples are in `spec/examples/`: `live-end-to-end.json` is the always-on Baseline stream, `baseline-burst.json` an 8-minute burst and `verification-plan.json` the V1 verification cases. The Android, web and iOS generators, control server, guided workflow, preparation APIs and container are implemented. See [owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) for the configuration and live checks that still require owner action.
 
 ## One app, three lines of business
 

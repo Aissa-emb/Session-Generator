@@ -1,55 +1,321 @@
-import {test,expect} from '@playwright/test';
-test('all screens, keyboard navigation and capability editing',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/');await expect(page.getByRole('heading',{name:'Build the story.'})).toBeVisible();
- await page.getByRole('button',{name:'Web',exact:true}).first().click();
- await page.getByRole('tab',{name:'Web performance'}).click();await page.getByRole('button',{name:'Add segment'}).click();
- await expect(page.getByLabel('CLS', {exact:true})).toBeDisabled();await expect(page.getByLabel('INP', {exact:true})).toBeDisabled();
- await page.getByRole('button',{name:'Connections',exact:true}).click();await expect(page.getByRole('heading',{name:'Connect the complete journey.'})).toBeVisible();
- await page.getByRole('button',{name:'Add app target',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
- await page.getByRole('button',{name:'Settings',exact:true}).click();await expect(page.getByRole('heading',{name:'Access, kept under control.'})).toBeVisible();
- await page.getByRole('button',{name:'Create token',exact:true}).click();await page.getByLabel('Token name',{exact:true}).fill('Browser check');await page.getByRole('dialog').getByRole('button',{name:'Create token',exact:true}).click();await expect(page.getByText('Token created',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Done',exact:true}).click();
- await page.getByRole('button',{name:'Runs & streams',exact:true}).click();await expect(page.getByRole('heading',{name:'Traffic with visible outcomes.'})).toBeVisible();
- await page.keyboard.press(process.platform==='darwin'?'Meta+k':'Control+k');await page.getByPlaceholder('Search pages, presets and scenarios…').fill('Scenario studio');await page.keyboard.press('Enter');await expect(page.getByRole('heading',{name:'Build the story.'})).toBeVisible();
- expect(errors).toEqual([]);
-});
-test('save, inspect real preview, confirm a bounded dry run, observe receipts',async({page,request})=>{
- const caps=await (await request.get('/api/capabilities')).json();const s=caps.default_spec;s.name='Browser acceptance';s.traffic={mode:'burst',count:4,window:{last_minutes:5}};
- const saved=await (await request.post('/api/specs',{data:s})).json();
- await page.goto('/');await page.getByLabel('Saved scenarios',{exact:true}).selectOption(saved.id);
- await page.getByRole('button',{name:'Preview scenario',exact:true}).click();await expect(page.getByText('Payload linter passed',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Configure run',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByRole('button',{name:'Start dry run',exact:true})).toBeDisabled();
- await page.getByRole('checkbox',{name:'I reviewed this scenario and its local output volume.'}).check();await page.getByRole('button',{name:'Start dry run',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Traffic with visible outcomes.'})).toBeVisible();await expect(page.locator('.run-item').first()).toContainText('completed',{timeout:30000});
- await expect(page.getByText('Dry run',{exact:true}).first()).toBeVisible();await expect(page.getByText('Delivery errors',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Verify run',exact:true}).click();await expect(page.getByText('Add an Embrace API token or run these read-only MCP calls and attach the results.',{exact:true})).toBeVisible();
-});
-test('laptop layout has no horizontal overflow and keeps copilot disabled without a key',async({page})=>{
- await page.setViewportSize({width:1280,height:900});await page.goto('/');await expect(page.getByRole('heading',{name:'Connect your model'})).toBeVisible();await expect(page.getByLabel('Message Copilot')).toBeDisabled();
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
- await page.getByRole('button',{name:'Toggle Copilot'}).click();await page.getByRole('tab',{name:'Population & traffic'}).click();await expect(page.getByLabel('Traffic mode',{exact:true})).toBeVisible();
-});
-test('copilot reviews a proposal before applying a new version',async({page,request})=>{
- const caps=await(await request.get('/api/capabilities')).json();const saved=await(await request.post('/api/specs',{data:caps.default_spec})).json();
- await page.route('**/api/settings',route=>route.fulfill({json:{secrets:{anthropic:true},defaults:{},models:['claude-sonnet-5-5']}}));
- await page.route('**/api/copilot/turns',async route=>{if(route.request().method()==='POST')await route.fulfill({json:{id:'recorded-proposal',summary:'Rename the scenario for the product journey.',patch:[{op:'replace',path:'/name',value:'Product journey'}]}});else await route.continue()});
- await page.route('**/api/copilot/turns/recorded-proposal/apply',route=>route.fulfill({json:{...saved,version:2,spec:{...saved.spec,name:'Product journey'}}}));
- await page.goto('/');await page.getByLabel('Saved scenarios',{exact:true}).selectOption(saved.id);await page.getByLabel('Message Copilot').fill('Rename this scenario Product journey');await page.getByRole('button',{name:'Send message'}).click();
- await expect(page.getByText('Proposed scenario change')).toBeVisible();await expect(page.getByLabel('Scenario name')).not.toHaveValue('Product journey');
- await page.getByRole('button',{name:'Apply',exact:true}).click();await expect(page.getByLabel('Scenario name')).toHaveValue('Product journey');
-});
-test('preparation plan stays local until its reviewed confirmation',async({page,request})=>{
- await page.goto('/');await page.getByRole('button',{name:'Plan preparation',exact:true}).click();await page.getByLabel('History hours',{exact:true}).fill('0');await page.getByLabel('Live duration (minutes)',{exact:true}).fill('1');await page.getByRole('button',{name:'Review preparation plan'}).click();
- await expect(page.getByText('Exact scenarios and projected evidence')).toBeVisible();await expect(page.getByRole('button',{name:'Start preparation',exact:true})).toBeDisabled();
- const plans=await(await request.get('/api/preparations')).json();expect(plans[0].status).toBe('planned');await page.keyboard.press('Escape');
+import { test, expect, Page } from "@playwright/test";
+
+async function connect(page: Page, platforms = ["android"]) {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Where should the data go?" }),
+  ).toBeVisible();
+  for (const p of platforms.filter((p) => p !== "android"))
+    await page
+      .getByRole("button", { name: p === "ios" ? "iOS" : "Web", exact: true })
+      .click();
+  if (!platforms.includes("android"))
+    await page.getByRole("button", { name: "Android", exact: true }).click();
+  for (const p of platforms)
+    await page
+      .getByLabel(
+        (p === "ios" ? "iOS" : p === "web" ? "Web" : "Android") + " app ID",
+        { exact: true },
+      )
+      .fill(p === "ios" ? "ios01" : p === "web" ? "kfs9f" : "5nrc2");
+  await page
+    .getByRole("button", { name: "Sessions only", exact: false })
+    .click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "What would you like to generate?" }),
+  ).toBeVisible();
+}
+async function preview(page: Page) {
+  await page
+    .getByRole("button", { name: "Generate preview", exact: true })
+    .click();
+  await expect(page.getByText("Passed", { exact: true })).toBeVisible({
+    timeout: 45000,
+  });
+  await page
+    .getByRole("button", { name: "Continue to send", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Local test", exact: false }).click();
+}
+
+test("one workflow, input validation, scoped platform controls, no AI or MCP", async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("five-character app ID");
+  await connect(page, ["web"]);
+  await expect(
+    page.getByRole("checkbox", { name: "Crashes", exact: false }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("checkbox", { name: "Slow page loads", exact: false }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Regression", exact: false }).click();
+  await page.getByLabel("Regression to reproduce").selectOption("pages");
+  await expect(
+    page.getByRole("checkbox", { name: "Slow page loads", exact: false }),
+  ).toBeChecked();
+  await expect(
+    page.getByLabel("Slow page loads affected percentage"),
+  ).toHaveValue("30");
+  await expect(page.getByText(/copilot|MCP connection/i)).toHaveCount(0);
+  expect((await request.post("/mcp", { data: {} })).status()).toBe(404);
+  expect(
+    (await request.post("/api/copilot/turns", { data: {} })).status(),
+  ).toBe(404);
+  expect(errors).toEqual([]);
 });
 
+test("custom mixed-platform faults produce real session and distributed trace previews", async ({
+  page,
+}) => {
+  await connect(page, ["android", "web", "ios"]);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: "Sessions + distributed traces",
+      exact: false,
+    })
+    .click();
+  await page
+    .getByLabel("Chronosphere tenant", { exact: true })
+    .fill("https://preview-tenant.chronosphere.io");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("User flow").selectOption("retail");
+  for (const name of [
+    "Crashes",
+    "Exceptions",
+    "App freezes",
+    "Network failures",
+    "Slow page loads",
+    "Payment failures",
+  ])
+    await page.getByRole("checkbox", { name, exact: false }).check();
+  await page.getByLabel("Number of sessions").fill("24");
+  await page
+    .getByRole("button", { name: "Generate preview", exact: true })
+    .click();
+  await expect(page.getByText("Passed", { exact: true })).toBeVisible({
+    timeout: 45000,
+  });
+  await expect(
+    page.getByRole("heading", { name: "Included signals" }),
+  ).toBeVisible();
+  await expect(page.locator(".waterfall-row").first()).toBeVisible();
+  for (const name of ["Android", "iOS", "Web"]) {
+    await page
+      .getByRole("group", { name: "Preview platform" })
+      .getByRole("button", { name, exact: true })
+      .click();
+    await expect(page.locator(".timeline-event").first()).toBeVisible();
+  }
+  await page.locator(".waterfall-row").first().click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Continue to send" }).click();
+  await expect(
+    page.getByRole("button", { name: "Send batch", exact: true }),
+  ).toBeDisabled();
+});
 
-test('iOS preview shows native session timeline and owner app setup gate',async({page})=>{
- await page.goto('/');
- await page.getByRole('button',{name:'iOS',exact:true}).first().click();
- await page.getByRole('button',{name:'Preview scenario',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Inspect before you send.'})).toBeVisible();
- await expect(page.getByText('emb-session',{exact:true})).toBeVisible();
- await expect(page.getByText('Create an iOS app in Embrace and replace ios00 before live delivery.')).toBeVisible();
+test("complete local batch records receipts and survives refresh", async ({
+  page,
+}) => {
+  await connect(page);
+  await page.getByLabel("Number of sessions").fill("4");
+  await preview(page);
+  await page
+    .getByRole("button", { name: "Start local test", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Completed", exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  await expect(page.locator(".run-metrics").first()).toContainText("4");
+  await page.getByText("Recent delivery receipts", { exact: true }).click();
+  await expect(
+    page.getByRole("cell", { name: "accepted", exact: true }).first(),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Completed", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Create another run" }).click();
+  await expect(page.getByLabel("Android app ID", { exact: true })).toHaveValue(
+    "5nrc2",
+  );
+});
+
+test("continuous rate and two-hour duration start a real local worker with pause and stop", async ({
+  page,
+}) => {
+  await connect(page);
+  await page
+    .getByRole("button", { name: "Continuous sending", exact: true })
+    .click();
+  await page.getByLabel("Sessions per minute", { exact: true }).fill("10");
+  await page.getByLabel("Run for", { exact: true }).selectOption("120");
+  await expect(page.getByText("1,200 sessions", { exact: true })).toBeVisible();
+  await preview(page);
+  await expect(page.getByText("10 sessions/min for 120 minutes")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Start local test", exact: true })
+    .click();
+  try {
+    await expect(
+      page.getByRole("heading", { name: "Generating locally", exact: true }),
+    ).toBeVisible({ timeout: 45000 });
+    await expect(page.locator(".sending-indicator")).toHaveClass(/animating/);
+    await expect(
+      page.getByRole("progressbar", { name: "Sending duration" }),
+    ).toHaveAttribute("max", "7200");
+    await expect(
+      page.locator(".run-metrics>div").first().locator("strong"),
+    ).not.toHaveText("0");
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Generating locally", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: /Pausing|Paused/ }),
+    ).toBeVisible();
+    await expect(page.locator(".sending-indicator")).not.toHaveClass(
+      /animating/,
+    );
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Stopped", exact: true }),
+    ).toBeVisible({ timeout: 45000 });
+  } finally {
+    const id = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("sg_run_id") || "null"),
+    );
+    if (id) await page.request.post("/api/runs/" + id + "/stop");
+  }
+});
+
+test("offline detection explains recovery, retains draft, and reconnects", async ({
+  page,
+}) => {
+  await connect(page);
+  await page.getByLabel("Number of sessions").fill("17");
+  await page.route("**/api/status", (r) => r.abort());
+  await page.route("**/api/preview", (r) => r.abort());
+  await page
+    .getByRole("button", { name: "Generate preview", exact: true })
+    .click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Couldn’t complete" }),
+  ).toContainText("Start Session Generator.command");
+  await expect(page.getByText("Offline", { exact: true })).toBeVisible({
+    timeout: 10000,
+  });
+  await page.unroute("**/api/status");
+  await page.unroute("**/api/preview");
+  await page.getByRole("button", { name: "Reconnect", exact: true }).click();
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByLabel("Number of sessions")).toHaveValue("17");
+  await page
+    .getByRole("button", { name: "Generate preview", exact: true })
+    .click();
+  await expect(page.getByText("Passed", { exact: true })).toBeVisible({
+    timeout: 45000,
+  });
+});
+
+test("lost start response recovers the same run after refresh", async ({
+  page,
+  request,
+}) => {
+  await connect(page);
+  await page.getByLabel("Number of sessions").fill("2");
+  await preview(page);
+  let created = "";
+  await page.route("**/api/runs", async (route) => {
+    if (route.request().method() === "POST") {
+      const response = await route.fetch();
+      created = (await response.json()).id;
+      await route.abort();
+    } else await route.continue();
+  });
+  await page
+    .getByRole("button", { name: "Start local test", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Retry start request" }),
+  ).toBeVisible();
+  await page.unroute("**/api/runs");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Local test", exact: false })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Retry start request" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Completed", exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  const id = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("sg_run_id") || "null"),
+  );
+  expect(id).toBe(created);
+  const runs = await (await request.get("/api/runs")).json();
+  expect(runs.filter((r: any) => r.id === created)).toHaveLength(1);
+});
+
+test("laptop and mobile layout stay within the viewport", async ({ page }) => {
+  await connect(page, ["android", "web"]);
+  for (const size of [
+    { width: 1280, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(size);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBeTruthy();
+  }
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
+test("continuous duration must be finite and app token is never part of the saved draft", async ({
+  page,
+}) => {
+  await connect(page);
+  await page
+    .getByRole("button", { name: "Continuous sending", exact: true })
+    .click();
+  await page.getByLabel("Run for", { exact: true }).selectOption("custom");
+  await page.getByLabel("Duration (minutes)", { exact: true }).fill("0");
+  await page
+    .getByRole("button", { name: "Generate preview", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("Choose a duration");
+  await expect(
+    page.getByRole("heading", { name: "What would you like to generate?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: "Sessions + distributed traces",
+      exact: false,
+    })
+    .click();
+  await page
+    .getByLabel("Chronosphere API token", { exact: true })
+    .fill("never-submit-this-local-value");
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
+  expect(stored).not.toContain("never-submit-this-local-value");
+  await page.reload();
+  await expect(
+    page.getByLabel("Chronosphere API token", { exact: true }),
+  ).toHaveValue("");
 });

@@ -1,6 +1,6 @@
 """FastAPI control plane. Bind to loopback locally; remote API access requires a token."""
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 import json
 import os
 from pathlib import Path
@@ -39,13 +39,14 @@ class SecretBody(BaseModel):
     value: str = Field(min_length=1, max_length=8192, repr=False)
 
 
-def create_app(service=None):
+def create_app(service=None, enable_integrations=None):
     svc = service or Service()
+    experimental = enable_integrations if enable_integrations is not None else os.environ.get("SG_ENABLE_EXPERIMENTAL") == "1"
     allowed_hosts = ['localhost', 'localhost:*', '127.0.0.1', '127.0.0.1:*', '[::1]', '[::1]:*', 'testserver']
     for host in filter(None, os.environ.get('SG_ALLOWED_HOSTS', '').split(',')):
         allowed_hosts += [host, host + ':*']
     mcp_app = build_server(svc).streamable_http_app(stateless_http=True, json_response=True, max_request_body_size=1024*1024,
-        transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts, allowed_origins=['http://localhost:*', 'http://127.0.0.1:*'] + ['https://' + h for h in allowed_hosts if '*' not in h]))
+        transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts, allowed_origins=['http://localhost:*', 'http://127.0.0.1:*'] + ['https://' + h for h in allowed_hosts if '*' not in h])) if experimental else None
     @asynccontextmanager
     async def lifespan(app):
         # Surviving worker processes own their journals. Never launch a duplicate on restart.
@@ -66,7 +67,9 @@ def create_app(service=None):
                         svc.launch(run['id'])
         from .audit import emit
         emit('server_started',runner_region=os.environ.get('SG_RUNNER_REGION','local'))
-        async with mcp_app.router.lifespan_context(mcp_app):
+        async with AsyncExitStack() as stack:
+            if mcp_app:
+                await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
             try:
                 yield
             finally:
@@ -82,7 +85,8 @@ def create_app(service=None):
                 emit('server_stopped')
     app = FastAPI(title='Session Generator', version='2.0', lifespan=lifespan)
     app.state.service = svc
-    app.router.routes.extend(mcp_app.routes)
+    if mcp_app:
+        app.router.routes.extend(mcp_app.routes)
 
     @app.middleware('http')
     async def guard(request, call_next):
@@ -93,6 +97,8 @@ def create_app(service=None):
         origin = request.headers.get('origin')
         if origin and origin != str(request.base_url).rstrip('/'):
             return JSONResponse({'detail': 'Cross-origin requests are not allowed.'}, 403)
+        if not experimental and request.url.path.startswith(('/mcp', '/api/copilot')):
+            return JSONResponse({'detail': 'This integration is disabled.'}, 404)
         client = request.client.host if request.client else ''
         is_local = client in ('127.0.0.1', '::1', 'localhost', 'testclient')
         authorization = request.headers.get('authorization', '')
@@ -142,10 +148,11 @@ def create_app(service=None):
     async def remote_error(request, error):
         return JSONResponse({'detail': 'The remote request could not be completed. Check credentials, endpoint settings and connectivity.'}, 502)
 
+    @app.get('/api/status')
     @app.get('/health')
     def health():
         svc.store.list('settings')
-        return {'status': 'ok', 'version': '2.0', 'runner_region':os.environ.get('SG_RUNNER_REGION','local')}
+        return {'status': 'ok', 'service': 'session-generator', 'version': '2.0', 'instance': os.environ.get('SG_STUDIO_INSTANCE'), 'pid': os.getpid(), 'active_runs': sum(r['status'] in ('queued', 'running', 'paused') for r in svc.store.list('runs')), 'runner_region':os.environ.get('SG_RUNNER_REGION','local')}
 
     @app.get('/api/capabilities')
     def capabilities():
@@ -341,7 +348,10 @@ def create_app(service=None):
     @app.get('/api/settings')
     def settings():
         defaults = next((s for s in svc.store.list('settings') if s['id'] == 'defaults'), {})
-        return {'secrets': secrets.status(svc.store), 'defaults': defaults.get('value', {}), 'models': ['claude-sonnet-5-5', 'claude-opus-5-5']}
+        configured = secrets.status(svc.store)
+        if not experimental:
+            configured.pop('anthropic', None)
+        return {'secrets': configured, 'defaults': defaults.get('value', {}), 'models': ['claude-sonnet-5-5', 'claude-opus-5-5'] if experimental else []}
 
     @app.put('/api/settings/defaults')
     def defaults(value: dict = Body()):
@@ -352,6 +362,8 @@ def create_app(service=None):
 
     @app.put('/api/settings/secrets/{name}')
     def save_secret(name: str, value: SecretBody):
+        if name == 'anthropic' and not experimental:
+            raise HTTPException(404, 'This integration is disabled.')
         return secrets.save(svc.store, name, value.value)
 
     @app.get('/api/settings/tokens')

@@ -10,7 +10,7 @@ docker compose up -d
 docker compose exec generator python -m server.admin create-token --name 'Workspace owner'
 ```
 
-The last command displays a token once. Open `http://localhost:8000` and enter that token in the connection screen. Store it securely; Settings can revoke it. It is hashed in the persistent database. The image runs as UID/GID 10001, the UI is built in its own Node stage, and no repository config file, environment file, private key or telemetry output is copied into the image. Compose exposes only host loopback, drops capabilities, uses a read-only root filesystem and retains data in `generator-state`.
+The last command displays a token once. Open `http://localhost:8000` and enter that token in the connection screen. Store it securely; the authenticated `DELETE /api/settings/tokens/{id}` endpoint can revoke it. It is hashed in the persistent database. The image runs as UID/GID 10001, the UI is built in its own Node stage, and no repository config file, environment file, private key or telemetry output is copied into the image. Compose exposes only host loopback, drops capabilities, uses a read-only root filesystem and retains data in `generator-state`.
 
 `docker compose logs -f generator` contains structured lifecycle/progress events with an explicit field allowlist. Request bodies, headers, credentials and remote exception bodies are excluded. `/health` checks database access; stream summaries report per-stream heartbeat health, UTC daily accepted/rejected record totals and delivery errors. Health alone does not prove Embrace visibility or trace retention.
 
@@ -24,12 +24,12 @@ Container secrets may be supplied as environment variables or owner-readable mou
 | --- | --- | --- |
 | Cortex XCOR | `SG_CHRONOSPHERE_TOKEN` | `SG_CHRONOSPHERE_TOKEN_FILE` |
 | Embrace verification | `SG_EMBRACE_API_TOKEN` | `SG_EMBRACE_API_TOKEN_FILE` |
-| Anthropic | `SG_ANTHROPIC_TOKEN` | `SG_ANTHROPIC_TOKEN_FILE` |
+
 | Symbol upload | `SG_SYMBOL_UPLOAD_TOKEN` | `SG_SYMBOL_UPLOAD_TOKEN_FILE` |
 
-Prefer mounted files owned by UID 10001, mode 0600; the existing token reader rejects symlinks and permissive modes. Never put credentials in the Compose YAML, image build args, scenario JSON or Git. Settings writes secrets to `SG_SECRET_DIR` inside the private data volume; macOS development uses Keychain instead. Back up the data volume securely: it includes write-only secret files, token hashes, scenario versions, receipts and run journals.
+Prefer mounted files owned by UID 10001, mode 0600; the existing token reader rejects symlinks and permissive modes. Never put credentials in the Compose YAML, image build args, scenario JSON or Git. The destination step writes secrets to `SG_SECRET_DIR` inside the private data volume; macOS development uses Keychain instead. Back up the data volume securely: it includes write-only secret files, token hashes, scenario versions, receipts and run journals.
 
-Create the desired live scenario and confirm **Save as an always-on stream** once. Active authorized streams resume after a process/container restart, starting new sessions without replaying incomplete deliveries. Explicitly paused or stopped streams remain stopped. Shutdown requests a pause and allows pending deliveries to drain for up to 65 seconds; Compose allows 90 seconds. A hard kill may interrupt a delivery, which must be reviewed rather than resent. Bounded jobs never auto-resume uncertain exports.
+The UI creates finite continuous runs with a selected duration. For an always-on managed stream, create the desired live scenario and explicitly confirm it through `POST /api/streams`. Active authorized streams resume after a process/container restart, starting new sessions without replaying incomplete deliveries. Explicitly paused or stopped streams remain stopped. Shutdown requests a pause and allows pending deliveries to drain for up to 65 seconds; Compose allows 90 seconds. A hard kill may interrupt a delivery, which must be reviewed rather than resent. Bounded jobs never auto-resume uncertain exports.
 
 Use rolling **Last 24 hours** for backfilled sessions. Backend traces begin with the running stream and remain subject to the eight-minute safety window. Container uptime does not override ingestion or retention limits.
 

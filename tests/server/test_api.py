@@ -96,11 +96,11 @@ class APITests(unittest.TestCase):
     def test_secret_is_write_only_and_origin_guard_prevents_csrf(self):
         value = 'private-value-' + str(time.time_ns())
         with patch('server.secrets.sys.platform', 'linux'), patch.dict(os.environ, {'SG_SECRET_DIR': self.tmp.name}):
-            response = self.client.put('/api/settings/secrets/anthropic', json={'value': value})
+            response = self.client.put('/api/settings/secrets/chronosphere', json={'value': value})
             self.assertEqual(response.status_code, 200, response.text)
             self.assertNotIn(value, response.text)
             self.assertNotIn(value, self.client.get('/api/settings').text)
-            self.assertEqual((Path(self.tmp.name) / 'anthropic.token').stat().st_mode & 0o777, 0o600)
+            self.assertEqual((Path(self.tmp.name) / 'chronosphere.token').stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.client.post('/api/specs', json=self.spec, headers={'Origin': 'https://untrusted.invalid'}).status_code, 403)
         self.assertEqual(self.client.get('/health', headers={'Host': 'untrusted.invalid'}).status_code, 400)
         self.assertEqual(self.client.post('/api/specs', content='x' * (1024 * 1024 + 1)).status_code, 413)
@@ -165,3 +165,37 @@ class APITests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(self.client.get('/api/streams/' + stream['id'] + '/summary').status_code, 200)
         self.assertEqual(self.client.post('/api/streams/' + stream['id'] + '/pause', json={}).json()['status'], 'paused')
+
+    def test_experimental_integrations_disabled_and_status_is_real(self):
+        self.assertEqual(self.client.get('/api/status').json()['service'], 'session-generator')
+        self.assertEqual(self.client.post('/mcp', json={}).status_code, 404)
+        self.assertEqual(self.client.post('/api/copilot/turns', json={}).status_code, 404)
+        self.assertEqual(self.client.put('/api/settings/secrets/anthropic', json={'value':'unused'}).status_code, 404)
+        self.assertNotIn('anthropic', self.client.get('/api/settings').json()['secrets'])
+
+    def test_stop_a_paused_run_without_a_worker(self):
+        saved = self.save()
+        run = self.svc.start_run(saved['id'], confirm=True, dry_run=True)
+        self.svc.control(run['id'], 'pause')
+        worker.execute(self.store, run['id'])
+        self.assertEqual(self.store.get('runs', run['id'])['status'], 'paused')
+        stopped = self.svc.control(run['id'], 'stop')
+        self.assertEqual(stopped['status'], 'stopped')
+        self.assertIsNotNone(stopped['ended'])
+
+    def test_live_duration_stops_generation_and_preserves_counts(self):
+        self.spec['traffic'] = {'mode': 'live', 'rate_per_minute': 10, 'duration_minutes': 1}
+        saved = self.save()
+        run = self.svc.start_run(saved['id'], confirm=True, dry_run=True)
+        clock = type('Clock', (), {'now': time.time()})()
+        def advance(seconds):
+            # Cross the end time after the first session, then let pending deliveries drain.
+            self.assertGreaterEqual(self.store.get('runs', run['id'])['counters']['sessions'], 1)
+            clock.now += 600
+        clock.time, clock.sleep = lambda: clock.now, advance
+        with patch('server.worker.time', clock):
+            worker.execute(self.store, run['id'])
+        result = self.store.get('runs', run['id'])
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['counters']['sessions'], 1)
+        self.assertGreater(result['counters']['payloads'], 0)

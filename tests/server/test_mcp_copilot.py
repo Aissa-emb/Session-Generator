@@ -42,7 +42,7 @@ class MCPTests(unittest.TestCase):
 
     def test_http_protocol_auth_confirmation_and_attribution(self):
         token = self.store.create_token('Protocol client')['token']
-        with TestClient(create_app(self.svc)) as client:
+        with TestClient(create_app(self.svc, enable_integrations=True)) as client:
             headers = {'host': 'localhost:80', 'Authorization': 'Bearer '+token, 'Accept': 'application/json, text/event-stream'}
             def call(method, params=None):
                 return client.post('/mcp', json={'jsonrpc':'2.0','id':1,'method':method,'params':params or {}}, headers=headers)

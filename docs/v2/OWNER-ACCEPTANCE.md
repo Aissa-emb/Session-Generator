@@ -11,10 +11,10 @@ Local implementation, payload tests, protocol tests and container tests do not e
 | Web Origins | Default is no Origin header. If enforcement is enabled, choose `site` and allow `https://www.vantra.com` and `https://app.vantra.com`, or choose one explicitly allowed Origin. |
 | Cortex XCOR | Extend `vantra-end-to-end` with `vantra_web-web-production` alongside `vantra-android-production`, `shop-experience-api`, `banking-experience-api`, `travel-experience-api`. Preserve unrelated dataset assignments and order; use managed Allow retention. |
 | App name | If web is renamed to `Vantra`, update its target app name and use `vantra-web-production` instead. Do not use both names interchangeably. |
-| Dashboards | Import/review the User Flows and saved filters from Connections → setup kit; apply the exact Page Group rules exported there. |
-| Access | Store a trace ingest/query token and an Embrace service-account token in Settings, or use read-only Embrace MCP access for verification. Tokens stay server-side. |
+| Dashboards | Import/review the User Flows and saved filters from the target setup-kit API (`GET /api/targets/{id}/setup-kit`); apply the exact Page Group rules exported there. |
+| Access | Store the trace ingest/query token in workflow step 1. Supply the optional verification token through `SG_EMBRACE_API_TOKEN_FILE` or `PUT /api/settings/secrets/embrace_api`. Tokens stay server-side. |
 
-Wait at least five minutes after forwarding changes. Record observed evidence in Connections. No tenant-configuration write is automated: the owner reviews and applies the exact setup kit through the platform controls.
+Wait at least five minutes after forwarding changes. Record observed evidence through `PUT /api/targets/{id}/readiness/{item}`. No tenant-configuration write is automated: the owner reviews and applies the exact setup kit through the platform controls.
 
 ## 2. Run the forwarding probe first
 
@@ -38,7 +38,7 @@ The command prints its `.runs/RUN_ID/manifest.jsonl` path. Wait five minutes, th
 .venv/bin/python tools/verify_v2.py spec/examples/forwarding-probe.json .runs/RUN_ID/manifest.jsonl --out out/probe-verification.json
 ```
 
-Require each expected trace to have exactly one root with the correct forwarded app service and no missing parents. Inspect each app's network request in Cortex XCOR RUM: it must say **Forwarded**, expose **View trace in Cortex XCOR**, and open that complete trace. Stop here if forwarding or retention fails; HTTP 200 is not proof. The server alternative is Connections → Run forwarding probe, followed by Runs → Verify run.
+Require each expected trace to have exactly one root with the correct forwarded app service and no missing parents. Inspect each app's network request in Cortex XCOR RUM: it must say **Forwarded**, expose **View trace in Cortex XCOR**, and open that complete trace. Stop here if forwarding or retention fails; HTTP 200 is not proof. The server alternatives are `POST /api/targets/{id}/probe` and `POST /api/runs/{id}/verify`.
 
 ## 3. Approve and run the 30-minute acceptance cohort
 
@@ -55,7 +55,7 @@ The local emitted report is `.runs/RUN_ID/reports/emitted.json`. Required eviden
 - Requested/emitted fault shares within ±2 percentage points; retain per-platform and per-business-unit denominators. Tiny filtered cohorts need a longer approved run.
 - At least 95% of eligible known traces complete for **both** app services, with the managed Allow dataset and retention rate 1. Missing IDs remain in the denominator.
 - Embrace sessions, native crashes, network domains and named root spans visible in the rolling range.
-- Web p75 by browser, device and surface within ±10% of target for sufficiently populated segments. Schedule the selected regression in Studio and verify its onset/recovery in the time series.
+- Web p75 by browser, device and surface within ±10% of target for sufficiently populated segments. Schedule the selected regression through the scenario/incident API and verify its onset/recovery in the time series.
 - Stable JS issue grouping; Page Load Insights shows Chrome desktop page-load p95 and resources; Pages health shows views, LCP and failures per route template.
 - Dashboard network links open the correct full backend traces.
 
@@ -63,13 +63,13 @@ Use Embrace MCP `get_session_distribution` with the app ID and `time_window=last
 
 ## 4. Backfill and mode transitions
 
-In Studio → Plan preparation, review a sessions-only 24-hour plan at the desired rate and explicitly approve it. Verify hourly counts and vitals in **Last 24 hours**. It must contain no traceparents or backend exports. Historic sessions do not backfill alerts, metric exports or version-comparison views.
+Through `POST /api/preparations/preview`, review a sessions-only 24-hour plan at the desired rate and explicitly approve it through its start endpoint. The simplified UI focuses on batches and finite continuous runs. Verify hourly counts and vitals in **Last 24 hours**. It must contain no traceparents or backend exports. Historic sessions do not backfill alerts, metric exports or version-comparison views.
 
 Separately approve end-to-end preparation: history → fresh eight-minute burst → live stream. Verify no trace links on history older than eight minutes and complete traces on eligible recent requests. Changing a running scenario's destination applies only to newly started sessions; record the displayed first trace time. Do not resend history to repair configuration: it double-counts sessions.
 
 ## 5. Optional connected capabilities
 
-- **Copilot:** add an Anthropic API key in Settings and check access to `claude-sonnet-5-5` or the selected `claude-opus-5-5`. Recorded protocol tests passed locally; no paid model call occurred. Review each proposal before Apply.
+- **AI/MCP:** removed from the UI at the owner’s request. Experimental HTTP integration routes are disabled by default; they are not part of current acceptance.
 - **iOS:** create a production iOS app, replace `ios00`, add its derived forwarded service/domain configuration, and repeat the small probe. Never reuse Android or web app IDs.
 - **RED metrics:** separately approve `spec/examples/backend-red-metrics.json`, then inspect the three service RED metrics. Check export receipts for expired or partially rejected points. No metric retention claim follows from HTTP status.
 - **Source maps:** follow [LATER-FEATURES](LATER-FEATURES.md), review release assets, add the symbol token and explicitly approve upload **before** emitting symbolicated exceptions.

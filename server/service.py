@@ -181,7 +181,11 @@ class Service:
         if action != 'resume' and run['status'] in ('completed', 'failed', 'stopped'):
             return run
         desired = {'stop': 'stopped', 'pause': 'paused', 'resume': 'running'}[action]
-        run = self.store.update('runs', id, desired_status=desired)
+        changes = {'desired_status': desired}
+        # A paused worker has drained and exited; no process remains to observe stop.
+        if action == 'stop' and run['status'] == 'paused':
+            changes.update(status='stopped', ended=time.time())
+        run = self.store.update('runs', id, **changes)
         self.store.event(id, action + '_requested', caller=author)
         if action == 'resume' and self.launch_jobs:
             self.launch(id)

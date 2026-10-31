@@ -1,14 +1,116 @@
-import {ReactNode, useEffect, useState, isValidElement, cloneElement, useId} from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import * as Switch from '@radix-ui/react-switch';
-import {Cross2Icon, CheckIcon, CopyIcon} from '@radix-ui/react-icons';
-import {pretty} from './api';
-export function Button({children, onClick, kind='', disabled=false, type='button', ...props}: {children:ReactNode,onClick?:()=>void,kind?:string,disabled?:boolean,type?:'button'|'submit', [key:string]:any}) {return <button type={type} className={'button '+kind} onClick={onClick} disabled={disabled} {...props}>{children}</button>}
-export function Badge({children, tone=''}:{children:ReactNode,tone?:string}) {return <span className={'badge '+tone}>{children}</span>}
-export function Panel({title, action, children, className=''}:{title?:ReactNode,action?:ReactNode,children:ReactNode,className?:string}) {return <section className={'panel '+className}>{title&&<div className="panel-head"><h2>{title}</h2>{action}</div>}{children}</section>}
-export function Field({label, children, hint}:{label:string,children:ReactNode,hint?:string}) {const id=useId();const control=isValidElement<any>(children)&&typeof children.type==='string'?cloneElement(children,{'aria-label':label,'aria-describedby':hint?id:undefined}):children;return <label className="field"><span>{label}</span>{control}{hint&&<small id={id}>{hint}</small>}</label>}
-export function Toggle({label, checked, onChange}:{label:string,checked:boolean,onChange:(v:boolean)=>void}) {return <label className="toggle"><Switch.Root className="switch" checked={checked} onCheckedChange={onChange} aria-label={label}><Switch.Thumb className="switch-thumb"/></Switch.Root><span>{label}</span></label>}
-export function JsonEditor({label,value,onChange,rows=8}:{label:string,value:any,onChange:(v:any)=>void,rows?:number}) {const [text,setText]=useState(pretty(value));const [error,setError]=useState('');useEffect(()=>setText(pretty(value)),[value]);return <Field label={label} hint={error}><textarea aria-invalid={!!error} className="code" rows={rows} value={text} onChange={e=>{setText(e.target.value);try{onChange(JSON.parse(e.target.value));setError('')}catch{setError('Enter valid JSON.')}}}/></Field>}
-export function Modal({open,onOpenChange,title,description,children}:{open:boolean,onOpenChange:(v:boolean)=>void,title:string,description:string,children:ReactNode}) {return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="overlay"/><Dialog.Content className="modal"><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description><Dialog.Close className="icon-button close" aria-label="Close"><Cross2Icon/></Dialog.Close>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>}
-export function Copy({value,label='Copy'}:{value:string,label?:string}) {const[copied,setCopied]=useState(false);return <Button kind="quiet small" onClick={()=>navigator.clipboard.writeText(value).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1800)})}>{copied?<CheckIcon/>:<CopyIcon/>}{copied?'Copied':label}</Button>}
-export function Empty({title,children}:{title:string,children:ReactNode}) {return <div className="empty"><h3>{title}</h3><p>{children}</p></div>}
+import { ReactNode, isValidElement, cloneElement, useId } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Cross2Icon } from "@radix-ui/react-icons";
+export function Button({
+  children,
+  onClick,
+  kind = "",
+  disabled = false,
+  type = "button",
+  ...props
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  kind?: string;
+  disabled?: boolean;
+  type?: "button" | "submit";
+  [key: string]: any;
+}) {
+  return (
+    <button
+      type={type}
+      className={"button " + kind}
+      onClick={onClick}
+      disabled={disabled}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+export function Badge({
+  children,
+  tone = "",
+}: {
+  children: ReactNode;
+  tone?: string;
+}) {
+  return <span className={"badge " + tone}>{children}</span>;
+}
+export function Panel({
+  title,
+  action,
+  children,
+  className = "",
+}: {
+  title?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={"panel " + className}>
+      {title && (
+        <div className="panel-head">
+          <h2>{title}</h2>
+          {action}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+export function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: string;
+}) {
+  const id = useId();
+  const control =
+    isValidElement<any>(children) && typeof children.type === "string"
+      ? cloneElement(children, {
+          "aria-label": label,
+          "aria-describedby": hint ? id : undefined,
+        })
+      : children;
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {control}
+      {hint && <small id={id}>{hint}</small>}
+    </label>
+  );
+}
+export function Modal({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="overlay" />
+        <Dialog.Content className="modal">
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description>{description}</Dialog.Description>
+          <Dialog.Close className="icon-button close" aria-label="Close">
+            <Cross2Icon />
+          </Dialog.Close>
+          {children}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}

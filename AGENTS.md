@@ -2,6 +2,12 @@
 
 You are picking up **Session-Generator**: a stdlib-only Python tool that generates realistic mobile (Android) and web sessions for **Cortex XCOR RUM** (formerly Embrace) and matching full distributed backend traces for **Cortex XCOR** (formerly Chronosphere), stitched together so a session's network request opens a complete trace. It feeds a live sales/demo tenant. Read this file fully before changing anything; `README.md` is the user-facing guide.
 
+## Current UI direction (owner feedback, 2026-10-30)
+
+The owner replaced the multi-page studio requirements with a four-step workflow: destination → customization → payload preview → send. Use the supplied Cortex navy/slate styling. All customization is through UI controls; remove Copilot/MCP from the UI and keep experimental HTTP integrations disabled by default. Continuous sending needs a rate, a finite duration (including one/two-hour presets), actual job progress, animation, refresh recovery, and pause/stop. These direct owner instructions supersede the old handoff's UI/integration requirements.
+
+`tools/studio.py` and `Start Session Generator.command` run the local API in a detached owned process. Do not stop the owner's working application server at the end of a coding session. Temporary visual-test servers must still be cleaned up. The old fetch failures were caused by ending the temporary server while its cached page stayed open. Keep truthful offline/reconnect states and idempotent run startup.
+
 ## V2 (branch `v2`)
 
 V2 turns the generator into a product driven by one versioned document, the **ScenarioSpec** (`spec/scenario.schema.json`). The build prompt and the verified feasibility findings are in `docs/v2/V2-BUILD-PROMPT.md` and `docs/v2/V2-SCOPE.md`; read both before V2 work. The prompt's phases: (1) spec and engine, (2) web generator, (3) server and runs, (4) UI, (5) MCP and copilot, (6) destinations, demo preparation and backfill, (7) hosted stream.
