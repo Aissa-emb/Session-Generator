@@ -284,7 +284,8 @@ class BrowserSession:
         if hard or self.caps["navigation_api"]:
             self._start_part("foreground" if restore else "init" if hard else "web_soft_navigation", cold=hard and not restore)
         self.page["faults"] = self._page_faults()
-        targets, mix = web_vitals.targets(self.performance, definition.group, self.persona["kind"], self.persona["browser"])
+        targets, mix = web_vitals.targets(self.performance, definition.group, self.persona["kind"], self.persona["browser"],
+                                         None if hasattr(self, "execution") else self.persona)
         self.page["tbd_mix"] = mix
         self._fault_targets(targets)
         self.page["vitals"] = web_vitals.PageVitals(targets, self.rng, self.caps["fractional_time"])
@@ -398,9 +399,8 @@ class BrowserSession:
             extra["browser.navigation_timing.not_restored_reasons"] = pg["not_restored"]
         self._resource_span("documentFetch", pg["url"], marks[0][1], html_end, rng.randint(24000, 50000), 4,
                             "navigation", tid, load_id, extra=extra, events=self._events(marks))
-        lcp_parts = v.lcp_parts(bool(pg["def"].lcp[2]))
-        pg["lcp_parts"] = lcp_parts
-        latest = html_end
+        varied = self.persona.get('population_model') and not hasattr(self, 'execution')
+        latest = blocking_end = html_end
         for i, (url, initiator, size, ratio, blocking) in enumerate(web_sites.first_party(self.cdn, self.lob, self.app_version, pg["def"])):
             if self.web.get('symbolication') and initiator=='script':
                 from .web_symbols import bundle
@@ -409,17 +409,35 @@ class BrowserSession:
                 size=len(gzip.compress(raw,mtime=0));ratio=len(raw)/size
             st = html_end + 4 + i * 2
             cached = self.user_session_number > 1 and rng.random() < .75
-            en = st + (rng.uniform(2, 5) if cached else rng.uniform(30, 120))
+            en = st + (rng.uniform(2, 5) if cached else
+                       self.persona['rtt'] + size * 8 / (self.persona['mbps'] * 1000) if self.persona.get('population_model')
+                       and not hasattr(self, 'execution') else rng.uniform(30, 120))
             latest = max(latest, en)
+            if blocking:
+                blocking_end = max(blocking_end, en)
             self._resource_span("resourceFetch", url, st, en, size, ratio, initiator, tid, load_id,
                                 blocking=blocking, cached=cached, revalidated=not cached and rng.random() < .06)
+        if varied:
+            v.fcp = max(v.fcp, blocking_end - zero + 40 * self.persona['cpu_factor'])
+            v.lcp = max(v.lcp, v.fcp)
+        lcp_parts = v.lcp_parts(bool(pg["def"].lcp[2]))
         if pg["def"].lcp[2]:
+            if varied:
+                # Fixed image bytes determine transport time, not the reverse.
+                size = 160000
+                transfer_ms = self.persona['rtt'] + size * 8 / (self.persona['mbps'] * 1000)
+                delay = lcp_parts['resourceLoadDelay']
+                v.lcp = max(v.lcp, v.ttfb + delay + transfer_ms + 40 * self.persona['cpu_factor'])
+                lcp_parts.update(resourceLoadDuration=self.p(transfer_ms),
+                                 elementRenderDelay=self.p(v.lcp - v.ttfb - delay - transfer_ms))
             url = self.cdn + pg["def"].lcp[2](pg["params"])
             st = response + lcp_parts["resourceLoadDelay"]
             en = st + max(1, lcp_parts["resourceLoadDuration"])
-            size = max(12000, round(lcp_parts["resourceLoadDuration"] * self.persona["mbps"] * 125 * .5))
+            if not varied:
+                size = max(12000, round(lcp_parts["resourceLoadDuration"] * self.persona["mbps"] * 125 * .5))
             self._resource_span("resourceFetch", url, st, en, size, 1, "img", tid, load_id)
             latest = max(latest, en)
+        pg["lcp_parts"] = lcp_parts
         for tag in web_sites.THIRD_PARTY.values():
             if self.lob not in tag["sites"]:
                 continue
@@ -690,10 +708,16 @@ class BrowserSession:
                                  "attributes": otlp.attrs({"message": message})})
 
     def wait(self, lo_s, hi_s):
+        if getattr(self, "population_settings", {}).get("model") == "varied" and lo_s >= 2 and hi_s >= 5:
+            from .population import read
+            read(self, max(3, lo_s), max(15, hi_s))
+            self.t = self.p(self.t)
+            return
         self.t = self.p(self.t + self.rng.uniform(lo_s, hi_s) * 1000)
 
     def type_text(self, chars):
-        self.t = self.p(self.t + chars * self.rng.uniform(140, 320))
+        duration = sum(self.rng.triangular(200, 800, 300) for _ in range(chars)) if getattr(self, "population_settings", {}).get("model") == "varied" else chars * self.rng.uniform(140, 320)
+        self.t = self.p(self.t + duration)
 
     def login(self, user_id=None):
         self.user_id = user_id or self.persona.get("user_id") or uuid4(self.rng)

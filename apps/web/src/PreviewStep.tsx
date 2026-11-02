@@ -121,6 +121,17 @@ export default function PreviewStep({
           const a=document.createElement("a");a.href=url;a.download="scenario-evidence.json";a.click();URL.revokeObjectURL(url);
         }}>Download evidence</Button>
       </Panel>}
+      {!!data.report.population?.length && <details className="panel">
+        <summary>Visitor distribution · this sample</summary>
+        <div className="table-scroll"><table>
+          <thead><tr><th>Platform / flow</th><th>Visit intent</th><th>Visits</th><th>Share</th></tr></thead>
+          <tbody>{data.report.population.flatMap((cohort: Json)=>cohort.dimensions.visit_intent.map((row: Json)=><tr key={`${cohort.platform}-${cohort.line_of_business}-${row.value}`}>
+            <td>{cohort.platform === "ios" ? "iOS" : cohort.platform} · {cohort.line_of_business}</td>
+            <td>{row.value.replaceAll("_", " ")}</td><td>{row.count}</td><td>{row.percent}%</td>
+          </tr>))}</tbody>
+        </table></div>
+        <p className="hint">Small samples vary. Selected faults may extend a visit to reach the affected step.</p>
+      </details>}
       {!!data.report.faults.length && (
         <Panel title="Included signals">
           <div className="table-scroll">

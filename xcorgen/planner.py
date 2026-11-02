@@ -62,12 +62,24 @@ def natural_shape(lob, depth, rng):
 
 def reach(lob, shape, signed_in=True):
     """Endpoints (and the 'content' stage) a session with this shape requests."""
+    if shape.get("bounce"):
+        return {"home"}
+    if shape.get("overview_only"):
+        return {"accounts", "content"} | (set() if signed_in else {"login", "mfa_verify"})
     if shape["short"]:
         return {"retail": {"home", "get_recommendations"}, "banking": {"lock_card"}, "travel": {"trips"}}[lob]
     if lob == "retail":
         out = {"home", "search", "get_product", "get_recommendations", "content"}
+        if shape.get("intent"):
+            out.discard("search")
+            if shape.get("search"):
+                out.add("search")
+            if shape.get("category"):
+                out.add("list_products")
         if shape["priority"] or shape["add"]:
             out.add("add_to_cart")
+            if shape.get("intent"):
+                out.add("get_cart")
         if shape["priority"]:
             out |= {"get_cart", "shipping_options", "place_order", "operation_status", "get_order"}
         return out
@@ -75,6 +87,8 @@ def reach(lob, shape, signed_in=True):
         out = {"accounts", "transactions", "content"} | (set() if signed_in else {"login", "mfa_verify"})
         if shape["priority"]:
             out |= {"payees", "create_transfer", "operation_status"}
+        elif shape.get("abandon"):
+            out.add("payees")
         elif shape["statement"]:
             out.add("statement")
         return out
@@ -82,7 +96,7 @@ def reach(lob, shape, signed_in=True):
     if shape["hotel"] and not shape["priority"]:
         return out | {"hotel_search", "hotel_revalidate"}
     out.add("flight_search")
-    if shape["priority"] or shape["offer"]:
+    if shape["priority"] or shape["offer"] or shape.get("abandon"):
         out.add("offer")
     if shape["priority"]:
         out |= {"create_booking", "operation_status", "trips"}
@@ -92,12 +106,16 @@ def reach(lob, shape, signed_in=True):
 def steer(lob, shape, endpoint):
     """Change the shape so the session reaches endpoint; False when no journey can."""
     shape["short"] = False
+    shape["bounce"] = shape["overview_only"] = False
     if endpoint in (None, "content", "startup"):
         return True
     if endpoint in PRIORITY_ENDPOINTS[lob]:
         shape["priority"] = True
+        shape["abandon"] = False
     elif lob == "retail" and endpoint == "add_to_cart":
         shape["add"] = True
+    elif lob == "retail" and endpoint in ("search", "list_products"):
+        shape["search" if endpoint == "search" else "category"] = True
     elif lob == "banking" and endpoint == "statement":
         shape.update(priority=False, statement=True)
     elif lob == "banking" and endpoint == "lock_card":
@@ -330,6 +348,10 @@ class Planner:
         settings = self.settings(start_ms)
         app = gen.app_overrides.get(profile.key, {})
         version = pick_version(app.get("versions") or profile.android["versions"], persona, self.rng)
+        if target["platform"] != "web" and self.spec["population"].get("model") == "varied":
+            # Batch planning selects return visits before the first one executes.
+            # Keep adoption stable across those visits too.
+            persona.setdefault("installed_version", version[0])
         if target["platform"] == "web":
             from .browser_session import pick_release
             version = (pick_release(target["web"], start_ms, self.rng),)
@@ -344,14 +366,21 @@ class Planner:
             cohort = int(hashlib.sha256((persona["device_id"] + service + rollout.get("cohort_seed", "deploy")).encode()).hexdigest()[:8], 16) / 2**32
             if active and cohort < rollout.get("canary_share", 1):
                 service_versions[service] = deployed
+        from .population import VISIT_FIELDS
         return {"target": target["id"], "platform": target["platform"], "lob": lob, "profile": profile,
+                "visit": {k: persona[k] for k in VISIT_FIELDS if k in persona},
                 "service_versions": service_versions,
                 "persona": persona, "version": version, "app_version": version[0],
                 "os_version": persona.get("os_version"), "model": persona.get("model"),
                 "tier": DEVICE_TIERS.get(persona.get("model"), "mid"), "signed_in": persona.get("user_id") is not None,
                 "ring": assign_ring(persona, settings) if self.cohort else "stable", "start_ms": start_ms,
                 "traces": trace_mode == "end_to_end" and limits.trace_eligible(start_ms, now_ms),
-                "shape": natural_shape(lob, self.depth.get(lob, .2), self.rng), "settings": settings}
+                "shape": self._shape(lob), "settings": settings}
+
+    def _shape(self, lob):
+        from .population import enabled, shape
+        pop = self.spec["population"]
+        return shape(lob, pop, self.rng) if enabled(pop) else natural_shape(lob, self.depth.get(lob, .2), self.rng)
 
     # --- allocation --------------------------------------------------------------------------------------------
 
@@ -415,6 +444,7 @@ class Planner:
         """V1 Plan fields for one session; also finalizes the journey shape."""
         lob = skel["lob"]
         shape = skel["shape"]
+        original_shape = dict(shape)
         a = {"primary": "clean", "incident": None, "client_fault": None, "fault_ids": list(fault_ids),
              "http_errors": {}, "service_versions": skel.get("service_versions", {})}
         handled_followup = 0.0
@@ -476,4 +506,6 @@ class Planner:
         a["handled_followup"] = handled_followup
         if self.cohort_rollback and skel["start_ms"] >= self.cohort_rollback:
             a["rollback_clears_canary"] = True
+        if shape != original_shape:
+            shape["steered"] = True
         return a

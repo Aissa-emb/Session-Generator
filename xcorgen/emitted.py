@@ -54,6 +54,8 @@ def observe(platform, envelopes, traces):
             a = _attrs(span)
             dur = (span["end_time_unix_nano"] - span["start_time_unix_nano"]) / 1e6
             if span["name"] == "emb-session":
+                from .population_report import capture
+                capture(obs, a, span["start_time_unix_nano"] / 1e6, span["end_time_unix_nano"] / 1e6)
                 obs["breadcrumbs"].update(_attrs(e).get("message") for e in span.get("events", [])
                                           if e["name"] == "emb-breadcrumb")
                 if first is None or span["start_time_unix_nano"] < first[0]:
@@ -315,11 +317,21 @@ class Emitted:
         from .web_vitals import targets
         for v in vitals:
             desired, _ = targets(self.spec["web_performance"], v["page_group"], v["device_type"], v["browser_family"])
+            if self.spec["population"].get("model") == "varied":
+                # This cohort mixes network/hardware conditions; the legacy
+                # baseline is not a promised aggregate percentile.
+                desired = {}
+                for entry in self.spec["web_performance"]:
+                    if all(not entry.get(key) or v[dim] in entry[key] for key, dim in
+                           (("page_groups", "page_group"), ("device_types", "device_type"), ("browser_families", "browser_family"))):
+                        desired.update(entry.get("targets", {}))
             v["requested_p75"] = desired.get(v["metric"])
             if v["requested_p75"]:
                 v["delta_pct"] = round(100 * (v["p75"] / v["requested_p75"] - 1), 2)
                 v["within_tolerance"] = abs(v["delta_pct"]) <= 10 if v["count"] >= 30 else None
-        return {"sdk_sessions": sum(len(o.get("sdk_sessions", [])) if o["platform"] == "ios" else 1 for o in population), "sessions": sessions, "verification_sessions": len(self.observations) - sessions,
+        from .population_report import summary as population_summary
+        return {"population": population_summary(population),
+                "sdk_sessions": sum(len(o.get("sdk_sessions", [])) if o["platform"] == "ios" else 1 for o in population), "sessions": sessions, "verification_sessions": len(self.observations) - sessions,
                 "sessions_with_traces": sum(o["traces"] for o in population), "faults": rows, "web_vitals": vitals,
                 "exception_groups": [dict(zip(("release", "name", "message", "stack", "handling"), k), count=n)
                                      for k, n in exceptions.items()]}

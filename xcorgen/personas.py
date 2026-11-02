@@ -10,6 +10,7 @@ import os
 import random
 import time
 import tempfile
+from functools import lru_cache
 
 from .util import emb_id, weighted
 
@@ -107,19 +108,38 @@ KIND_BIAS = {
 CHROME_HEIGHT = {"desktop": (110, 160), "mobile": (150, 200), "tablet": (100, 140)}
 
 
-def _new_persona(profile_key, rng, overrides=None):
-    bias = KIND_BIAS.get(profile_key, {})
-    overrides = overrides or {}
-    family_mix, type_mix = overrides.get("browser_mix") or {}, overrides.get("device_type_mix") or {}
+@lru_cache(maxsize=128)
+def browser_weights(profile_key, families=(), types=()):
+    """Fit requested marginal shares while retaining supported browser/device pairs."""
+    margins = [(0, dict(families)), (5, dict(types))]
+    weights = [b[8] * KIND_BIAS.get(profile_key, {}).get(b[5], 1) for b in BROWSERS]
+    for dim, mix in margins:
+        if mix:
+            if set(mix) - {b[dim] for b in BROWSERS} or not sum(mix.values()):
+                raise ValueError("Browser/device mix contains unsupported values or no positive weight.")
+            total = sum(mix.values())
+            mix.update({k: v / total for k, v in mix.items()})
+            weights = [w if mix.get(b[dim], 0) else 0 for b, w in zip(BROWSERS, weights)]
+    for _ in range(2000):
+        for dim, mix in margins:
+            for value, share in mix.items():
+                indices = [i for i, b in enumerate(BROWSERS) if b[dim] == value]
+                mass = sum(weights[i] for i in indices)
+                if share and not mass:
+                    raise ValueError("The requested browser and device shares have no compatible population.")
+                for i in indices:
+                    weights[i] *= share / mass if mass else 0
+        if all(abs(sum(w for b, w in zip(BROWSERS, weights) if b[dim] == k) - v) < 1e-6
+               for dim, mix in margins for k, v in mix.items()):
+            return tuple(weights)
+    raise ValueError("The requested browser and device percentages cannot be combined; adjust their shares.")
 
-    def weight(b):
-        w = b[8] * bias.get(b[5], 1.0)
-        if family_mix:
-            w *= family_mix.get(b[0], 0)
-        if type_mix:
-            w *= type_mix.get(b[5], 0)
-        return w
-    browser = weighted([(b, weight(b)) for b in BROWSERS], rng)
+
+def _new_persona(profile_key, rng, overrides=None):
+    overrides = overrides or {}
+    weights = browser_weights(profile_key, tuple(sorted((overrides.get("browser_mix") or {}).items())),
+                              tuple(sorted((overrides.get("device_type_mix") or {}).items())))
+    browser = weighted(list(zip(BROWSERS, weights)), rng)
     family, version, engine, chromium_version, os_name, kind, ua, screens, _ = browser
     chromium = engine == "chromium"
     screen = rng.choice(screens)
@@ -131,19 +151,25 @@ def _new_persona(profile_key, rng, overrides=None):
         vw, vh = w, h - rng.randint(*CHROME_HEIGHT[kind])
     conn_mix = overrides.get("connection_mix") or {}
     options = [("fiber", 5), ("cable", 4), ("wifi", 6)] if kind == "desktop" else [("wifi", 5), ("5g", 4), ("4g", 5), ("4g-weak", 1)]
-    if conn_mix and any(conn_mix.get(c, 0) for c, _ in options):
-        options = [(c, conn_mix.get(c, 0)) for c, _ in options]
+    if conn_mix:
+        from .population import NETWORKS
+        conn = weighted(list(conn_mix.items()), rng)
+        speed, latency = NETWORKS[conn]
+        options = [(conn, 1)]
+        rtt_override, mbps_override = (latency * .8, latency * 1.2), (speed * .8, speed * 1.2)
+    else:
+        rtt_override = mbps_override = None
     conn = weighted(options, rng)
-    rtt = {"fiber": (12, 30), "cable": (20, 45), "wifi": (25, 70), "5g": (35, 80), "4g": (55, 130),
-           "4g-weak": (140, 320)}[conn]
-    mbps = {"fiber": (150, 600), "cable": (60, 250), "wifi": (30, 180), "5g": (40, 220), "4g": (8, 45),
-            "4g-weak": (1.2, 4)}[conn]
+    rtt = rtt_override or {"fiber": (12, 30), "cable": (20, 45), "wifi": (25, 70), "5g": (35, 80), "4g": (55, 130),
+                          "4g-weak": (140, 320)}[conn]
+    mbps = mbps_override or {"fiber": (150, 600), "cable": (60, 250), "wifi": (30, 180), "5g": (40, 220), "4g": (8, 45),
+                            "4g-weak": (1.2, 4)}[conn]
     return {
         "device_id": emb_id(rng),
         "kind": kind, "ua": ua, "chromium": chromium, "browser": family, "browser_version": version,
         "engine": engine, "chromium_version": chromium_version, "os": os_name, "connection": conn,
         "screen": screen, "viewport": f"{vw}x{vh}",
-        "effective_type": "3g" if conn == "4g-weak" else "4g",
+        "effective_type": "2g" if conn == "slow-3g" else "3g" if conn in ("4g-weak", "fast-3g") else "4g",
         "device_memory": rng.choice([4, 8, 8, 16]) if kind == "desktop" else rng.choice([4, 6, 8]),
         "rtt": round(rng.uniform(*rtt), 1), "mbps": round(rng.uniform(*mbps), 1),
         "ip": f"{rng.choice([24, 47, 66, 67, 68, 71, 73, 75, 76, 98, 99, 107, 108, 172, 174])}.{rng.randint(0, 255)}."
@@ -183,13 +209,14 @@ def _new_android_persona(profile_key, rng, overrides=None):
 
 class PersonaPool:
     def __init__(self, profile_key, state_dir, size=600, rng=random, platform="web", returning_share=None,
-                 android_overrides=None, web_overrides=None, ios_overrides=None):
+                 android_overrides=None, web_overrides=None, ios_overrides=None, population=None):
         self.profile_key, self.rng, self.platform = profile_key, rng, platform
         # Steady-state share of returning visitors; V1 settles at 45% returning.
         self.new_floor = 1 - returning_share if returning_share is not None else 0.55
         self.android_overrides = android_overrides
         self.ios_overrides = ios_overrides
         self.web_overrides = web_overrides
+        self.population = population or {}
         self.path = os.path.join(state_dir, f"personas-{profile_key}{'' if platform == 'web' else '-' + platform}.json")
         self.size = size
         self.personas = []
@@ -207,7 +234,8 @@ class PersonaPool:
         fresh = [p for p in self.personas if abs(now - p.get("last_seen", 0)) > 1800]
         # A young pool is mostly first-time visitors; it settles at ~55% new once it has grown.
         p_new = max(self.new_floor, 1 - len(self.personas) / 150)
-        if len(self.personas) < self.size and (not fresh or self.rng.random() < p_new):
+        is_new = not fresh or self.rng.random() < p_new
+        if is_new:
             if self.platform == "android":
                 p = _new_android_persona(self.profile_key, self.rng, self.android_overrides)
             elif self.platform == "ios":
@@ -215,12 +243,18 @@ class PersonaPool:
             else:
                 p = _new_persona(self.profile_key, self.rng, self.web_overrides)
             make_user(p)
-            self.personas.append(p)
+            if len(self.personas) >= self.size and fresh:
+                self.personas.remove(min(fresh, key=lambda item: item.get("last_seen", 0)))
+            if len(self.personas) < self.size:
+                self.personas.append(p)
         else:
             # Skew towards a core of frequent visitors.
-            pool = fresh or self.personas
+            pool = fresh
             p = pool[min(int(len(pool) * (self.rng.random() ** 1.3)), len(pool) - 1)]
         p["last_seen"] = now
+        p["returning_visit"] = not is_new
+        from .population import visit
+        visit(p, self.population, self.platform, self.rng)
         return p
 
     def save(self):

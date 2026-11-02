@@ -283,6 +283,20 @@ class Destinations(BaseModel):
     )
 
 
+class Model(Enum):
+    legacy = 'legacy'
+    varied = 'varied'
+
+
+class IntentMix(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    retail: Weights | None = None
+    banking: Weights | None = None
+    travel: Weights | None = None
+
+
 class LineOfBusinessMix(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -346,6 +360,27 @@ class Ios(BaseModel):
 class Population(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
+    )
+    model: Model | None = Field(
+        None,
+        description='Varied visitor intent, conditional performance and native lifecycle; legacy preserves prior journey probabilities.',
+    )
+    intent_mix: IntentMix | None = None
+    network_mix: Weights | None = Field(
+        None,
+        description='Optional shared network-profile session weights. Without overrides, desktop and handheld visits use different mixes.',
+    )
+    geo_mix: Weights | None = Field(
+        None,
+        description='Visitor locale/timezone weights. Does not change ingest IP geolocation.',
+    )
+    native_cold_start_share: Share | None = Field(
+        None,
+        description='Chance of a new process for a returning native visitor with a previous process. First visits and startup faults are always cold.',
+    )
+    native_background_share: Share | None = Field(
+        None,
+        description='Chance of one interruption at an eligible content stage, excluding fatal paths.',
     )
     platform_mix: Weights | None = Field(
         None, description='Share of sessions per target ID.'

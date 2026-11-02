@@ -33,11 +33,21 @@ def rating(name, value):
     return "good" if value <= good else "needs-improvement" if value <= poor else "poor"
 
 
-def targets(spec_entries, page_group, device_type, browser_family):
+def targets(spec_entries, page_group, device_type, browser_family, persona=None):
     """p75 targets and TBD rating mix for one page view, with spec entries overriding the baseline."""
     t = dict(BASELINE[device_type])
     for k, f in PAGE_FACTOR.get(page_group, {}).items():
         t[k] *= f
+    if persona and persona.get("population_model"):
+        # Add transport cost to load metrics, and hardware cost to synchronous
+        # rendering/interaction work. Slow HTTP alone never becomes poor INP.
+        net = max(0, 2 * (persona["rtt"] - 35))
+        transfer = max(0, 160000 * 8 / (persona["mbps"] * 1000) - 160000 * 8 / 30000)
+        cpu = persona["cpu_factor"]
+        t["ttfb"] += net
+        t["fcp"] += net + transfer * .2 + max(0, cpu - 1) * 250
+        t["lcp"] += net + transfer + max(0, cpu - 1) * 450
+        t["inp"] *= cpu
     mix = dict(TBD_MIX)
     for entry in spec_entries or []:
         if entry.get("page_groups") and page_group not in entry["page_groups"]:

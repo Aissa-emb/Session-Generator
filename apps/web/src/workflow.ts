@@ -37,6 +37,10 @@ export type Draft = {
   causalSeed: number;
   regression: string;
   flow: string;
+  population: "varied" | "legacy";
+  returning: number;
+  coldStarts: number;
+  interruptions: number;
   signals: Record<Signal, boolean>;
   rates: Record<Signal, number>;
   lcp: number;
@@ -69,6 +73,10 @@ export const defaults: Draft = {
   causalMix: [70,15,10,5],
   regression: "payments",
   flow: "all",
+  population: "varied",
+  returning: 45,
+  coldStarts: 35,
+  interruptions: 12,
   signals: {
     crashes: false,
     exceptions: false,
@@ -228,7 +236,12 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
       d.flow === "all" || d.flow === lob ? 1 : 0,
     ]),
   );
-  if (d.flow !== "all") s.population.journey_depth[d.flow] = 1;
+  s.population.model = d.population;
+  s.population.returning_share = d.returning / 100;
+  if (d.population === "varied") {
+    s.population.native_cold_start_share = d.coldStarts / 100;
+    s.population.native_background_share = d.interruptions / 100;
+  } else if (d.flow !== "all") s.population.journey_depth[d.flow] = 1;
   s.destinations = { mode: d.destination, backend_logs: false };
   s.chronosphere =
     d.destination === "end_to_end" ? { tenant: tenantName(d.tenant) } : null;
@@ -243,6 +256,8 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
   s.rollouts = [];
   s.web_performance = [];
   if (d.story === "causal") {
+    // Explicit diagnostic stories own their exact journey and timing contracts.
+    s.population.model = "legacy";
     const domain = d.causalScenario === "travel-provider" ? "travel" : "banking";
     s.name = "Causal demo · " + d.causalScenario + " · " + d.causalVariant;
     s.population.line_of_business_mix = { retail: 0, banking: Number(domain === "banking"), travel: Number(domain === "travel") };

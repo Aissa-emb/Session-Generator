@@ -50,6 +50,25 @@ async function preview(page: Page) {
   await page.getByRole("button", { name: "Local test", exact: false }).click();
 }
 
+test("varied visitor model reaches preview with native lifecycle controls", async ({page}, testInfo) => {
+  await connect(page, ["android", "ios", "web"]);
+  await page.getByText("Visitor mix", {exact:true}).click();
+  await expect(page.getByLabel("Visit patterns", {exact:true})).toHaveValue("varied");
+  await page.getByLabel("Returning visitors %", {exact:true}).fill("40");
+  await page.getByLabel("Cold starts on return %", {exact:true}).fill("30");
+  const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
+  await page.getByRole("button", {name:"Generate preview",exact:true}).click();
+  const result = await response;
+  expect(result.ok()).toBeTruthy();
+  const data = await result.json();
+  expect(data.report.population.length).toBeGreaterThan(0);
+  expect(result.request().postDataJSON().population.model).toBe("varied");
+  expect(result.request().postDataJSON().population.returning_share).toBe(.4);
+  await page.getByText("Visitor distribution · this sample", {exact:true}).click();
+  await expect(page.getByRole("columnheader", {name:"Visit intent",exact:true})).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath("population-preview.png"),fullPage:true});
+});
+
 test("one workflow, input validation, scoped platform controls, no AI or MCP", async ({
   page,
   request,

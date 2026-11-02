@@ -88,9 +88,12 @@ def begin(s, page, **params):
 
 
 def client_issue(s, stage="content"):
-    if stage == "content" and s.plan.client_fault != "crash" and hasattr(s, "background") and s.rng.random() < .08:
+    background_share = getattr(s, "population_settings", {}).get("native_background_share", .12) if s.persona.get("population_model") else .08
+    if s.persona.get("population_model") and s.persona.get("platform") not in ("android", "ios"):
+        background_share = 0
+    if stage == "content" and s.plan.client_fault != "crash" and hasattr(s, "background") and s.rng.random() < background_share:
         mark(s, "app_backgrounded")
-        s.background(4, 12)
+        s.background(6, 45) if s.persona.get("population_model") else s.background(4, 12)
         mark(s, "session_resumed")
     plan = s.plan
     if stage == "content":
@@ -167,6 +170,9 @@ def payment(s, key):
 
 
 def ecommerce(s):
+    if (getattr(s.plan, "shape", None) or {}).get("intent"):
+        from .population_journeys import retail
+        return retail(s)
     from .profiles.ecommerce import PRODUCTS, SEARCHES
     plan, rng = s.plan, s.rng
     priority = plan.primary == "mobile" and not getattr(plan, "transport", None) or rng.random() < plan.settings.get("journey_weights", {}).get("ecommerce_priority", .23)
@@ -290,22 +296,35 @@ def banking(s):
     if not s.user_id:
         s.type_text(rng.randint(18, 25))
         mark(s, "credentials_submitted")
-        request(s, "login")
+        if not request(s, "login").ok:
+            s.properties["visit_outcome"] = "signin_failed"
+            return done(s)
         s.page_view("mfa")
         mark(s, "identity_challenge_presented")
         s.wait(3, 8)
-        request(s, "mfa_verify")
+        if not request(s, "mfa_verify").ok:
+            s.properties["visit_outcome"] = "challenge_failed"
+            return done(s)
         s.login()
         mark(s, "identity_verified")
     s.page_view("dashboard")
     mark(s, "account_overview_opened")
     account_result = request(s, "accounts")
+    if not account_result.ok:
+        s.properties["visit_outcome"] = "overview_unavailable"
+        return done(s)
     if account_result.data.get("snapshot"):
         mark(s, "cached_account_snapshot_displayed")
         mark(s, "account_snapshot_as_of_displayed")
         s.log("warning", "Account snapshot is read-only; recent activity may be missing", **{
             "account.snapshot_as_of_ms": str(account_result.data["as_of_ms"])})
     mark(s, "account_overview_rendered")
+    if shape and shape.get("overview_only"):
+        from .population import read
+        read(s)
+        s.properties["visit_outcome"] = "balance_checked"
+        client_issue(s)
+        return done(s)
     s.wait(2, 8)
     acct, label = rng.choice(ACCOUNTS)
     tap(s, label)
@@ -318,7 +337,14 @@ def banking(s):
     tap(s, "View transaction details")
     mark(s, "transaction_details_viewed")
     client_issue(s)
-    if priority:
+    if shape and shape.get("power"):
+        from .population import read
+        other, other_label = next((a, name) for a, name in ACCOUNTS if a != acct)
+        tap(s, other_label)
+        s.page_view("account", account=other, label=other_label)
+        request(s, "transactions", account=other)
+        read(s)
+    if priority or shape and shape.get("abandon"):
         tap(s, "Move money")
         s.page_view("transfer")
         mark(s, "transfer_started")
@@ -335,6 +361,9 @@ def banking(s):
         s.page_view("transfer_review")
         mark(s, "transfer_review_displayed")
         s.wait(2, 5)
+        if shape and shape.get("abandon"):
+            s.properties["visit_outcome"] = "transfer_abandoned"
+            return done(s)
         tap(s, "Send transfer")
         mark(s, "fraud_check_started")
         r = request(s, "create_transfer")
@@ -348,8 +377,10 @@ def banking(s):
                 r = request(s, "create_transfer")
         if r.ok:
             s.page_view("transfer_done", transfer_id=r.data["transfer_id"])
+            s.properties["visit_outcome"] = "transfer_completed"
             mark(s, "transfer_confirmation_viewed")
         else:
+            s.properties["visit_outcome"] = "transfer_unconfirmed"
             mark(s, "transfer_help_opened")
     elif statement:
         s.page_view("statements")
@@ -450,6 +481,11 @@ def travel(s):
         tap(s, "Earlier departures")
         mark(s, "flight_departure_filter_changed")
     client_issue(s)
+    if shape and shape.get("power"):
+        tap(s, "Compare flight options")
+        request(s, "flight_search", origin=origin, dest=dest)
+        from .population import read
+        read(s)
     if priority or (shape["offer"] if shape is not None else rng.random() < .5):
         tap(s, "Select itinerary")
         mark(s, "itinerary_selected")
@@ -458,7 +494,7 @@ def travel(s):
         mark(s, "fare_rules_displayed")
         mark(s, "fare_revalidated")
         s.wait(3, 8)
-    if priority:
+    if priority or shape and shape.get("abandon"):
         s.page_view("checkout")
         mark(s, "booking_started")
         s.type_text(rng.randint(25, 50))
@@ -468,12 +504,17 @@ def travel(s):
             mark(s, "traveler_details_corrected")
         mark(s, "traveler_details_validated")
         mark(s, "booking_review_displayed")
+        if shape and shape.get("abandon"):
+            s.properties["visit_outcome"] = "booking_abandoned"
+            return done(s)
         r = payment(s, "create_booking")
         if r.ok:
+            s.properties["visit_outcome"] = "booking_completed"
             s.page_view("confirmation", ref=r.data["ref"])
             mark(s, "booking_confirmation_viewed")
             request(s, "trips")
         else:
+            s.properties["visit_outcome"] = "booking_unconfirmed"
             mark(s, "booking_cancelled")
     done(s)
 

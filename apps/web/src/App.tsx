@@ -702,6 +702,19 @@ export default function App() {
                   </Field>}
                 </div>
               </Panel>
+              {step === 1 && draft.story !== "causal" && <details className="panel">
+                <summary>Visitor mix</summary>
+                <div className="field-grid">
+                  <Field label="Visit patterns"><select value={draft.population} onChange={e=>update({population:e.target.value as Draft["population"]})}>
+                    <option value="varied">Varied visits</option><option value="legacy">Previous distribution</option>
+                  </select></Field>
+                  <Field label="Returning visitors %" hint="Target after the visitor pool warms up."><input type="number" min="0" max="100" value={draft.returning} onChange={e=>update({returning:Number(e.target.value)})}/></Field>
+                  {draft.population === "varied" && draft.apps.some(a=>a.platform!=="web") && <>
+                    <Field label="Cold starts on return %" hint="First visits always start cold."><input type="number" min="0" max="100" value={draft.coldStarts} onChange={e=>update({coldStarts:Number(e.target.value)})}/></Field>
+                    <Field label="App interruptions %" hint="At eligible content stages."><input type="number" min="0" max="100" value={draft.interruptions} onChange={e=>update({interruptions:Number(e.target.value)})}/></Field>
+                  </>}
+                </div>
+              </details>}
               {draft.story === "causal" && <details className="panel">
                 <summary>Scenario parameters</summary>
                 <div className="field-grid">

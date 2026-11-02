@@ -329,6 +329,9 @@ class Generator:
         selection = self.verification_queue.pop(0) if self.verification_queue and skeleton is None else {}
         if skeleton:
             profile, persona = skeleton["profile"], skeleton["persona"]
+            # Batch allocation may select this visitor again before generation.
+            # Freeze visit conditions, but retain shared identity/session counters.
+            persona.update(skeleton.get("visit", {}))
         else:
             profile = next((p for p in self.profiles if p.key == selection.get("profile")), None) or random.choice(self.profiles)
             pool = self.pools[profile.key]
@@ -354,6 +357,8 @@ class Generator:
         s.plan = Plan(s, self.runtime, settings, incident, assignment=assignment)
         if skeleton is not None and assignment is not None:
             s.plan.shape = skeleton.get("shape")
+        from .population import configure_session
+        configure_session(s, getattr(self, "population_settings", {}), getattr(s.plan, "shape", None))
         s.verification_case = selection.get("name")
         if assignment is None and s.plan.primary == "mobile" and s.plan.ring == "stable" and random.random() < self.settings.get("transport_share", .4) and not incident:
             s.plan.transport = random.choice(("dns", "offline", "reset", "timeout", "cancelled"))
@@ -361,6 +366,7 @@ class Generator:
         try:
             journey(s)
         except SessionEnded:  # the app crashed; the process is gone
+            s.persona.pop("native_process_id", None)
             if self.platform == "android" and s.persona.pop("pending_crash_upload", False):
                 due = s.crash_upload_due
                 for delivery in s.deliveries:

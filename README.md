@@ -38,6 +38,8 @@ AI/Copilot and MCP controls have been removed from the UI. Their experimental HT
 
 [Owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) lists app forwarding and live checks; [hosting](docs/v2/HOSTING.md) covers authenticated containers and deployment.
 
+[Visitor distributions](docs/v2/POPULATION-MODEL.md) explains the varied Android, iOS and web visit model, native cold/warm starts, conditional performance, configurable weights and offline population audit. New standard/regression runs use it by default; existing saved specs retain their behavior.
+
 [Causal telemetry](docs/v2/CAUSAL-TELEMETRY.md) documents the new canonical service catalog, three-platform fixtures, ready-to-run examples, evidence gates and both presenter navigation directions. The existing standard/regression profiles remain available:
 
 | Profile | Brand | What visitors do | Backend |

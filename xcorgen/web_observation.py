@@ -37,6 +37,8 @@ def observe(payloads, traces):
             a = attrs(s)
             ms = (int(s["endTimeUnixNano"]) - int(s["startTimeUnixNano"])) / 1e6
             if a.get("emb.type") == "ux.session_part":
+                from .population_report import capture
+                capture(obs, a, int(s["startTimeUnixNano"]) / 1e6, int(s["endTimeUnixNano"]) / 1e6)
                 obs.update(lob=a.get("emb.properties.business_unit"), session_id=a["emb.user_session_id"],
                            start_ms=float(a["emb.user_session_start_ts"]), signed_in=bool(a.get("user.id")))
                 obs["abandoned"] |= a.get("emb.page_load") is False

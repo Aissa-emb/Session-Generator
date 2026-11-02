@@ -39,7 +39,8 @@ class IOSSession(AndroidSession):
 
     def _resource(self):
         p = self.persona
-        self.process_id = emb_id(self.rng)
+        if len(self.process_id) != 32:
+            self.process_id = emb_id(self.rng)
         return {
             "os_name": "ios",
             "os_type": "darwin",
@@ -65,7 +66,7 @@ class IOSSession(AndroidSession):
             "environment": "prod",
             "launch_count": p["version_starts"],
             "process_identifier": self.process_id,
-            "process_start_time": nanos(self.start_ms),
+            "process_start_time": nanos(self.persona.get("native_process_start_ms", self.start_ms)),
             "process_pre_warm": False,
         }
 
@@ -162,6 +163,8 @@ class IOSSession(AndroidSession):
         t = self.t
         tid, root = hex_id(16, self.rng), hex_id(8, self.rng)
         self.startup_ms = lat(350, 1100, self.rng) if cold else lat(80, 280, self.rng)
+        if self.persona.get("population_model"):
+            self.startup_ms *= self.persona["cpu_factor"]
         regression = getattr(getattr(self, "plan", None), "slow_startup", None)
         if regression:
             self.startup_ms = self.rng.uniform(

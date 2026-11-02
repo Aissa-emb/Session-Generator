@@ -103,10 +103,12 @@ class SpecRun:
                             backend_logs=self.spec["destinations"].get("backend_logs", False), persist=persist,
                             platform=target["platform"], shared=True, app_overrides=app_overrides(target, self.spec),
                             pool_options={"returning_share": pop["returning_share"],
-                                          "android_overrides": pop.get("android"), "ios_overrides":pop.get("ios"), "web_overrides": pop.get("web")}, runtime=runtime,
+                                          "android_overrides": pop.get("android"), "ios_overrides":pop.get("ios"), "web_overrides": pop.get("web"),
+                                          "population": pop}, runtime=runtime,
                             state_dir=state_dir, web_options={"web": target["web"], "performance": self.spec["web_performance"],
                                 "population": pop.get("web", {}), "app_name": target["app_name"]} if target["platform"] == "web" else None)
             gen.cross_platform_customers = len({t["platform"] for t in self.spec["targets"]}) > 1
+            gen.population_settings = pop
             gen.signed_in_share = pop["signed_in_share"]
             gen.membership_weights = list(pop["session_properties"]["membership_tier"].items())
             gen.verification_queue = [self._case(c) for c in self.spec["verification_cases"]

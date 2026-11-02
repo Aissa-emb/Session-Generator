@@ -130,6 +130,8 @@ def normalized(spec):
             else:
                 target.setdefault(key, copy.deepcopy(value))
     pop.setdefault("platform_mix", {t["id"]: 1 for t in s.get("targets", [])})
+    if pop.get("model") == "varied":
+        pop.setdefault("web", {}).setdefault("device_type_mix", {"desktop": 60, "mobile": 40})
     s.setdefault("destinations", {"mode": "sessions_only"})
     for fault in s["client_faults"]:
         meta = catalog.CLIENT_FAULTS.get(fault.get("type"), {})
@@ -328,6 +330,24 @@ def validate(spec, now_ms=None, lint=True):
         issues.append(_issue("error", "$.population.platform_mix", f"Unknown target IDs: {', '.join(sorted(unknown))}.", "unknown_target"))
     if not lines_of_business(s):
         issues.append(_issue("error", "$.population.line_of_business_mix", "At least one line of business needs a positive share.", "mix"))
+    from .population import INTENTS, NETWORKS, GEOS
+    pop = s["population"]
+    mixes = [("network_mix", pop.get("network_mix"), NETWORKS), ("geo_mix", pop.get("geo_mix"), GEOS),
+             ("web.connection_mix", pop.get("web", {}).get("connection_mix"), NETWORKS),
+             ("web.browser_mix", pop.get("web", {}).get("browser_mix"), ("chrome", "safari", "firefox", "edge", "samsung_internet")),
+             ("web.device_type_mix", pop.get("web", {}).get("device_type_mix"), ("desktop", "mobile", "tablet"))]
+    mixes += [("intent_mix." + lob, mix, INTENTS[lob]) for lob, mix in pop.get("intent_mix", {}).items()]
+    for name, mix, allowed in mixes:
+        if mix is not None and (set(mix) - set(allowed) or sum(mix.values()) <= 0):
+            issues.append(_issue("error", "$.population." + name,
+                "Use positive weights from: " + ", ".join(allowed) + ".", "population_mix"))
+    from .personas import browser_weights
+    web = pop.get("web", {})
+    try:
+        browser_weights("ecommerce", tuple(sorted((web.get("browser_mix") or {}).items())),
+                        tuple(sorted((web.get("device_type_mix") or {}).items())))
+    except ValueError as exc:
+        issues.append(_issue("error", "$.population.web", str(exc), "population_mix"))
 
     # Destinations.
     mode = s["destinations"]["mode"]

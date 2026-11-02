@@ -300,6 +300,12 @@
     "population": {
       "type": "object", "additionalProperties": false,
       "properties": {
+        "model": {"enum": ["legacy", "varied"], "description": "Varied visitor intent, conditional performance and native lifecycle; legacy preserves prior journey probabilities."},
+        "intent_mix": {"type": "object", "additionalProperties": false, "properties": {"retail": {"$ref": "#/$defs/weights"}, "banking": {"$ref": "#/$defs/weights"}, "travel": {"$ref": "#/$defs/weights"}}},
+        "network_mix": {"$ref": "#/$defs/weights", "description": "Optional shared network-profile session weights. Without overrides, desktop and handheld visits use different mixes."},
+        "geo_mix": {"$ref": "#/$defs/weights", "description": "Visitor locale/timezone weights. Does not change ingest IP geolocation."},
+        "native_cold_start_share": {"$ref": "#/$defs/share", "description": "Chance of a new process for a returning native visitor with a previous process. First visits and startup faults are always cold."},
+        "native_background_share": {"$ref": "#/$defs/share", "description": "Chance of one interruption at an eligible content stage, excluding fatal paths."},
         "platform_mix": {"$ref": "#/$defs/weights", "description": "Share of sessions per target ID."},
         "line_of_business_mix": {"type": "object", "additionalProperties": false,
                                  "properties": {"retail": {"type": "number", "minimum": 0}, "banking": {"type": "number", "minimum": 0},

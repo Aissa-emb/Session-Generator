@@ -230,13 +230,19 @@ class AndroidSession:
     # --- time ----------------------------------------------------------------------
 
     def wait(self, lo_s, hi_s):
+        if getattr(self, "population_settings", {}).get("model") == "varied" and lo_s >= 2 and hi_s >= 5:
+            from .population import read
+            return read(self, max(3, lo_s), max(15, hi_s))
         self.t += self.rng.uniform(lo_s, hi_s) * 1000
 
     def _think(self):
         self.t += self.rng.uniform(60, 260)
 
     def type_text(self, chars):
-        self.t += chars * self.rng.uniform(170, 360)
+        if getattr(self, "population_settings", {}).get("model") == "varied":
+            self.t += sum(self.rng.triangular(200, 800, 300) for _ in range(chars))
+        else:
+            self.t += chars * self.rng.uniform(170, 360)
 
     # --- lifecycle -------------------------------------------------------------------
 
@@ -340,6 +346,8 @@ class AndroidSession:
     def _startup(self, cold):
         rng, mid = self.rng, self.persona["model"]
         slow = 1.0 if any(x in mid for x in ("SM-S9", "Pixel 9", "Pixel 10", "SM-F9", "CPH")) else 1.6
+        if self.persona.get("population_model"):
+            slow = self.persona["cpu_factor"]
         t0 = self.t
         tid, root = hex_id(16, self.rng), hex_id(8, self.rng)
         act = self.app["activity"]
