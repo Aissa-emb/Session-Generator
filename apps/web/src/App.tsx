@@ -363,7 +363,6 @@ export default function App() {
         <header className="topbar">
           <div className="tool-identity">
             <img className="tool-name" src={toolWordmark} alt="Session Generator" />
-            <span className="tool-location">{steps[step][0]}</span>
           </div>
           <span
             className="server-connection"
