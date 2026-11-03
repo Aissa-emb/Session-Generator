@@ -331,10 +331,10 @@ export default function App() {
       <aside className="workflow-rail">
         <div className="brand">
           <img src={cortexLogo} alt="Cortex XCOR" width="184" height="27" />
-        </div>
-        <div className="rail-intro">
-          <ActivityLogIcon />
-          <span>Generate telemetry</span>
+          <div className="tool-identity">
+            <span className="tool-name">Session Generator</span>
+            <span className="tool-context">Internal tool</span>
+          </div>
         </div>
         <nav aria-label="Generation steps">
           {steps.map(([title, sub], i) => (
