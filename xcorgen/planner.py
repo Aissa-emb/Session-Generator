@@ -348,13 +348,15 @@ class Planner:
         settings = self.settings(start_ms)
         app = gen.app_overrides.get(profile.key, {})
         version = pick_version(app.get("versions") or profile.android["versions"], persona, self.rng)
-        if target["platform"] != "web" and self.spec["population"].get("model") == "varied":
-            # Batch planning selects return visits before the first one executes.
-            # Keep adoption stable across those visits too.
-            persona.setdefault("installed_version", version[0])
         if target["platform"] == "web":
             from .browser_session import pick_release
             version = (pick_release(target["web"], start_ms, self.rng),)
+        if self.spec.get('modeling', {}).get('releases'):
+            from .adoption import choose
+            version = choose(target, persona, start_ms, self.spec['modeling'], self.spec.get('seed', 7331), version)
+        if target["platform"] != "web" and self.spec["population"].get("model") == "varied":
+            # Batch planning selects return visits before the first one executes.
+            persona.setdefault("installed_version", version[0])
         service_versions = {}
         for f in self.faults:
             if f.type != "deploy_regression":

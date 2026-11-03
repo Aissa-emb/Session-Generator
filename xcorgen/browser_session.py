@@ -713,10 +713,13 @@ class BrowserSession:
             read(self, max(3, lo_s), max(15, hi_s))
             self.t = self.p(self.t)
             return
-        self.t = self.p(self.t + self.rng.uniform(lo_s, hi_s) * 1000)
+        from .modeling import sample
+        duration = sample(self, "reading_ms", lambda: self.rng.uniform(lo_s, hi_s) * 1000) if lo_s >= 2 and hi_s >= 5 else self.rng.uniform(lo_s, hi_s) * 1000
+        self.t = self.p(self.t + duration)
 
     def type_text(self, chars):
-        duration = sum(self.rng.triangular(200, 800, 300) for _ in range(chars)) if getattr(self, "population_settings", {}).get("model") == "varied" else chars * self.rng.uniform(140, 320)
+        from .modeling import sample
+        duration = sum(sample(self, "typing_ms", lambda: self.rng.triangular(200, 800, 300)) for _ in range(chars)) if getattr(self, "population_settings", {}).get("model") == "varied" else chars * sample(self, "typing_ms", lambda: self.rng.uniform(140, 320))
         self.t = self.p(self.t + duration)
 
     def login(self, user_id=None):

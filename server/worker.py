@@ -168,6 +168,9 @@ def live(store, job, version):
                     if latest['spec'].get('causal'):
                         runner._causal_index = counters['sessions']
                         runner.run_id = latest['spec']['causal'].get('replay_namespace') or job['id']
+                    if latest['spec'].get('modeling'):
+                        runner._model_index = counters['sessions']
+                        runner.run_id = job['id']
                     sender = ReceiptSender(store, dict(job, spec_version=latest['version']), latest['spec'], receipt)
                     senders.append(sender)
                     current = latest['version']
@@ -188,6 +191,8 @@ def live(store, job, version):
                           'spec_version': current, 'part_ids': getattr(session,'sdk_session_ids',[]) + [p.id for p in getattr(session, 'parts', [])]}
                 if hasattr(session, 'causal_evidence'):
                     record['causal'] = session.causal_evidence
+                if hasattr(session, 'performance_model'):
+                    record['modeling'] = session.performance_model.evidence()
                 pending[key] = {'remaining': len(deliveries), 'ok': True, 'record': record}
                 delivery_summary.annotate(deliveries, record)
                 for ordinal, d in enumerate(deliveries):

@@ -249,6 +249,11 @@ def create_app(service=None, enable_integrations=None):
     def preview(id: str):
         return svc.preview(svc.store.get('scenario_specs', id)['spec'])
 
+    @app.post('/api/distributions/preview')
+    def distribution_preview(value: dict = Body()):
+        from xcorgen.distributions import preview
+        return preview(value.get('distribution'), value.get('quantity'), value.get('effect'))
+
     @app.post('/api/preview')
     def preview_unsaved(value: dict = Body()):
         return svc.preview(value)

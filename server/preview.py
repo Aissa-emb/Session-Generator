@@ -30,6 +30,11 @@ def preview(spec):
     preview_now = time.time() * 1000
     if s['traffic']['mode'] == 'live':
         windows = [specs.incident_window(i) for i in s.get('incidents', [])]
+        for curve in s.get('modeling', {}).get('releases', []):
+            finish = specs.parse_time(curve['start']) + curve['points'][-1]['minute'] * 60000
+            if finish > preview_now:
+                begin = max(preview_now, specs.parse_time(curve['start']))
+                windows.append({'start_ms': begin, 'onset_ms': 0, 'peak_ms': finish - begin, 'recovery_ms': 0})
         causal=s.get('causal',{})
         if causal.get('variant')=='scheduled':
             windows.append({'start_ms':specs.parse_time(causal['incident_start'])-60000,
@@ -44,7 +49,7 @@ def preview(spec):
     s['traffic'].pop('rate_per_minute', None)
     s['traffic'].pop('duration_minutes', None)
     s['traffic'].setdefault('window', {'last_minutes': 8})
-    random.seed(s.get('seed') or 7331)
+    random.seed(s['seed'] if s.get('seed') is not None else 7331)
     cfg = {'embrace': {'apps': {}}, 'chronosphere': {}, 'otlp': {}}
     with tempfile.TemporaryDirectory() as state:
         run = SpecRun(s, cfg, persist=False, state_dir=state, now_ms=preview_now)
@@ -111,7 +116,9 @@ def preview(spec):
                         elif d['target']=='embrace' and selected_payload:timeline.append(row)
         causal_previews[c['platform']]={'evidence':c,'timeline':timeline,'waterfall':tree}
     collector.pool.shutdown(wait=True)
-    return {'preview_clock': specs.iso(preview_now), 'sample_count': s['traffic']['count'], 'requested_count': requested_count,
+    from xcorgen.distributions import preview as distribution_preview
+    numerical = {b['id']: distribution_preview(b['distribution'], b['quantity'], b.get('effect')) for b in s.get('modeling', {}).get('bindings', [])}
+    return {'performance_distributions': numerical, 'preview_clock': specs.iso(preview_now), 'sample_count': s['traffic']['count'], 'requested_count': requested_count,
             'expected_counts': allocated, 'report': run.emitted.summary(), 'timelines': timelines,
             'trace_waterfall': waterfall, 'vitals': vitals[:1000], 'exception': exception,
             'causal_evidence': run.causal_evidence[:12],

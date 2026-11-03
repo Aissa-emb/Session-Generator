@@ -31,6 +31,21 @@ class APITests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()
 
+    def test_distribution_preview_and_canonical_model_roundtrip(self):
+        from xcorgen.distributions import default
+        config=default('reading_ms')
+        with patch('xcorgen.runner.Sender', side_effect=AssertionError('Preview cannot send')):
+            result=self.client.post('/api/distributions/preview',json={'quantity':'reading_ms','distribution':config})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['count'],2048)
+        self.assertEqual(len(result.json()['histogram']),24)
+        self.spec['modeling']={'version':'1.0','bindings':[{'id':'read','quantity':'reading_ms','distribution':config}]}
+        saved=self.save()
+        restored=self.client.get('/api/specs/'+saved['id']).json()['spec']
+        self.assertEqual(restored['modeling'],self.spec['modeling'])
+        broken=self.client.post('/api/distributions/preview',json={'quantity':'reading_ms','distribution':{'family':'constant','parameters':{'value':-100}}})
+        self.assertEqual(broken.status_code,422)
+
     def test_versions_and_optimistic_patch(self):
         saved = self.save()
         url = '/api/specs/' + saved['id']
@@ -83,6 +98,18 @@ class APITests(unittest.TestCase):
         result = self.client.post('/api/preview', json=s)
         self.assertEqual(result.status_code, 200, result.text)
         self.assertGreater(spec.parse_time(result.json()['preview_clock']), time.time()*1000)
+
+    def test_release_preview_projects_future_adoption_and_keeps_finished_curves_usable(self):
+        self.spec['traffic']={'mode':'live','rate_per_minute':4}
+        curve={'target':self.spec['targets'][0]['id'], 'start':spec.iso(time.time()*1000+120000),
+               'points':[{'minute':0,'shares':{'10.28.0':10,'10.27.3':90}}, {'minute':20,'shares':{'10.28.0':90,'10.27.3':10}}]}
+        self.spec['modeling']={'version':'1.0','releases':[curve]}
+        response=self.client.post('/api/preview',json=self.spec)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertGreaterEqual(spec.parse_time(response.json()['preview_clock']),spec.parse_time(curve['start'])+1200000)
+        self.assertEqual(response.json()['report']['modeling']['releases'][0]['visits'],60)
+        curve['start']='2026-01-01T00:00:00Z'
+        self.assertEqual(self.client.post('/api/preview',json=self.spec).status_code,200)
 
     def test_unreadable_live_token_is_correctable_before_any_run_is_created(self):
         from xcorgen.security import SecurityError
@@ -197,6 +224,16 @@ class APITests(unittest.TestCase):
         self.assertEqual(result['spec_version'], 2)
         self.assertGreater(result['counters']['payloads'], 0)
         self.assertEqual({e['spec_version'] for e in self.store.events(run['id']) if e['type'] == 'spec_applied'}, {1, 2})
+        return result
+
+    def test_live_model_sequence_and_evidence_continue_across_spec_edits(self):
+        from xcorgen.distributions import default
+        self.spec['modeling']={'version':'1.0','bindings':[{'id':'transport','quantity':'network_rtt_ms','distribution':default('network_rtt_ms')}]}
+        result=self.test_live_edits_apply_before_the_next_session_and_stop_flushes()
+        records=[json.loads(line) for line in Path(result['manifest_path']).read_text().splitlines()]
+        records=[r for r in records if r.get('modeling')]
+        self.assertEqual(sorted(r['modeling']['index'] for r in records),list(range(result['counters']['sessions'])))
+        self.assertEqual(len({r['session_id'] for r in records}),len(records))
 
     def test_stream_controls_and_hourly_observation_comparison(self):
         saved = self.save()

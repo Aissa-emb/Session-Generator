@@ -87,10 +87,11 @@ class SpecRun:
         self.planner = Planner(self.spec, rng)
         self.mode = self.spec["destinations"]["mode"]
         self.run_id = datetime.now().strftime("%Y%m%dT%H%M%S") + "-" + hex_id(3, rng)
-        if self.spec.get("causal"):
+        if self.spec.get("causal") or self.spec.get("modeling"):
             import uuid
-            self.run_id = self.spec["causal"].get("replay_namespace") or uuid.uuid4().hex
+            self.run_id = self.spec.get("causal", {}).get("replay_namespace") or uuid.uuid4().hex
         self._causal_index = 0
+        self._model_index = 0
         self.causal_evidence = []
         runtime = Runtime()
         pop = self.spec["population"]
@@ -168,7 +169,15 @@ class SpecRun:
             fault_ids = self.planner.allocate_one(skel)
         target, gen = self.generators[skel["target"]]
         assignment = self.planner.assignment(skel, fault_ids)
-        s, journey, deliveries = gen.session(start_ms, skeleton=skel, assignment=assignment, settings=skel["settings"])
+        gen.model_context = (self.spec.get("modeling"), self.spec["seed"] if self.spec.get("seed") is not None else 7331, self._model_index, target["id"])
+        self._model_index += 1
+        if self.spec.get("modeling"):
+            from .distributions import rng_for
+            from .util import identity_scope
+            with identity_scope(rng_for("emission", self.run_id, self._model_index - 1)):
+                s, journey, deliveries = gen.session(start_ms, skeleton=skel, assignment=assignment, settings=skel["settings"])
+        else:
+            s, journey, deliveries = gen.session(start_ms, skeleton=skel, assignment=assignment, settings=skel["settings"])
         return target, s, journey, deliveries, fault_ids
 
     def record(self, target, s, fault_ids, deliveries):
@@ -196,6 +205,8 @@ class SpecRun:
                 record["causal"] = s.causal_evidence
                 record["trace_ids"] = sorted({sp["traceId"] for d in deliveries if d["target"] == "otlp" and d["kind"] == "traces"
                     for rs in d["payload"]["resourceSpans"] for ss in rs["scopeSpans"] for sp in ss["spans"]})
+            if hasattr(s, "performance_model"):
+                record["modeling"] = s.performance_model.evidence()
             if self.journal:
                 self.journal.plan_session(self.session_index, record, deliveries)
             else:

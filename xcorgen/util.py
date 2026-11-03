@@ -1,10 +1,24 @@
 import math
 import random
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
+
+_identity_rng = ContextVar("emission_identity_rng", default=None)
+
+
+@contextmanager
+def identity_scope(rng):
+    """Separate per-emission IDs from reproducible simulation draws."""
+    token = _identity_rng.set(rng)
+    try:
+        yield
+    finally:
+        _identity_rng.reset(token)
 
 
 def hex_id(n_bytes, rng=random, upper=False):
-    identity_rng = getattr(rng, "identity_rng", rng)
+    identity_rng = getattr(rng, "identity_rng", None) or _identity_rng.get() or rng
     h = "%0*x" % (n_bytes * 2, identity_rng.getrandbits(n_bytes * 8))
     return h.upper() if upper else h
 
@@ -15,7 +29,8 @@ def emb_id(rng=random):
 
 
 def uuid4(rng=random):
-    return str(uuid.UUID(int=rng.getrandbits(128), version=4))
+    identity_rng = getattr(rng, "identity_rng", None) or _identity_rng.get() or rng
+    return str(uuid.UUID(int=identity_rng.getrandbits(128), version=4))
 
 
 def lat(p50, p95, rng=random):

@@ -359,6 +359,10 @@ class Generator:
             s.plan.shape = skeleton.get("shape")
         from .population import configure_session
         configure_session(s, getattr(self, "population_settings", {}), getattr(s.plan, "shape", None))
+        model_context = getattr(self, "model_context", None)
+        if model_context and model_context[0]:
+            from .modeling import Model
+            s.performance_model = Model(s, *model_context)
         s.verification_case = selection.get("name")
         if assignment is None and s.plan.primary == "mobile" and s.plan.ring == "stable" and random.random() < self.settings.get("transport_share", .4) and not incident:
             s.plan.transport = random.choice(("dns", "offline", "reset", "timeout", "cancelled"))

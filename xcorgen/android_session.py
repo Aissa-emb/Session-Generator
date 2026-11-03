@@ -233,16 +233,18 @@ class AndroidSession:
         if getattr(self, "population_settings", {}).get("model") == "varied" and lo_s >= 2 and hi_s >= 5:
             from .population import read
             return read(self, max(3, lo_s), max(15, hi_s))
-        self.t += self.rng.uniform(lo_s, hi_s) * 1000
+        from .modeling import sample
+        self.t += sample(self, "reading_ms", lambda: self.rng.uniform(lo_s, hi_s) * 1000) if lo_s >= 2 and hi_s >= 5 else self.rng.uniform(lo_s, hi_s) * 1000
 
     def _think(self):
         self.t += self.rng.uniform(60, 260)
 
     def type_text(self, chars):
+        from .modeling import sample
         if getattr(self, "population_settings", {}).get("model") == "varied":
-            self.t += sum(self.rng.triangular(200, 800, 300) for _ in range(chars))
+            self.t += sum(sample(self, "typing_ms", lambda: self.rng.triangular(200, 800, 300)) for _ in range(chars))
         else:
-            self.t += chars * self.rng.uniform(170, 360)
+            self.t += chars * sample(self, "typing_ms", lambda: self.rng.uniform(170, 360))
 
     # --- lifecycle -------------------------------------------------------------------
 

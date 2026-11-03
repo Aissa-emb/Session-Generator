@@ -301,6 +301,8 @@ def validate(spec, now_ms=None, lint=True):
             issues.append(_issue('error', '$.destinations.emit_client_spans', 'Causal demos use Network Span Forwarding; duplicate client export is disabled.', 'causal_contract'))
     if issues:
         return issues
+    from .modeling import validate as validate_modeling
+    issues += [_issue("error", path, message, "modeling") for path, message in validate_modeling(spec.get("modeling"), spec)]
     s = normalized(spec)
     targets = {t["id"]: t for t in s["targets"]}
     platforms = {t["platform"] for t in s["targets"]}

@@ -20,6 +20,207 @@ from pydantic import (
 )
 
 
+class Quantity(Enum):
+    reading_ms = 'reading_ms'
+    typing_ms = 'typing_ms'
+    network_rtt_ms = 'network_rtt_ms'
+    backend_work_ms = 'backend_work_ms'
+
+
+class Family(Enum):
+    constant = 'constant'
+    normal = 'normal'
+    right_skew = 'right_skew'
+    left_skew = 'left_skew'
+    lognormal = 'lognormal'
+    bimodal = 'bimodal'
+    bounded_left_skew = 'bounded_left_skew'
+    bounded_right_skew = 'bounded_right_skew'
+
+
+class Parameters(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    value: float | None = None
+    mean: float | None = None
+    stddev: float | None = None
+    location: float | None = None
+    scale: float | None = None
+    skew: float | None = None
+    mu: float | None = None
+    sigma: float | None = None
+    mean1: float | None = None
+    stddev1: float | None = None
+    mean2: float | None = None
+    stddev2: float | None = None
+    weight: float | None = None
+    alpha: float | None = None
+    beta: float | None = None
+    low: float | None = None
+    high: float | None = None
+    upper_mass: float | None = None
+
+
+class Policy(Enum):
+    truncate = 'truncate'
+    clip = 'clip'
+
+
+class Bounds(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    low: float
+    high: float
+    policy: Policy
+
+
+class Distribution(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    family: Family
+    parameters: Parameters
+    bounds: Bounds | None = None
+
+
+class Platform(Enum):
+    android = 'android'
+    ios = 'ios'
+    web = 'web'
+
+
+class LinesOfBusinessEnum(Enum):
+    retail = 'retail'
+    banking = 'banking'
+    travel = 'travel'
+
+
+class DeviceTier(Enum):
+    flagship = 'flagship'
+    mid = 'mid'
+    budget = 'budget'
+
+
+class Network(RootModel[constr(max_length=100)]):
+    root: constr(max_length=100)
+
+
+class Intent(RootModel[constr(max_length=100)]):
+    root: constr(max_length=100)
+
+
+class AppVersion(RootModel[constr(max_length=100)]):
+    root: constr(max_length=100)
+
+
+class Endpoint(RootModel[constr(max_length=100)]):
+    root: constr(max_length=100)
+
+
+class Screen(RootModel[constr(max_length=100)]):
+    root: constr(max_length=100)
+
+
+class Experiment(RootModel[constr(max_length=100)]):
+    root: constr(max_length=100)
+
+
+class Cohort(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    platforms: list[Platform] | None = Field(None, max_length=40)
+    lines_of_business: list[LinesOfBusinessEnum] | None = Field(None, max_length=40)
+    device_tiers: list[DeviceTier] | None = Field(None, max_length=40)
+    networks: list[Network] | None = Field(None, max_length=40)
+    intents: list[Intent] | None = Field(None, max_length=40)
+    app_versions: list[AppVersion] | None = Field(None, max_length=40)
+    endpoints: list[Endpoint] | None = Field(None, max_length=40)
+    screens: list[Screen] | None = Field(None, max_length=40)
+    returning: bool | None = None
+    experiments: (
+        dict[constr(pattern=r'^[a-z][a-z0-9_-]{0,39}$'), list[Experiment]] | None
+    ) = Field(None, max_length=8)
+
+
+class Kind(Enum):
+    scale = 'scale'
+    tail = 'tail'
+
+
+class Effect(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Kind
+    factor: confloat(ge=1.0, le=20.0)
+    knee: confloat(ge=0.5, le=0.99) | None = None
+
+
+class Binding(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: constr(pattern=r'^[a-z][a-z0-9_-]{0,39}$')
+    quantity: Quantity
+    priority: conint(ge=0, le=1000) | None = None
+    distribution: Distribution
+    cohort: Cohort | None = None
+    share: confloat(ge=0.0, le=1.0) | None = None
+    effect: Effect | None = None
+
+
+class ExposureEndpoint(RootModel[constr(max_length=100)]):
+    root: constr(max_length=100)
+
+
+class Experiment1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: constr(pattern=r'^[a-z][a-z0-9_-]{0,39}$')
+    version: constr(max_length=40) | None = None
+    salt: constr(max_length=100) | None = None
+    enrollment: confloat(ge=0.0, le=1.0) | None = None
+    variants: dict[
+        constr(pattern=r'^[a-z][a-z0-9_-]{0,39}$'), confloat(ge=0.0, le=100.0)
+    ] = Field(..., max_length=6, min_length=2)
+    exposure_endpoints: list[ExposureEndpoint] = Field(..., max_length=40)
+
+
+class Point(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    minute: confloat(ge=0.0, le=10080.0)
+    shares: dict[str, confloat(ge=0.0, le=100.0)] = Field(
+        ..., max_length=20, min_length=1
+    )
+
+
+class Release(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    target: constr(min_length=1)
+    start: AwareDatetime
+    salt: constr(max_length=100) | None = None
+    allow_rollback: bool | None = None
+    points: list[Point] = Field(..., max_length=20, min_length=2)
+
+
+class Modeling(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    version: Literal['1.0']
+    bindings: list[Binding] | None = Field(None, max_length=24)
+    experiments: list[Experiment1] | None = Field(None, max_length=8)
+    releases: list[Release] | None = Field(None, max_length=3)
+
+
 class Scenario(Enum):
     healthy = 'healthy'
     signin_outage = 'signin-outage'
@@ -49,7 +250,7 @@ class Cache(Enum):
     warm = 'warm'
 
 
-class Network(Enum):
+class Network1(Enum):
     wifi = 'wifi'
     cellular = 'cellular'
     constrained = 'constrained'
@@ -146,7 +347,7 @@ class StringList(RootModel[list[StringListItem]]):
     root: list[StringListItem] = Field(..., max_length=64)
 
 
-class Platform(Enum):
+class Platform1(Enum):
     android = 'android'
     web = 'web'
     ios = 'ios'
@@ -200,7 +401,7 @@ class AndroidTarget(BaseModel):
     versions: list[Version] | None = Field(None, max_length=12, min_length=1)
 
 
-class Release(BaseModel):
+class Release1(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -215,7 +416,7 @@ class RouterIntegration(Enum):
     raw_paths = 'raw_paths'
 
 
-class Policy(Enum):
+class Policy1(Enum):
     none = 'none'
     allowed = 'allowed'
     site = 'site'
@@ -225,7 +426,7 @@ class OriginHeader(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    policy: Policy
+    policy: Policy1
     value: Origin | None = None
 
 
@@ -406,7 +607,7 @@ class Mode2(Enum):
     backfill = 'backfill'
 
 
-class Kind(Enum):
+class Kind1(Enum):
     flat = 'flat'
     diurnal = 'diurnal'
     custom = 'custom'
@@ -420,7 +621,7 @@ class DailyCurve(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    kind: Kind
+    kind: Kind1
     hourly_weights: list[HourlyWeight] | None = Field(
         None, max_length=24, min_length=24
     )
@@ -467,7 +668,7 @@ class Quota(Enum):
     probability = 'probability'
 
 
-class DeviceTier(Enum):
+class DeviceTier1(Enum):
     budget = 'budget'
     mid = 'mid'
     flagship = 'flagship'
@@ -518,7 +719,7 @@ class Filters(BaseModel):
     web_releases: StringList | None = None
     os_versions: StringList | None = None
     device_models: StringList | None = None
-    device_tiers: list[DeviceTier] | None = None
+    device_tiers: list[DeviceTier1] | None = None
     browser_families: list[BrowserFamily] | None = None
     browser_versions: BrowserVersions | None = None
     device_types: list[DeviceType] | None = None
@@ -552,7 +753,7 @@ class Type(Enum):
     ios_crash = 'ios_crash'
 
 
-class Platform1(Enum):
+class Platform2(Enum):
     android = 'android'
     web = 'web'
     ios = 'ios'
@@ -565,7 +766,7 @@ class ClientFault(BaseModel):
     )
     id: Id
     type: Type
-    platform: Platform1 | None = None
+    platform: Platform2 | None = None
     rate: Rate
     quota: Quota | None = None
     exclusive_group: Id | None = Field(
@@ -627,7 +828,7 @@ class Type1(Enum):
     validation_conflict = 'validation_conflict'
 
 
-class Platform2(Enum):
+class Platform3(Enum):
     android = 'android'
     web = 'web'
     ios = 'ios'
@@ -654,7 +855,7 @@ class BackendFault(BaseModel):
     service: constr(pattern=r'^[a-z][a-z0-9-]{1,62}$') | None = None
     endpoints: StringList | None = None
     lines_of_business: list[LineOfBusiness] | None = None
-    platforms: list[Platform2] | None = None
+    platforms: list[Platform3] | None = None
     rate: Rate | None = None
     quota: Quota | None = None
     exclusive_group: Id | None = None
@@ -681,7 +882,7 @@ class Incident(BaseModel):
     repeat_every_minutes: confloat(ge=2.0, le=10080.0) | None = None
 
 
-class Kind1(Enum):
+class Kind2(Enum):
     app_version = 'app_version'
     web_release = 'web_release'
     service_version = 'service_version'
@@ -693,7 +894,7 @@ class Rollout(BaseModel):
         extra='forbid',
     )
     id: Id
-    kind: Kind1
+    kind: Kind2
     subject: constr(min_length=1, max_length=128)
     canary_share: confloat(ge=0.0, le=0.999) | None = None
     start: Timestamp | None = None
@@ -764,7 +965,7 @@ class Causal(BaseModel):
     variant: Variant | None = None
     mode: Mode | None = None
     cache: Cache | None = None
-    network: Network | None = None
+    network: Network1 | None = None
     reference: bool | None = None
     result_count: conint(ge=1, le=100) | None = None
     client_failure: ClientFailure | None = None
@@ -809,7 +1010,7 @@ class WebTarget(BaseModel):
     sdk_version: constr(pattern=r'^[0-9]+\.[0-9]+\.[0-9]+$') | None = None
     estate: Estate | None = None
     cdn: Origin | None = None
-    releases: list[Release] | None = Field(None, max_length=12)
+    releases: list[Release1] | None = Field(None, max_length=12)
     router_integration: RouterIntegration | None = None
     sdk_upload_spans: bool | None = Field(
         None,
@@ -828,7 +1029,7 @@ class Target(BaseModel):
         extra='forbid',
     )
     id: Id
-    platform: Platform
+    platform: Platform1
     embrace_app_id: constr(pattern=r'^[A-Za-z0-9]{5}$')
     app_name: constr(min_length=1, max_length=64) | None = Field(
         None,
@@ -847,6 +1048,7 @@ class ScenarioSpec(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
+    modeling: Modeling | None = None
     spec_version: Literal['2.0'] = Field(
         ..., description='Schema version of this document.'
     )

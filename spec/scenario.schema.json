@@ -7,6 +7,408 @@
   "additionalProperties": false,
   "required": ["spec_version", "targets", "destinations", "traffic"],
   "properties": {
+    "modeling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "1.0"
+        },
+        "bindings": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+              },
+              "quantity": {
+                "enum": [
+                  "reading_ms",
+                  "typing_ms",
+                  "network_rtt_ms",
+                  "backend_work_ms"
+                ]
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "distribution": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "family": {
+                    "enum": [
+                      "constant",
+                      "normal",
+                      "right_skew",
+                      "left_skew",
+                      "lognormal",
+                      "bimodal",
+                      "bounded_left_skew",
+                      "bounded_right_skew"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "value": {
+                        "type": "number"
+                      },
+                      "mean": {
+                        "type": "number"
+                      },
+                      "stddev": {
+                        "type": "number"
+                      },
+                      "location": {
+                        "type": "number"
+                      },
+                      "scale": {
+                        "type": "number"
+                      },
+                      "skew": {
+                        "type": "number"
+                      },
+                      "mu": {
+                        "type": "number"
+                      },
+                      "sigma": {
+                        "type": "number"
+                      },
+                      "mean1": {
+                        "type": "number"
+                      },
+                      "stddev1": {
+                        "type": "number"
+                      },
+                      "mean2": {
+                        "type": "number"
+                      },
+                      "stddev2": {
+                        "type": "number"
+                      },
+                      "weight": {
+                        "type": "number"
+                      },
+                      "alpha": {
+                        "type": "number"
+                      },
+                      "beta": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "upper_mass": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "bounds": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "low": {
+                        "type": "number"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "policy": {
+                        "enum": [
+                          "truncate",
+                          "clip"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "low",
+                      "high",
+                      "policy"
+                    ]
+                  }
+                },
+                "required": [
+                  "family",
+                  "parameters"
+                ]
+              },
+              "cohort": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "platforms": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "android",
+                        "ios",
+                        "web"
+                      ]
+                    }
+                  },
+                  "lines_of_business": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "retail",
+                        "banking",
+                        "travel"
+                      ]
+                    }
+                  },
+                  "device_tiers": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "flagship",
+                        "mid",
+                        "budget"
+                      ]
+                    }
+                  },
+                  "networks": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "intents": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "app_versions": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "endpoints": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "screens": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "returning": {
+                    "type": "boolean"
+                  },
+                  "experiments": {
+                    "type": "object",
+                    "maxProperties": 8,
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "additionalProperties": {
+                      "type": "array",
+                      "maxItems": 40,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 100
+                      }
+                    }
+                  }
+                }
+              },
+              "share": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "effect": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "scale",
+                      "tail"
+                    ]
+                  },
+                  "factor": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 20
+                  },
+                  "knee": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 0.99
+                  }
+                },
+                "required": [
+                  "kind",
+                  "factor"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "quantity",
+              "distribution"
+            ]
+          }
+        },
+        "experiments": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+              },
+              "version": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "salt": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "enrollment": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "variants": {
+                "type": "object",
+                "minProperties": 2,
+                "maxProperties": 6,
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              },
+              "exposure_endpoints": {
+                "type": "array",
+                "maxItems": 40,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              }
+            },
+            "required": [
+              "id",
+              "variants",
+              "exposure_endpoints"
+            ]
+          }
+        },
+        "releases": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "target",
+              "start",
+              "points"
+            ],
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1
+              },
+              "start": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "salt": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "allow_rollback": {
+                "type": "boolean"
+              },
+              "points": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 20,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "minute",
+                    "shares"
+                  ],
+                  "properties": {
+                    "minute": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 10080
+                    },
+                    "shares": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 20,
+                      "additionalProperties": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
     "spec_version": {"const": "2.0", "description": "Schema version of this document."},
     "name": {"type": "string", "maxLength": 120},
     "causal": {

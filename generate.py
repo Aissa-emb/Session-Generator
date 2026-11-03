@@ -272,6 +272,8 @@ def run_spec(a, spec):
     report_dir=Path(run.manifest).parent/'reports'
     report_dir.mkdir(exist_ok=True)
     (report_dir/'emitted.json').write_text(__import__('json').dumps(run.emitted.summary(),indent=2)+'\n')
+    if run.spec.get('modeling'):
+        (report_dir/'signals.json').write_text(__import__('json').dumps(dict(run.emitted.summary()['modeling'], run_id=run.run_id, frozen_clock_ms=run.now_ms),indent=2)+'\n')
     for e in sender.last_errors:
         print(f"  ! {e}", file=sys.stderr)
     return 1 if st["errors"] else 0

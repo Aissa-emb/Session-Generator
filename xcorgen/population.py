@@ -116,7 +116,8 @@ def configure_session(s, pop, shape=None):
 
 def read(s, lo=3, hi=15):
     """A bounded skewed reading pause; network retry/deadline waits stay separate."""
-    s.t += s.rng.triangular(lo, hi, lo + (hi - lo) * .3) * 1000
+    from .modeling import sample
+    s.t += sample(s, "reading_ms", lambda: s.rng.triangular(lo, hi, lo + (hi - lo) * .3) * 1000)
 
 
 def proportions(values):

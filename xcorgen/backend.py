@@ -141,7 +141,8 @@ class Node:
 
 
 def layout(node, start, rng):
-    self_ms = lat(*node.ms, rng)
+    draw_cost = lambda: lat(*node.ms, rng)
+    self_ms = node.modeled_cost(draw_cost) if hasattr(node, "modeled_cost") else draw_cost()
     pre = self_ms * rng.uniform(0.25, 0.6)
     t = start + pre
     sync = [c for c in node.children if c.async_lag is None]

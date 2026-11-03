@@ -63,6 +63,9 @@ def simulate(session, key, params, start, rng=random):
         from .causal.adapter import planned_call
         return planned_call(session, key, start)
     profile, p = session.profile, session.persona
+    model = getattr(session, "performance_model", None)
+    if model:
+        model.expose(key)
     ep = profile.endpoints[key]
     weights = dict(ep.outcomes)
     for name, w in (profile.incidents.get(session.incident, {}).get(key, {}) or {}).items():
@@ -96,7 +99,10 @@ def simulate(session, key, params, start, rng=random):
 
     trace_id, span_id = hex_id(16, rng), hex_id(8, rng)
     host = session.api_host
-    rtt = p["rtt"] * rng.uniform(0.85, 1.3)
+    from .modeling import sample
+    rtt = sample(session, "network_rtt_ms", lambda: p["rtt"] * rng.uniform(0.85, 1.3), key)
+    if root and model:
+        root.modeled_cost = lambda fallback: model.sample("backend_work_ms", fallback, key)
     first = host not in session.connected_hosts
     session.connected_hosts.add(host)
     dns = lat(5, 25, rng) if first else 0.0

@@ -62,6 +62,16 @@ class ResumeTests(unittest.TestCase):
         sender.close()
         self.assertEqual(sum(sender.stats.values()), 0)
         self.assertEqual(count, len([f for f in os.listdir(self.directory) if f.endswith('.json')]))
+        return third
+
+    def test_performance_and_experiments_resume_without_duplicate_deliveries(self):
+        from xcorgen.distributions import default
+        self.s['modeling']={'version':'1.0','bindings':[{'id':'transport','quantity':'network_rtt_ms',
+            'distribution':default('network_rtt_ms'),'share':.5,'effect':{'kind':'tail','factor':4}}],
+            'experiments':[{'id':'journey','variants':{'control':50,'treatment':50},'exposure_endpoints':['home','accounts','flight_search']}]}
+        result = self.test_resume_regenerates_exact_plan_and_skips_received_payloads()
+        from xcorgen.emitted import from_dry_run
+        self.assertEqual(result.emitted.summary()['modeling'], from_dry_run(self.directory, self.s).summary()['modeling'])
 
     def test_spec_change_is_rejected(self):
         self.make()

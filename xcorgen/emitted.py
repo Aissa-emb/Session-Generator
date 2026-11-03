@@ -257,6 +257,9 @@ class Emitted:
         else:
             obs = observe(target["platform"], envelopes, traces)
         obs["target_id"] = target["id"]
+        if hasattr(session, "performance_model"):
+            obs["modeling"] = session.performance_model.evidence()
+            obs["model_device"] = session.persona["device_id"]
         obs["verification_case"] = getattr(session, "verification_case", None)
         # The spec's rate applies at the session's planned time (it differs only for sessions moved back
         # so they had finished by send time).
@@ -281,8 +284,11 @@ class Emitted:
                 row["delta_pp"] = round(row["emitted_pct"] - row["requested_pct"], 2)
                 exact = f.quota == "exact" or (f.quota == "auto" and self.spec["traffic"]["mode"] != "live")
                 ev = (f.meta.get("evidence") or {}) if f.variant else {}
-                latency_only = "slow_ms" in ev.get("client", {}) and not (
-                    "backend" in ev and any(o["traces"] for o in elig))
+                # A cohort can straddle the trace-age boundary. A trace on one
+                # visit does not make latency-only evidence on another exact.
+                latency_only = "slow_ms" in ev.get("client", {}) and (
+                    "backend" not in ev or any(not n["spans"] and n["status"] is not None and n["status"] < 400 for o in elig for n in o["net"]
+                        if n["endpoint"] == f.meta.get("endpoints", {}).get(o.get("lob"))))
                 if latency_only or f.type in ("lcp_regression", "layout_instability", "interaction_latency", "poor_web_vitals",
                                               "slow_server_response", "soft_navigation_slowness", "long_task", "third_party_blocking"):
                     # Without backend traces a slow request is the only evidence, and natural latency overlaps it.
@@ -330,7 +336,8 @@ class Emitted:
                 v["delta_pct"] = round(100 * (v["p75"] / v["requested_p75"] - 1), 2)
                 v["within_tolerance"] = abs(v["delta_pct"]) <= 10 if v["count"] >= 30 else None
         from .population_report import summary as population_summary
-        return {"population": population_summary(population),
+        from .modeling import report as modeling_report
+        return {"modeling": modeling_report(population, self.spec), "population": population_summary(population),
                 "sdk_sessions": sum(len(o.get("sdk_sessions", [])) if o["platform"] == "ios" else 1 for o in population), "sessions": sessions, "verification_sessions": len(self.observations) - sessions,
                 "sessions_with_traces": sum(o["traces"] for o in population), "faults": rows, "web_vitals": vitals,
                 "exception_groups": [dict(zip(("release", "name", "message", "stack", "handling"), k), count=n)
@@ -362,11 +369,13 @@ def from_dry_run(directory, spec):
     report = Emitted(spec)
     by_session, traces, web_payloads = {}, {}, []
     manifest = os.path.join(directory, "manifest.jsonl")
-    owners = {}
+    owners, model_records = {}, {}
     if os.path.exists(manifest):
         for line in Path(manifest).read_text().splitlines():
             record = json.loads(line)
             owners.update({part: record["session_id"] for part in record.get("part_ids", [])})
+            if record.get("modeling"):
+                model_records[record["session_id"]] = record
     for fn in sorted(glob.glob(os.path.join(directory, "*.json"))):
         doc = json.loads(Path(fn).read_text())
         if doc.get("fmt") == "envelope":
@@ -413,10 +422,14 @@ def from_dry_run(directory, spec):
         obs = observe(envelopes[0]["resource"].get("sdk_platform", "android"), envelopes, traces)
         obs["verification_case"] = sid if sid in cases else None
         obs["planned_start_ms"] = planned.get(sid, obs.get("start_ms"))
+        if sid in model_records:
+            obs.update(modeling=model_records[sid]["modeling"], model_device=model_records[sid]["device_id"])
         report.observations.append(obs)
     for sid, payloads in web_sessions.items():
         obs = observe_web(payloads, traces)
         obs["verification_case"] = sid if sid in cases else None
         obs["planned_start_ms"] = planned.get(sid, obs.get("start_ms"))
+        if sid in model_records:
+            obs.update(modeling=model_records[sid]["modeling"], model_device=model_records[sid]["device_id"])
         report.observations.append(obs)
     return report

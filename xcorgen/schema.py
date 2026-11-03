@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_PATH = os.path.join(ROOT, "spec", "scenario.schema.json")
 
 SUPPORTED = {"$schema", "$id", "$defs", "$ref", "title", "description", "default", "type", "enum", "const",
-             "properties", "required", "additionalProperties", "propertyNames", "minProperties", "items",
+             "properties", "required", "additionalProperties", "propertyNames", "minProperties", "maxProperties", "items",
              "minItems", "maxItems", "uniqueItems", "minimum", "maximum", "exclusiveMinimum", "minLength",
              "maxLength", "pattern", "format", "anyOf", "oneOf"}
 TYPES = {
@@ -105,6 +105,8 @@ def validate(value, schema=None, root=None, path="$"):
         for key in schema.get("required", []):
             if key not in value:
                 errors.append((f"{path}.{key}", "is required"))
+        if len(value) > schema.get("maxProperties", float("inf")):
+            errors.append((path, f"allows at most {schema['maxProperties']} entries"))
         if len(value) < schema.get("minProperties", 0):
             errors.append((path, f"needs at least {schema['minProperties']} entries"))
         extra = schema.get("additionalProperties", True)

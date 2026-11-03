@@ -26,7 +26,10 @@ class Service:
         self.processes = {}
 
     def capabilities(self):
-        return {'runner_region':os.environ.get('SG_RUNNER_REGION','local'), 'regional_runners':{'plan_endpoint':'/api/regions/plan','geography':'Location comes from each deployed runner egress IP.'}, 'platforms': ['android', 'web', 'ios'], 'faults': catalog.describe(), 'limits': limits.capabilities(),
+        from xcorgen.distributions import metadata
+        from xcorgen.population import INTENTS
+        from xcorgen.adoption import versions
+        return {'release_catalog': {t['platform']: {'target': t['id'], 'versions': versions(t)} for t in (specs.ANDROID_TARGET, specs.IOS_TARGET, specs.WEB_TARGET)}, 'modeling': metadata(), 'population_model': INTENTS, 'runner_region':os.environ.get('SG_RUNNER_REGION','local'), 'regional_runners':{'plan_endpoint':'/api/regions/plan','geography':'Location comes from each deployed runner egress IP.'}, 'platforms': ['android', 'web', 'ios'], 'faults': catalog.describe(), 'limits': limits.capabilities(),
                 'browser_matrix': web_capabilities.MATRIX, 'trace_caveat': limits.TRACE_CAVEAT,
                 'backfill_notes': limits.BACKFILL_NOTES, 'demo_preparation': {'steps':['readiness','session history','recent traces','live stream'], 'prepare_ahead_default_minutes':120, 'recommend_prepare_ahead_after_minutes':120}, 'default_spec': specs.default_spec(),
                 'web_target': specs.WEB_TARGET, 'ios_target':specs.IOS_TARGET, 'schema': json.loads((ROOT / "spec/scenario.schema.json").read_text())}

@@ -108,7 +108,8 @@ def forwarded_service_name(app_name, platform, environment="production"):
 
 
 def capabilities():
-    return {"limits": PLATFORM_LIMITS, "trace_caveat": TRACE_CAVEAT, "backfill_notes": list(BACKFILL_NOTES),
+    from .distributions import metadata
+    return {"modeling": metadata(), "limits": PLATFORM_LIMITS, "trace_caveat": TRACE_CAVEAT, "backfill_notes": list(BACKFILL_NOTES),
             "trace_eligible_minutes": TRACE_ELIGIBLE_MS // MINUTE_MS,
             "trace_ingest_window_minutes": TRACE_INGEST_WINDOW_MS // MINUTE_MS,
             "backfill_max_hours": BACKFILL_MAX_MS // (60 * MINUTE_MS),
