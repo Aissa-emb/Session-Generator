@@ -78,6 +78,29 @@ class LaterFeatures(unittest.TestCase):
         with self.assertRaises(ValueError):
             symbols.ready(self.store, changed)
 
+    def test_rejected_symbol_token_names_the_app_and_records_no_receipt(self):
+        from xcorgen.security import TransportError
+
+        s = spec.default_spec()
+        s["targets"] = [copy.deepcopy(spec.WEB_TARGET)]
+        s["population"]["platform_mix"] = {"vantra-web": 1}
+        s["targets"][0]["web"]["symbolication"] = True
+        s["traffic"] = {"mode": "burst", "count": 2, "window": {"last_minutes": 6}}
+        saved = self.svc.create_spec(s)
+        app_id = saved["spec"]["targets"][0]["embrace_app_id"]
+
+        def transport(url, body, headers):
+            raise TransportError("HTTP 403 from telemetry endpoint", status=403)
+
+        with patch("server.symbols.secrets.get", return_value="fixture-symbol-value"):
+            with self.assertRaisesRegex(ValueError, f"rejected the Symbol Upload token for app {app_id}"):
+                symbols.upload(self.svc, saved["id"], True, "user", transport)
+        self.assertFalse(
+            [r for r in self.store.list("settings") if r["id"].startswith("symbol:")]
+        )
+        with self.assertRaisesRegex(ValueError, "Upload"):
+            symbols.ready(self.store, saved["spec"])
+
     def test_concurrent_confirmed_starts_reuse_one_run_and_stream(self):
         s = spec.default_spec()
         s["traffic"] = {"mode": "live", "rate_per_minute": 1}

@@ -839,6 +839,8 @@ class BrowserSession:
             self.t = self.p(c.end)
             self._rage_clicks()
         if c.status is None and not hasattr(self, 'execution'):
+            # fetch() rejects when the request fails, so the unhandled rejection follows the span's end.
+            self.t = self.p(max(self.t, c.end) + 1)
             self.exception(family="abort" if c.transport == "cancelled" else "failed_to_fetch")
         if c.status is not None and c.status < 400:
             for name in self.page["def"].measures:

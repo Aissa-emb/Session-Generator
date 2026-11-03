@@ -68,7 +68,7 @@ export function Field({
 }: {
   label: string;
   children: ReactNode;
-  hint?: string;
+  hint?: ReactNode;
   compact?: boolean;
 }) {
   const id = useId();

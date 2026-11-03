@@ -658,6 +658,70 @@ test("continuous duration must be finite and app token is never part of the save
   ).toHaveValue("");
 });
 
+test("web apps accept a Symbol Upload token that is saved server-side and enables source maps", async ({
+  page,
+}) => {
+  let configured = false;
+  const saved: string[] = [];
+  await page.route("**/api/settings", (r) =>
+    r.fulfill({
+      json: {
+        secrets: { chronosphere: false, symbol_upload: configured },
+        defaults: {},
+      },
+    }),
+  );
+  await page.route("**/api/settings/secrets/symbol_upload", (r) => {
+    expect(r.request().method()).toBe("PUT");
+    saved.push(r.request().postDataJSON().value);
+    configured = true;
+    return r.fulfill({ json: { name: "symbol_upload", configured: true } });
+  });
+  await page.goto("/");
+  await expect(
+    page.getByLabel("Symbol Upload token", { exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Web", exact: true }).click();
+  await page.getByRole("button", { name: "Android", exact: true }).click();
+  await page.getByLabel("Web app ID", { exact: true }).fill("kfs9f");
+  await page
+    .getByRole("button", { name: "Sessions only", exact: false })
+    .click();
+  const settingsLink = page.getByRole("link", { name: /Settings → API/ });
+  await expect(settingsLink).toHaveAttribute(
+    "href",
+    "https://dash.embrace.io/settings/organization/api",
+  );
+  await expect(settingsLink).toHaveAttribute("target", "_blank");
+  await expect(
+    page.getByRole("link", { name: /Source map upload guide/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://embrace.io/docs/web/getting-started/sourcemap-uploads/",
+  );
+  await page
+    .getByLabel("Symbol Upload token", { exact: true })
+    .fill("local-symbol-value");
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
+  expect(stored).not.toContain("local-symbol-value");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Customize traffic" }),
+  ).toBeVisible();
+  expect(saved).toEqual(["local-symbol-value"]);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(
+    page.getByLabel("Symbol Upload token", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByText(/^Saved\. Source maps upload before each live run\./),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /Settings → API/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: /Source map upload guide/ }),
+  ).toBeVisible();
+});
+
 test("configured source maps upload automatically before live start and failures never start a run", async ({
   page,
 }) => {

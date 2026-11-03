@@ -427,6 +427,16 @@ main {
   color: var(--muted);
   font-size: 0.8125rem;
 }
+.field small a {
+  color: var(--mint);
+  text-underline-offset: 2px;
+}
+.field small .hint-link svg {
+  width: 0.75em;
+  height: 0.75em;
+  margin-left: 0.3em;
+  vertical-align: -0.05em;
+}
 .field input,
 .field select,
 .field textarea,
@@ -563,6 +573,9 @@ main {
   padding-top: 20px;
   margin-top: 20px;
   align-items: start;
+}
+.app-symbols {
+  grid-column: 2 / 4;
 }
 .app-platform {
   font-weight: 500;
@@ -1828,10 +1841,10 @@ details[open] > summary::before {
     grid-template-columns: 65px 1fr 1fr;
     gap: 15px;
   }
-  .app-fields .field:last-child {
+  .app-fields > .field:last-of-type {
     grid-column: 2/4;
   }
-  .app-fields .field:last-child .select-control {
+  .app-fields > .field:last-of-type .select-control {
     max-width: 200px;
   }
   .customize-layout {
@@ -1909,7 +1922,8 @@ details[open] > summary::before {
     grid-column: 1/-1;
     padding: 0;
   }
-  .app-fields .field:last-child {
+  .app-fields > .field:last-of-type,
+  .app-symbols {
     grid-column: 1/-1;
   }
   .destination-fields,
