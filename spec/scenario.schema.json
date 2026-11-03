@@ -1,0 +1,935 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Aissa-emb/Session-Generator/spec/scenario.schema.json",
+  "title": "ScenarioSpec",
+  "description": "One versioned document that describes what Session-Generator produces: targets, population, traffic, client and backend faults, incidents and rollouts. The UI, the REST API, the copilot and MCP clients all read and write this document; the engine executes it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_version", "targets", "destinations", "traffic"],
+  "properties": {
+    "modeling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "1.0"
+        },
+        "bindings": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+              },
+              "quantity": {
+                "enum": [
+                  "reading_ms",
+                  "typing_ms",
+                  "network_rtt_ms",
+                  "backend_work_ms"
+                ]
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "distribution": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "family": {
+                    "enum": [
+                      "constant",
+                      "normal",
+                      "right_skew",
+                      "left_skew",
+                      "lognormal",
+                      "bimodal",
+                      "bounded_left_skew",
+                      "bounded_right_skew"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "value": {
+                        "type": "number"
+                      },
+                      "mean": {
+                        "type": "number"
+                      },
+                      "stddev": {
+                        "type": "number"
+                      },
+                      "location": {
+                        "type": "number"
+                      },
+                      "scale": {
+                        "type": "number"
+                      },
+                      "skew": {
+                        "type": "number"
+                      },
+                      "mu": {
+                        "type": "number"
+                      },
+                      "sigma": {
+                        "type": "number"
+                      },
+                      "mean1": {
+                        "type": "number"
+                      },
+                      "stddev1": {
+                        "type": "number"
+                      },
+                      "mean2": {
+                        "type": "number"
+                      },
+                      "stddev2": {
+                        "type": "number"
+                      },
+                      "weight": {
+                        "type": "number"
+                      },
+                      "alpha": {
+                        "type": "number"
+                      },
+                      "beta": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "upper_mass": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "bounds": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "low": {
+                        "type": "number"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "policy": {
+                        "enum": [
+                          "truncate",
+                          "clip"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "low",
+                      "high",
+                      "policy"
+                    ]
+                  }
+                },
+                "required": [
+                  "family",
+                  "parameters"
+                ]
+              },
+              "cohort": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "platforms": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "android",
+                        "ios",
+                        "web"
+                      ]
+                    }
+                  },
+                  "lines_of_business": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "retail",
+                        "banking",
+                        "travel"
+                      ]
+                    }
+                  },
+                  "device_tiers": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "flagship",
+                        "mid",
+                        "budget"
+                      ]
+                    }
+                  },
+                  "networks": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "intents": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "app_versions": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "endpoints": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "screens": {
+                    "type": "array",
+                    "maxItems": 40,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "returning": {
+                    "type": "boolean"
+                  },
+                  "experiments": {
+                    "type": "object",
+                    "maxProperties": 8,
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "additionalProperties": {
+                      "type": "array",
+                      "maxItems": 40,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 100
+                      }
+                    }
+                  }
+                }
+              },
+              "share": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "effect": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "scale",
+                      "tail"
+                    ]
+                  },
+                  "factor": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 20
+                  },
+                  "knee": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 0.99
+                  }
+                },
+                "required": [
+                  "kind",
+                  "factor"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "quantity",
+              "distribution"
+            ]
+          }
+        },
+        "experiments": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+              },
+              "version": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "salt": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "enrollment": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "variants": {
+                "type": "object",
+                "minProperties": 2,
+                "maxProperties": 6,
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              },
+              "exposure_endpoints": {
+                "type": "array",
+                "maxItems": 40,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              }
+            },
+            "required": [
+              "id",
+              "variants",
+              "exposure_endpoints"
+            ]
+          }
+        },
+        "releases": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "target",
+              "start",
+              "points"
+            ],
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1
+              },
+              "start": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "salt": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "allow_rollback": {
+                "type": "boolean"
+              },
+              "points": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 20,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "minute",
+                    "shares"
+                  ],
+                  "properties": {
+                    "minute": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 10080
+                    },
+                    "shares": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 20,
+                      "additionalProperties": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "spec_version": {"const": "2.0", "description": "Schema version of this document."},
+    "name": {"type": "string", "maxLength": 120},
+    "causal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario"
+      ],
+      "properties": {
+        "scenario": {
+          "enum": [
+            "healthy",
+            "signin-outage",
+            "slow-history",
+            "contract-regression",
+            "transfer-response-loss",
+            "worker-backlog",
+            "frontend-regression",
+            "connectivity",
+            "travel-provider"
+          ]
+        },
+        "variant": {
+          "enum": [
+            "affected",
+            "control",
+            "recovered",
+            "scheduled"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "single",
+            "mixed"
+          ]
+        },
+        "cache": {
+          "enum": [
+            "cold",
+            "warm"
+          ]
+        },
+        "network": {
+          "enum": [
+            "wifi",
+            "cellular",
+            "constrained"
+          ]
+        },
+        "reference": {
+          "type": "boolean"
+        },
+        "result_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "client_failure": {
+          "enum": [
+            "handled",
+            "fatal"
+          ]
+        },
+        "connectivity_phase": {
+          "enum": [
+            "pre_send",
+            "post_send"
+          ]
+        },
+        "retry": {
+          "type": "boolean"
+        },
+        "partial_results": {
+          "type": "boolean"
+        },
+        "region": {
+          "enum": [
+            "us-east-1",
+            "eu-west-1",
+            "ap-southeast-2"
+          ]
+        },
+        "service_release": {
+          "type": "string",
+          "pattern": "^[0-9]{4}\\.[0-9]{2}\\.[0-9]{1,2}$"
+        },
+        "incident_start": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "incident_minutes": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 120
+        },
+        "cohort_share": {
+          "$ref": "#/$defs/share"
+        },
+        "mix": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "healthy",
+            "hero",
+            "slow",
+            "other"
+          ],
+          "properties": {
+            "healthy": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "hero": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "slow": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "other": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        },
+        "replay_namespace": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$",
+          "description": "Exact-ID diagnostic replay. Local dry runs only."
+        },
+        "web_widget": {
+          "type": "boolean",
+          "description": "Web-only blocking interaction variant, exclusive with the view-state failure."
+        },
+        "provider": {
+          "enum": [
+            "none",
+            "analytics",
+            "support"
+          ],
+          "description": "One consented external client request; no invented provider SERVER spans."
+        },
+        "version": {
+          "const": "1.0.0",
+          "description": "Causal execution model version."
+        }
+      }
+    },
+    "seed": {"type": ["integer", "null"], "description": "Seed for reproducible output; null draws a fresh seed per run."},
+    "notes": {"type": "string", "maxLength": 4000, "description": "Operator notes. Never emitted."},
+    "stories": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"},
+                "description": "Preset identifiers applied to this document, recorded for provenance. Never emitted."},
+    "targets": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/target"}},
+    "chronosphere": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/chronosphere"}]},
+    "destinations": {"$ref": "#/$defs/destinations"},
+    "population": {"$ref": "#/$defs/population"},
+    "traffic": {"$ref": "#/$defs/traffic"},
+    "client_faults": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/client_fault"}},
+    "web_performance": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/web_performance"}},
+    "backend_faults": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/backend_fault"}},
+    "incidents": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/incident"}},
+    "rollouts": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/rollout"}},
+    "verification_cases": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/verification_case"},
+                           "description": "Bounded cases generated first; the normal distribution resumes afterwards. Excluded from population-rate claims."}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$"},
+    "line_of_business": {"enum": ["retail", "banking", "travel"]},
+    "share": {"type": "number", "minimum": 0, "maximum": 1},
+    "positive": {"type": "number", "exclusiveMinimum": 0},
+    "hostname": {"type": "string", "pattern": "^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"},
+    "origin": {"type": "string", "pattern": "^https://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?(:[0-9]{2,5})?$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "weights": {
+      "type": "object",
+      "description": "Relative weights; normalized to shares at run time.",
+      "propertyNames": {"pattern": "^[A-Za-z0-9][A-Za-z0-9 ._:/-]{0,63}$"},
+      "additionalProperties": {"type": "number", "minimum": 0}
+    },
+    "string_list": {"type": "array", "uniqueItems": true, "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "platform", "embrace_app_id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "platform": {"enum": ["android", "web", "ios"]},
+        "embrace_app_id": {"type": "string", "pattern": "^[A-Za-z0-9]{5}$"},
+        "app_name": {"type": "string", "minLength": 1, "maxLength": 64,
+                     "description": "Name of the app in Embrace; forwarded client spans use lower(name with spaces as underscores)-<platform>-<environment> as service.name."},
+        "environment": {"enum": ["production", "staging", "development", "qa", "beta"]},
+        "region": {"enum": ["us", "eu"]},
+        "api_domains": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"retail": {"$ref": "#/$defs/hostname"}, "banking": {"$ref": "#/$defs/hostname"},
+                         "travel": {"$ref": "#/$defs/hostname"}}
+        },
+        "otlp_endpoint": {"type": ["string", "null"], "maxLength": 512},
+        "android": {"$ref": "#/$defs/android_target"},
+        "web": {"$ref": "#/$defs/web_target"},
+        "ios": {
+          "$ref": "#/$defs/ios_target"
+        }
+      }
+    },
+    "android_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "package": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},
+        "ui_toolkit": {"enum": ["compose", "views"]},
+        "sdk_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "versions": {"type": "array", "minItems": 1, "maxItems": 12, "items": {
+          "type": "object", "additionalProperties": false, "required": ["version", "share"],
+          "properties": {
+            "version": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+){1,3}$"},
+            "version_code": {"type": "string", "pattern": "^[0-9]{1,10}$"},
+            "sdk_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "released": {"type": "string", "format": "date"},
+            "share": {"$ref": "#/$defs/share"}
+          }
+        }}
+      }
+    },
+    "web_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sdk_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "estate": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"retail": {"$ref": "#/$defs/site"}, "banking": {"$ref": "#/$defs/site"}, "travel": {"$ref": "#/$defs/site"}}
+        },
+        "cdn": {"$ref": "#/$defs/origin"},
+        "releases": {"type": "array", "maxItems": 12, "items": {
+          "type": "object", "additionalProperties": false, "required": ["version", "share"],
+          "properties": {
+            "version": {"type": "string", "minLength": 1, "maxLength": 32},
+            "deployed": {"$ref": "#/$defs/timestamp"},
+            "share": {"$ref": "#/$defs/share"},
+            "bundles": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^/[A-Za-z0-9._/-]+\\.(js|css)$"}}
+          }
+        }},
+        "router_integration": {"enum": ["route_templates", "raw_paths"]},
+        "sdk_upload_spans": {"type": "boolean", "description": "Whether the SDK's own uploads to a-<appId>.data.emb-api.com appear as network spans (SDK default: true)."},
+        "origin_header": {
+          "type": "object", "additionalProperties": false, "required": ["policy"],
+          "properties": {"policy": {"enum": ["none", "allowed", "site"]}, "value": {"$ref": "#/$defs/origin"}}
+        },
+        "propagation_allow_list": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/hostname"}},
+        "symbolication": {
+          "type": "boolean",
+          "default": false,
+          "description": "Emit bundle IDs for executable release assets. Upload all maps with explicit confirmation before live exceptions."
+        }
+      }
+    },
+    "site": {
+      "type": "object", "additionalProperties": false, "required": ["origin", "archetype"],
+      "properties": {"origin": {"$ref": "#/$defs/origin"}, "archetype": {"enum": ["multi_page", "single_page", "hybrid"]}}
+    },
+    "chronosphere": {
+      "type": "object", "additionalProperties": false, "required": ["tenant"],
+      "properties": {
+        "tenant": {"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},
+        "token_ref": {"type": "string", "pattern": "^(keychain|file|env):[A-Za-z0-9_./:@ -]{1,256}$",
+                      "description": "Reference to a stored secret. The token value itself is never part of a spec."}
+      }
+    },
+    "destinations": {
+      "type": "object", "additionalProperties": false, "required": ["mode"],
+      "properties": {
+        "mode": {"enum": ["sessions_only", "end_to_end"]},
+        "backend_logs": {"type": "boolean"},
+        "backend_metrics": {"type": "boolean"},
+        "emit_client_spans": {"type": "boolean", "description": "Advanced: send the client span to Chronosphere directly. Only for apps without network span forwarding."},
+        "metrics_policy": {
+          "enum": [
+            "aggregated",
+            "raw"
+          ],
+          "default": "aggregated",
+          "description": "Conservative 2-minute lateness for aggregation rules; raw allows 2 hours. Only recent traced traffic generates metrics."
+        }
+      }
+    },
+    "population": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "model": {"enum": ["legacy", "varied"], "description": "Varied visitor intent, conditional performance and native lifecycle; legacy preserves prior journey probabilities."},
+        "intent_mix": {"type": "object", "additionalProperties": false, "properties": {"retail": {"$ref": "#/$defs/weights"}, "banking": {"$ref": "#/$defs/weights"}, "travel": {"$ref": "#/$defs/weights"}}},
+        "network_mix": {"$ref": "#/$defs/weights", "description": "Optional shared network-profile session weights. Without overrides, desktop and handheld visits use different mixes."},
+        "geo_mix": {"$ref": "#/$defs/weights", "description": "Visitor locale/timezone weights. Does not change ingest IP geolocation."},
+        "native_cold_start_share": {"$ref": "#/$defs/share", "description": "Chance of a new process for a returning native visitor with a previous process. First visits and startup faults are always cold."},
+        "native_background_share": {"$ref": "#/$defs/share", "description": "Chance of one interruption at an eligible content stage, excluding fatal paths."},
+        "platform_mix": {"$ref": "#/$defs/weights", "description": "Share of sessions per target ID."},
+        "line_of_business_mix": {"type": "object", "additionalProperties": false,
+                                 "properties": {"retail": {"type": "number", "minimum": 0}, "banking": {"type": "number", "minimum": 0},
+                                                "travel": {"type": "number", "minimum": 0}}},
+        "signed_in_share": {"$ref": "#/$defs/share"},
+        "returning_share": {"$ref": "#/$defs/share", "description": "Steady-state share of sessions from returning visitors."},
+        "journey_depth": {"type": "object", "additionalProperties": false,
+                          "description": "Share of sessions that run the full priority flow (checkout, transfer, booking) without being steered by a fault.",
+                          "properties": {"retail": {"$ref": "#/$defs/share"}, "banking": {"$ref": "#/$defs/share"},
+                                         "travel": {"$ref": "#/$defs/share"}}},
+        "session_properties": {"type": "object", "additionalProperties": false, "properties": {
+          "market": {"$ref": "#/$defs/weights"}, "membership_tier": {"$ref": "#/$defs/weights"},
+          "entry_point": {"$ref": "#/$defs/weights"}}},
+        "android": {"type": "object", "additionalProperties": false, "properties": {
+          "device_weights": {"$ref": "#/$defs/weights", "description": "Relative weights by Build.MODEL; unlisted catalog devices keep their default weight."},
+          "os_version_mix": {"$ref": "#/$defs/weights"}}},
+        "web": {"type": "object", "additionalProperties": false, "properties": {
+          "browser_mix": {"$ref": "#/$defs/weights"}, "device_type_mix": {"$ref": "#/$defs/weights"},
+          "connection_mix": {"$ref": "#/$defs/weights"}, "bfcache_share": {"$ref": "#/$defs/share"},
+          "third_party_bloat": {"type": "number", "minimum": 0, "maximum": 10}}},
+        "ios": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "device_weights": {
+              "$ref": "#/$defs/weights",
+              "description": "Relative weights by Apple model identifier; unlisted catalog devices keep their default weight."
+            },
+            "os_version_mix": {
+              "$ref": "#/$defs/weights"
+            }
+          }
+        }
+      }
+    },
+    "traffic": {
+      "type": "object", "additionalProperties": false, "required": ["mode"],
+      "properties": {
+        "mode": {"enum": ["live", "burst", "backfill"]},
+        "rate_per_minute": {"type": "number", "exclusiveMinimum": 0, "maximum": 600},
+        "duration_minutes": {"type": "number", "minimum": 0, "maximum": 10080},
+        "daily_curve": {"type": "object", "additionalProperties": false, "required": ["kind"], "properties": {
+          "kind": {"enum": ["flat", "diurnal", "custom"]},
+          "hourly_weights": {"type": "array", "minItems": 24, "maxItems": 24, "items": {"type": "number", "minimum": 0}},
+          "time_zone": {"type": "string", "pattern": "^[A-Za-z_]+(/[A-Za-z0-9_+-]+){0,2}$"}}},
+        "count": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "window": {"anyOf": [
+          {"type": "object", "additionalProperties": false, "required": ["last_minutes"],
+           "properties": {"last_minutes": {"type": "number", "exclusiveMinimum": 0, "maximum": 1440}}},
+          {"type": "object", "additionalProperties": false, "required": ["start", "end"],
+           "properties": {"start": {"$ref": "#/$defs/timestamp"}, "end": {"$ref": "#/$defs/timestamp"}}}]},
+        "throttle_payloads_per_second": {"type": "number", "exclusiveMinimum": 0, "maximum": 500}
+      }
+    },
+    "rate": {"type": "number", "minimum": 0, "maximum": 1, "description": "Share of eligible sessions affected."},
+    "quota": {"enum": ["auto", "exact", "probability"],
+              "description": "exact pre-allocates outcomes so emitted counts match within one session; probability draws per session; auto is exact for bursts and backfills and probability for live streams."},
+    "filters": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "lines_of_business": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/line_of_business"}},
+        "app_versions": {"$ref": "#/$defs/string_list"},
+        "web_releases": {"$ref": "#/$defs/string_list"},
+        "os_versions": {"$ref": "#/$defs/string_list"},
+        "device_models": {"$ref": "#/$defs/string_list"},
+        "device_tiers": {"type": "array", "uniqueItems": true, "items": {"enum": ["budget", "mid", "flagship"]}},
+        "browser_families": {"type": "array", "uniqueItems": true, "items": {"enum": ["chrome", "edge", "samsung_internet", "safari", "firefox"]}},
+        "browser_versions": {"type": "object", "additionalProperties": false, "properties": {
+          "min": {"type": "number", "minimum": 0}, "max": {"type": "number", "minimum": 0}}},
+        "device_types": {"type": "array", "uniqueItems": true, "items": {"enum": ["desktop", "mobile", "tablet"]}},
+        "connections": {"type": "array", "uniqueItems": true, "items": {"enum": ["fiber", "cable", "wifi", "5g", "4g", "4g-weak"]}},
+        "screens": {"$ref": "#/$defs/string_list"},
+        "page_groups": {"$ref": "#/$defs/string_list"},
+        "routes": {"$ref": "#/$defs/string_list"},
+        "endpoints": {"$ref": "#/$defs/string_list"},
+        "signed_in": {"type": ["boolean", "null"]},
+        "release_rings": {"type": "array", "uniqueItems": true, "items": {"enum": ["canary", "stable"]}}
+      }
+    },
+    "client_fault": {
+      "type": "object", "additionalProperties": false, "required": ["id", "type", "rate"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "type": {"enum": ["jvm_crash", "main_thread_blockage", "handled_exception", "network_failure", "slow_startup", "http_error", "slow_root_span", "js_exception", "chunk_load_failures", "poor_web_vitals", "lcp_regression", "layout_instability", "interaction_latency", "slow_server_response", "soft_navigation_slowness", "rage_clicks", "page_abandonment", "ios_crash"]},
+        "platform": {"enum": ["android", "web", "ios", "any"]},
+        "rate": {"$ref": "#/$defs/rate"},
+        "quota": {"$ref": "#/$defs/quota"},
+        "exclusive_group": {"$ref": "#/$defs/id", "description": "Faults in one group never occur in the same session."},
+        "steer_journey": {"type": "boolean", "description": "Make affected sessions reach the fault's stage. Without it, the rate applies to sessions that reach the stage naturally."},
+        "filters": {"$ref": "#/$defs/filters"},
+        "details": {"type": "object"}
+      }
+    },
+    "web_performance": {
+      "type": "object", "additionalProperties": false, "required": ["id", "targets"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "page_groups": {"$ref": "#/$defs/string_list"},
+        "device_types": {"type": "array", "uniqueItems": true, "items": {"enum": ["desktop", "mobile", "tablet"]}},
+        "browser_families": {"type": "array", "uniqueItems": true, "items": {"enum": ["chrome", "edge", "samsung_internet", "safari", "firefox"]}},
+        "targets": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {
+          "ttfb": {"type": "number", "exclusiveMinimum": 0, "maximum": 60000},
+          "fcp": {"type": "number", "exclusiveMinimum": 0, "maximum": 60000},
+          "lcp": {"type": "number", "exclusiveMinimum": 0, "maximum": 60000},
+          "inp": {"type": "number", "exclusiveMinimum": 0, "maximum": 60000},
+          "cls": {"type": "number", "minimum": 0, "maximum": 5}}},
+        "tbd_rating_mix": {"type": "object", "additionalProperties": false, "properties": {
+          "good": {"$ref": "#/$defs/share"}, "needs-improvement": {"$ref": "#/$defs/share"}, "poor": {"$ref": "#/$defs/share"}}}
+      }
+    },
+    "backend_fault": {
+      "type": "object", "additionalProperties": false, "required": ["id", "type"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "type": {"enum": [
+          "db_pool_exhaustion", "db_deadlock", "slow_query", "n_plus_one", "downstream_timeout",
+          "dependency_5xx", "cache_outage", "rate_limited", "kafka_consumer_lag", "deploy_regression",
+          "partial_results", "dependency_latency", "validation_conflict"]},
+        "variant": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "description": "Catalog behavior for this type, for example payments-db-pool."},
+        "service": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"},
+        "endpoints": {"$ref": "#/$defs/string_list"},
+        "lines_of_business": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/line_of_business"}},
+        "platforms": {"type": "array", "uniqueItems": true, "items": {"enum": ["android", "web", "ios"]}},
+        "rate": {"$ref": "#/$defs/rate"},
+        "quota": {"$ref": "#/$defs/quota"},
+        "exclusive_group": {"$ref": "#/$defs/id"},
+        "steer_journey": {"type": "boolean"},
+        "filters": {"$ref": "#/$defs/filters"},
+        "schedule": {"$ref": "#/$defs/id", "description": "Incident ID that controls when the fault is active."},
+        "blast_radius": {"type": "object", "additionalProperties": false, "properties": {
+          "instances": {"type": "integer", "minimum": 1, "maximum": 64}, "share_of_traffic": {"$ref": "#/$defs/share"}}},
+        "details": {"type": "object"}
+      }
+    },
+    "incident": {
+      "type": "object", "additionalProperties": false, "required": ["id", "fault_ref", "start"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "fault_ref": {"$ref": "#/$defs/id"},
+        "start": {"$ref": "#/$defs/timestamp"},
+        "onset_minutes": {"type": "number", "minimum": 0, "maximum": 1440},
+        "peak_minutes": {"type": "number", "exclusiveMinimum": 0, "maximum": 1440},
+        "recovery_minutes": {"type": "number", "minimum": 0, "maximum": 1440},
+        "peak_rate": {"$ref": "#/$defs/rate"},
+        "repeat_every_minutes": {"type": "number", "minimum": 2, "maximum": 10080}
+      }
+    },
+    "rollout": {
+      "type": "object", "additionalProperties": false, "required": ["id", "kind", "subject"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["app_version", "web_release", "service_version", "feature_cohort"]},
+        "subject": {"type": "string", "minLength": 1, "maxLength": 128},
+        "canary_share": {"type": "number", "minimum": 0, "maximum": 0.999},
+        "start": {"$ref": "#/$defs/timestamp"},
+        "rollback_at": {"$ref": "#/$defs/timestamp"},
+        "cohort_seed": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"}
+      }
+    },
+    "verification_case": {
+      "type": "object", "additionalProperties": false, "required": ["name", "line_of_business"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9/_-]{0,127}$"},
+        "line_of_business": {"$ref": "#/$defs/line_of_business"},
+        "target": {"$ref": "#/$defs/id"},
+        "backend_fault": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+        "incident_phase": {"enum": ["onset", "incident", "recovery"]},
+        "primary_scenario": {"enum": ["clean", "mobile", "backend", "slow", "handled", "blockage", "crash"]},
+        "crash_family": {"type": "integer", "minimum": 0, "maximum": 4},
+        "blockage_cause": {"enum": ["migration", "worker_lock", "layout"]},
+        "full_journey": {"type": "boolean", "description": "Run the complete priority flow (checkout, transfer, booking)."},
+        "rollout_phase": {"enum": ["active", "rollback"]}
+      }
+    },
+    "ios_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sdk_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "share"
+            ],
+            "properties": {
+              "version": {
+                "type": "string",
+                "pattern": "^[0-9]+(\\.[0-9]+){1,3}$"
+              },
+              "version_code": {
+                "type": "string",
+                "pattern": "^[0-9]{1,10}$"
+              },
+              "sdk_version": {
+                "type": "string",
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+              },
+              "released": {
+                "type": "string",
+                "format": "date"
+              },
+              "share": {
+                "$ref": "#/$defs/share"
+              }
+            }
+          }
+        },
+        "bundle_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+        }
+      },
+      "required": []
+    }
+  }
+}

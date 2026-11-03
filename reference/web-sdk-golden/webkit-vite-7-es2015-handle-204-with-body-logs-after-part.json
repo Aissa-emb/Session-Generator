@@ -1,0 +1,343 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "embrace-web-sdk"
+            }
+          },
+          {
+            "key": "app_version",
+            "value": {
+              "stringValue": "1.0.0"
+            }
+          },
+          {
+            "key": "app_framework",
+            "value": {
+              "intValue": 1
+            }
+          },
+          {
+            "key": "sdk_version",
+            "value": {
+              "stringValue": "2.31.0"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "2.31.0"
+            }
+          },
+          {
+            "key": "sdk_simple_version",
+            "value": {
+              "intValue": 1
+            }
+          },
+          {
+            "key": "sdk_platform",
+            "value": {
+              "stringValue": "web"
+            }
+          },
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "webjs"
+            }
+          },
+          {
+            "key": "emb.app_instance_id",
+            "value": {
+              "stringValue": "E5973FD79748BFB698A467C2A790D69C"
+            }
+          },
+          {
+            "key": "user_agent.original",
+            "value": {
+              "stringValue": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Safari/605.1.15"
+            }
+          },
+          {
+            "key": "screen_resolution",
+            "value": {
+              "stringValue": "1792x1120"
+            }
+          },
+          {
+            "key": "viewport_resolution",
+            "value": {
+              "stringValue": "1280x720"
+            }
+          },
+          {
+            "key": "webdriver",
+            "value": {
+              "boolValue": true
+            }
+          },
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "embrace-web-sdk"
+            }
+          }
+        ],
+        "droppedAttributesCount": 0
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "MaxScrollDepthInstrumentation",
+            "version": "1.0.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1792592909942000000",
+              "observedTimeUnixNano": "1792592909942000000",
+              "severityNumber": 9,
+              "body": {},
+              "eventName": "max-scroll-depth",
+              "attributes": [
+                {
+                  "key": "emb.type",
+                  "value": {
+                    "stringValue": "emb.otel_log"
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.pixels",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.did_scroll",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.percent",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "max_scroll_depth.document_height",
+                  "value": {
+                    "intValue": 720
+                  }
+                },
+                {
+                  "key": "log.record.uid",
+                  "value": {
+                    "stringValue": "57C74730661552189B1AB0ED75C3893C"
+                  }
+                },
+                {
+                  "key": "emb.user_session_id",
+                  "value": {
+                    "stringValue": "4257E2662E8555A6B4DD1CA9D35283DE"
+                  }
+                },
+                {
+                  "key": "emb.user_session_previous_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "emb.session_part_id",
+                  "value": {
+                    "stringValue": "73A7E00849D54FA05E7ECA2BC5952D55"
+                  }
+                },
+                {
+                  "key": "browser.url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "emb.is_tab_engaged",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "app.surface.id",
+                  "value": {
+                    "stringValue": "316E3BA0C10751C56E73B13DB6ED09FE"
+                  }
+                },
+                {
+                  "key": "app.surface.label",
+                  "value": {
+                    "stringValue": "React + TS + Vite"
+                  }
+                },
+                {
+                  "key": "emb.perf_clock_lag_ms",
+                  "value": {
+                    "intValue": 1
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0
+            }
+          ]
+        },
+        {
+          "scope": {
+            "name": "DOMStateInstrumentation",
+            "version": "1.0.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1792592909942000000",
+              "observedTimeUnixNano": "1792592909942000000",
+              "severityNumber": 9,
+              "body": {},
+              "eventName": "dom-state",
+              "attributes": [
+                {
+                  "key": "emb.type",
+                  "value": {
+                    "stringValue": "emb.otel_log"
+                  }
+                },
+                {
+                  "key": "dom_state.element_count",
+                  "value": {
+                    "intValue": 13
+                  }
+                },
+                {
+                  "key": "dom_state.average_depth",
+                  "value": {
+                    "doubleValue": 3.4615384615384617
+                  }
+                },
+                {
+                  "key": "dom_state.document_height",
+                  "value": {
+                    "intValue": 720
+                  }
+                },
+                {
+                  "key": "dom_state.document_width",
+                  "value": {
+                    "intValue": 1280
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.count",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.viewport_height",
+                  "value": {
+                    "intValue": 720
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.viewport_width",
+                  "value": {
+                    "intValue": 1280
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.timestamp",
+                  "value": {
+                    "intValue": 1792592909011
+                  }
+                },
+                {
+                  "key": "dom_state.images_above_fold.capture_time",
+                  "value": {
+                    "intValue": 38
+                  }
+                },
+                {
+                  "key": "log.record.uid",
+                  "value": {
+                    "stringValue": "2A76DBE0A3ADF10C4667F9462F9CD148"
+                  }
+                },
+                {
+                  "key": "emb.user_session_id",
+                  "value": {
+                    "stringValue": "4257E2662E8555A6B4DD1CA9D35283DE"
+                  }
+                },
+                {
+                  "key": "emb.user_session_previous_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "emb.session_part_id",
+                  "value": {
+                    "stringValue": "73A7E00849D54FA05E7ECA2BC5952D55"
+                  }
+                },
+                {
+                  "key": "browser.url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://localhost:3001/platforms/vite-7/es2015/index.html"
+                  }
+                },
+                {
+                  "key": "emb.is_tab_engaged",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "app.surface.id",
+                  "value": {
+                    "stringValue": "316E3BA0C10751C56E73B13DB6ED09FE"
+                  }
+                },
+                {
+                  "key": "app.surface.label",
+                  "value": {
+                    "stringValue": "React + TS + Vite"
+                  }
+                },
+                {
+                  "key": "emb.perf_clock_lag_ms",
+                  "value": {
+                    "intValue": 0
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+fastapi==0.162.0
+pydantic==2.14.2
+sqlalchemy==2.1.6
+uvicorn==0.54.0
+datamodel-code-generator==0.87.0
+keyring==25.7.0
+httpx==0.28.1
+jsonpatch==1.38
+mcp==2.3.0
+anthropic==2.3.0
+bandit==1.9.4
+black==26.10.1
+isort==8.0.1

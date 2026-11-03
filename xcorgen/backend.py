@@ -85,13 +85,13 @@ class Service:
         self._resources = {}
 
     def resource(self, pod):
-        key = pod["pod"]
+        key = (pod["pod"], pod.get("version", self.version))
         if key not in self._resources:
             lang = LANG[self.lang]
             a = {
                 "service.name": self.name,
                 "service.namespace": self.namespace,
-                "service.version": self.version,
+                "service.version": pod.get("version", self.version),
                 "service.instance.id": pod["instance"],
                 "deployment.environment.name": "production",
                 "telemetry.sdk.name": "opentelemetry",
@@ -141,7 +141,8 @@ class Node:
 
 
 def layout(node, start, rng):
-    self_ms = lat(*node.ms, rng)
+    draw_cost = lambda: lat(*node.ms, rng)
+    self_ms = node.modeled_cost(draw_cost) if hasattr(node, "modeled_cost") else draw_cost()
     pre = self_ms * rng.uniform(0.25, 0.6)
     t = start + pre
     sync = [c for c in node.children if c.async_lag is None]
@@ -183,6 +184,7 @@ class TraceBuild:
         self.logs = []   # (service, pod, record)
         self._pods = {}
         self.context = dict(context or {})
+        self.service_versions = self.context.pop("_service_versions", {})
 
     def pod(self, svc):
         if svc.name not in self._pods:
@@ -195,6 +197,11 @@ class TraceBuild:
                 self._pods[svc.name] = svc.pods[-1] if self.context["routing.target"] == "canary" else svc.pods[0]
             else:
                 self._pods[svc.name] = self.rng.choice(svc.pods)
+            if svc.name in self.service_versions:
+                version = self.service_versions[svc.name]
+                seed = zlib.crc32((svc.name + version).encode())
+                self._pods[svc.name] = dict(svc.pods[-1], version=version,
+                    pod=f"{svc.name}-{seed:09x}-v2r7k", instance=uuid4(random.Random(seed)))
         return self._pods[svc.name]
 
     def emit(self, node, parent_span_id):

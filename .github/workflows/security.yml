@@ -8,7 +8,7 @@ permissions:
 jobs:
   security:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -37,3 +37,59 @@ jobs:
           python3 tools/check_output.py out/web
           python3 generate.py --profile all --sessions 120 --quiet --incident payments-db-pool --dry-run out/incident
           python3 tools/check_output.py out/incident
+      - name: Validate V2 specs and spec-driven payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in spec/examples/*.json; do python3 generate.py validate "$spec"; done
+          python3 generate.py run spec/examples/baseline-burst.json --dry-run out/spec --quiet --seed 7331
+          python3 tools/check_output.py out/spec
+          python3 generate.py report out/spec spec/examples/baseline-burst.json
+          python3 generate.py lint out/spec
+          python3 generate.py run spec/examples/verification-plan.json --dry-run out/verify --quiet
+          python3 tools/check_output.py out/verify
+          python3 generate.py run spec/examples/web-burst.json --dry-run out/web-spec --quiet --seed 7331
+          python3 tools/check_output.py out/web-spec
+          python3 generate.py lint out/web-spec
+          python3 generate.py run spec/examples/android-web-end-to-end.json --dry-run out/both --quiet --seed 7331
+          python3 tools/check_output.py out/both
+          python3 generate.py lint out/both
+          python3 generate.py run spec/examples/ios-burst.json --dry-run out/ios --quiet --seed 7331
+          python3 tools/check_output.py out/ios
+          python3 generate.py report out/ios spec/examples/ios-burst.json
+          python3 generate.py run spec/examples/backend-red-metrics.json --dry-run out/red --quiet --seed 7331
+          python3 tools/check_output.py out/red
+      - name: Server dependencies and generated contract
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r server/requirements.txt
+          .venv/bin/python tools/generate_models.py --check
+          .venv/bin/python -m pip install opentelemetry-proto==1.38.0
+          .venv/bin/python tools/check_protobuf.py out/red
+      - name: API, job and receiver integration tests
+        run: .venv/bin/python -m unittest discover -s tests/server -v
+      - name: UI contract, build and dependency audit
+        run: |
+          npm --prefix apps/web ci
+          npm --prefix apps/web run schema:check
+          npm --prefix apps/web run build
+          .venv/bin/python -m tools.check_studio
+          npm --prefix apps/web audit --audit-level=high
+      - name: Browser acceptance
+        run: |
+          cd apps/web
+          npx playwright install --with-deps chromium
+          npm test
+      - name: Static security analysis
+        run: .venv/bin/bandit --ini .bandit -r xcorgen generate.py tools server
+
+      - name: Non-root isolated container acceptance
+        run: |
+          docker build -t session-generator:ci .
+          docker run -d --name session-generator-check --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m --tmpfs /var/lib/session-generator:rw,uid=10001,gid=10001,mode=700,size=512m --cap-drop ALL --security-opt no-new-privileges session-generator:ci
+          trap 'docker rm -f session-generator-check' EXIT
+          for attempt in {1..30}; do
+            if docker exec session-generator-check python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then break; fi
+            sleep 1
+          done
+          docker exec session-generator-check python -m tools.container_smoke

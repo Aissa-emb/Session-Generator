@@ -107,7 +107,9 @@ def _span(s):
     for e in s.get("events", []):
         out += _len(11, _fixed64(1, e["timeUnixNano"]) + _str(2, e["name"]) + _kvs(3, e.get("attributes")))
     for link in s.get("links", []):
-        out += _len(13, _bytes_hex(1, link["traceId"]) + _bytes_hex(2, link["spanId"]) + _kvs(4, link.get("attributes")))
+        out += _len(13, _bytes_hex(1, link["traceId"]) + _bytes_hex(2, link["spanId"]) +
+                    _str(3, link.get('traceState', '')) + _kvs(4, link.get("attributes")) +
+                    _fixed32(6, link.get('flags', 0)))
     if "status" in s:
         st = s["status"] or {}
         out += _len(15, _str(2, st.get("message", "")) + _uint(3, st.get("code", 0)))
@@ -129,8 +131,8 @@ def encode_traces(req):
     for rs in req["resourceSpans"]:
         body = _len(1, _resource(rs["resource"]))
         for ss in rs["scopeSpans"]:
-            body += _len(2, _len(1, _scope(ss["scope"])) + b"".join(_len(2, _span(s)) for s in ss["spans"]))
-        out += _len(1, body)
+            body += _len(2, _len(1, _scope(ss["scope"])) + b"".join(_len(2, _span(s)) for s in ss["spans"]) + _str(3, ss.get('schemaUrl', '')))
+        out += _len(1, body + _str(3, rs.get('schemaUrl', '')))
     return out
 
 
@@ -140,8 +142,42 @@ def encode_logs(req):
     for rl in req["resourceLogs"]:
         body = _len(1, _resource(rl["resource"]))
         for sl in rl["scopeLogs"]:
-            body += _len(2, _len(1, _scope(sl["scope"])) + b"".join(_len(2, _log(r)) for r in sl["logRecords"]))
-        out += _len(1, body)
+            body += _len(2, _len(1, _scope(sl["scope"])) + b"".join(_len(2, _log(r)) for r in sl["logRecords"]) + _str(3, sl.get('schemaUrl', '')))
+        out += _len(1, body + _str(3, rl.get('schemaUrl', '')))
+    return out
+
+
+def _double(field, value):
+    return _key(field, 1) + struct.pack("<d", float(value))
+
+
+def encode_metrics(req):
+    """ExportMetricsServiceRequest: cumulative integer sums and explicit histograms."""
+    out = b""
+    for rm in req["resourceMetrics"]:
+        resource = _len(1, _resource(rm["resource"]))
+        for sm in rm["scopeMetrics"]:
+            scope = _len(1, _scope(sm["scope"]))
+            for metric in sm["metrics"]:
+                body = _str(1, metric["name"]) + _str(2, metric.get("description", "")) + _str(3, metric.get("unit", ""))
+                kind = "sum" if "sum" in metric else "histogram"
+                data = metric[kind]
+                encoded = b""
+                for point in data["dataPoints"]:
+                    p = _fixed64(2, point["startTimeUnixNano"]) + _fixed64(3, point["timeUnixNano"])
+                    if kind == "sum":
+                        p += _key(6, 1) + struct.pack("<q", int(point["asInt"])) + _kvs(7, point.get("attributes"))
+                    else:
+                        p += _fixed64(4, point["count"]) + _double(5, point["sum"]) + _kvs(9, point.get("attributes"))
+                        p += _len(6, b"".join(struct.pack("<Q", int(n)) for n in point["bucketCounts"]))
+                        p += _len(7, b"".join(struct.pack("<d", float(n)) for n in point["explicitBounds"]))
+                    encoded += _len(1, p)
+                encoded += _uint(2, data["aggregationTemporality"])
+                if kind == "sum":
+                    encoded += _uint(3, data.get("isMonotonic", False))
+                scope += _len(2, body + _len(7 if kind == "sum" else 9, encoded))
+            resource += _len(2, scope)
+        out += _len(1, resource)
     return out
 
 
@@ -190,7 +226,7 @@ def partial_success(body, json_body=False):
     if json_body:
         import json
         ps = json.loads(body).get("partialSuccess") or {}
-        return int(ps.get("rejectedSpans") or ps.get("rejectedLogRecords") or 0), ps.get("errorMessage", "")
+        return int(ps.get("rejectedSpans") or ps.get("rejectedLogRecords") or ps.get("rejectedDataPoints") or 0), ps.get("errorMessage", "")
     rejected, message = 0, ""
     for field, wire, value in _response_fields(body):
         if field == 1:

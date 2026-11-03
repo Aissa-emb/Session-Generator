@@ -2,9 +2,81 @@
 
 You are picking up **Session-Generator**: a stdlib-only Python tool that generates realistic mobile (Android) and web sessions for **Cortex XCOR RUM** (formerly Embrace) and matching full distributed backend traces for **Cortex XCOR** (formerly Chronosphere), stitched together so a session's network request opens a complete trace. It feeds a live sales/demo tenant. Read this file fully before changing anything; `README.md` is the user-facing guide.
 
+## Current UI direction (owner feedback, 2026-10-30)
+
+The owner replaced the multi-page studio requirements with a four-step workflow: destination → customization → payload preview → send. The latest approved UI direction uses a compact Cortex navy/slate shell, restrained mint accents, and the approved Cortex XCOR SVG logo. The owner approved the redesign and its Source Sans 3 font on 2026-10-31; no Good Company font change is needed. All customization is through UI controls; remove Copilot/MCP from the UI and keep experimental HTTP integrations disabled by default. Continuous sending needs a rate, a finite duration (including one/two-hour presets), actual time-based schedule progress, refresh recovery, and pause/resume/stop. The latest owner feedback requests lighter glass-inspired navigation/controls, less text, and visible traffic animation. Animate only while the worker is running with fresh observations; stop animation on pause, completion, or uncertain connectivity. Show delivery receipts directly and distinguish API acknowledgements from confirmed dashboard ingestion. These direct owner instructions supersede the old handoff's UI/integration requirements.
+
+`tools/studio.py` and `Start Session Generator.command` run the local API in a detached owned process. Do not stop the owner's working application server at the end of a coding session. Temporary visual-test servers must still be cleaned up. The old fetch failures were caused by ending the temporary server while its cached page stayed open. Keep truthful offline/reconnect states and idempotent run startup.
+
+The UI refinement uses native selects inside the shared `Field` wrapper, with reserved arrow space and consistent keyboard behavior. Keep platform icons/checkmarks contained at 320–1920px and 200% text size. Preview colors identify services consistently, filters operate on actual payload rows, and inspector values come from those rows. The delivery timeline plots actual response timestamps on separate RUM/backend lanes; no decorative packet loop. Freeze it on pause or stale connectivity. Use XCOR RUM as the visible destination brand. Show fully acknowledged sessions and backend spans separately, never a mixed record count. Storage stays explicitly unverified unless destination evidence exists. Preserve reduced-motion and reduced-transparency support.
+
+The owner removed the stack-trace setup/preview sections from the UI. Always generate real captured browser stacks with readable function names. Automatically upload maps before live runs when the server has a symbol-upload credential; without it, use real compiled-file positions and do not block sending on an invisible setting. Original-source resolution in Embrace still requires matching uploaded maps.
+
+## V2 (branch `v2`)
+
+V2 turns the generator into a product driven by one versioned document, the **ScenarioSpec** (`spec/scenario.schema.json`). The build prompt and the verified feasibility findings are in `docs/v2/V2-BUILD-PROMPT.md` and `docs/v2/V2-SCOPE.md`; read both before V2 work. The prompt's phases: (1) spec and engine, (2) web generator, (3) server and runs, (4) UI, (5) MCP and copilot, (6) destinations, demo preparation and backfill, (7) hosted stream.
+
+**Continuing V2:** start with `docs/v2/CODEX-HANDOFF.md` (zero-context handoff: architecture, state, remaining work in order) and `docs/v2/web-sdk-behavior.md` (verified Web SDK 2.31 behavior).
+
+**Phase 1 status (done):** spec, stdlib schema validator, semantic validation, platform limits, exact quotas, realism linter, presets with a computed Baseline, `generate.py run spec.json`, requested-versus-emitted report, new Android faults, and the burst trace-window fix. Live, burst and backfill modes run from specs; V1 flags still work unchanged for the LaunchAgent.
+
+**Owner decisions (2026-10-30):** local Mac first (uvicorn, single user, macOS Keychain secrets; container later); no Anthropic key yet, so build the MCP server before the in-app copilot; web estate accepted (www.vantra.com: retail multi-page and travel hybrid, with the booking flow client-routed under /travel/book on the same origin because storage is per origin; app.vantra.com: banking single-page app; static.vantra.com: CDN); web app `kfs9f` "Vantra Web" (web, production, US). Embrace names forwarded client spans `lower(app name with spaces as underscores)-<platform>-<environment>` (`go/lib/common/data_destinations_config.go:114`), so this app forwards as **`vantra_web-web-production`**, not `vantra-web-production`, unless it is renamed "Vantra". Derive service names with `limits.forwarded_service_name`, never by hand.
+
+### How a spec runs
+
+```
+spec.json --validate()--> Planner --skeleton per session--> allocation (exact quota / probability) --> assignment
+          (schema, limits,   (target, line of business, visitor, app version, ring, start time,      (V1 Plan fields: story,
+           linter)            trace eligibility, journey shape)                                       incident, client fault ...)
+                                                                    --> V1 journeys and builders --> Emitted report (payloads only)
+```
+
+| File | Role |
+| --- | --- |
+| `spec/scenario.schema.json` | The ScenarioSpec. `xcorgen/schema.py` validates it with the stdlib (the engine stays dependency-free); the server will generate Pydantic and Zod types from the same file |
+| `xcorgen/spec.py` | Defaults (`ANDROID_TARGET`, `WEB_TARGET`), `validate()` (actionable issues; severity `error` blocks a run), JSON Patch, `explain()`, incident windows and ramps |
+| `xcorgen/limits.py` | Verified platform limits and the verbatim trace caveat; `trace_eligible()` (8-minute rule), `forwarded_service_name()` |
+| `xcorgen/catalog.py` | Client fault types and backend variants (V1 incidents) with story, endpoints and emitted evidence |
+| `xcorgen/quota.py` | Exact allocation (count from every eligible session, placed only where available) and streaming quotas |
+| `xcorgen/planner.py` | Skeletons, journey shapes and steering, eligibility versus availability, V1 `Plan` assignments |
+| `xcorgen/spec_runner.py` | `SpecRun`: live streams, bursts, backfills, per-session time shift, trace stripping, run manifest, throttling |
+| `xcorgen/emitted.py` | Requested versus emitted from payloads only (never the plan) |
+| `xcorgen/linter.py` | Realism linter for specs and payloads (forbidden words, service names, stack language, status, durations, device/OS, PII) |
+| `xcorgen/presets.py` | Preset library; `baseline()` re-expresses V1's default policy as fault rates |
+| `xcorgen/generic_faults.py` | Backend traces for spec-defined `http_error` faults, with language-shaped exceptions |
+| `xcorgen/secrets.py` | `token_ref` resolution (`keychain:`, `file:`, `env:`); specs never hold secret values |
+
+Rules that keep the numbers honest:
+- **Rates are shares of eligible sessions.** Session-level filters (line of business, app version, OS, device model and tier, signed-in, release ring) define eligibility. `steer_journey` (default true) makes affected sessions reach the fault's stage; with it false, only sessions that reach the stage naturally are eligible (`filters.endpoints`).
+- **Exact quotas** (default for bursts and backfills) fix the count from all eligible sessions and place it only where the fault can happen: free in its exclusive group, not after a fatal crash or a journey-ending failure (`ends_journey`), and compatible with the journey shape. This is why emitted shares match within one session.
+- **One backend story per session** (all backend faults share one exclusive group); fatal faults share one group. `details.with_fault` couples a fault to another's sessions (for example a crash after a failed payment).
+- **Payments pool phase:** in spec mode the phase is fixed per session from its planned start (exact counts); V1 mode still evaluates it per request. Onset sessions get the slow lock-query story without failing.
+- **Time model:** a session dated more than 8 minutes before it is sent carries no `emb.w3c_traceparent`/`emb.forward_telemetry` and no backend trace (`strip_traces`). Batch sessions keep their planned time; only sessions still running at send time move back. The V1 `--sessions` burst now applies the same rule and defaults to `--spread 8`.
+- **Evidence:** the report counts crash logs, blockage spans, handled exceptions by type, transport failures, startup and root-span durations, HTTP statuses, app-side fallback breadcrumbs and logs, and backend spans when the session has traces. Latency-only evidence without traces is labeled approximate (±2 pp).
+
+### SDK behavior verified for V2 (and V1 discrepancies fixed)
+
+- `emb.w3c_traceparent` and `emb.forward_telemetry="true"` are set together, only for domains with network span forwarding (`NetworkRequestDataSourceImpl.kt:123-127`). Sessions-only runs omit both. V1 set `emb.forward_telemetry=false` on transport failures; the SDK never does, so V2 keeps `"true"`.
+- Transport failures: `error.type` is the exception's canonical class name and `exception.message` its message, with no status code (`OkHttpDataSource.kt:156`). Timeouts and resets happen after the request reached the gateway, so the backend trace is still built; DNS, offline, TLS and cancelled requests produce none.
+- Handled exceptions use `throwable.javaClass.simpleName` for `exception.type` (`LogsApiDelegate.kt:104-121`). In spec mode the handled error a screen logs after a failed request is the failure itself (`retrofit2.HttpException: HTTP 502 ` or the transport exception), not V1's `NumberFormatException`, so it is distinguishable from a requested handled-exception fault.
+
+### V2 workflow
+
+```bash
+python3 generate.py validate spec/examples/baseline-burst.json
+python3 generate.py run spec/examples/baseline-burst.json --dry-run out/spec --seed 7331 --quiet
+python3 tools/check_output.py out/spec && python3 generate.py report out/spec spec/examples/baseline-burst.json && python3 generate.py lint out/spec
+python3 generate.py run spec/examples/verification-plan.json --dry-run out/verify --quiet && python3 tools/check_output.py out/verify
+python3 -m unittest discover -s tests -v
+```
+
+`spec/examples/live-end-to-end.json` is the V2 equivalent of the LaunchAgent (Baseline, 10 sessions per minute, end to end). Do not point the LaunchAgent at this branch until the owner approves; it runs from `~/xcor-demo-generator`. Non-dry runs write an owner-only manifest to `.runs/<run id>/manifest.jsonl` and lint a preflight sample first; any realism error blocks sending.
+
+**Implementation status:** handoff phases 4.1–4.9 are implemented on `v2`. The remaining gates are owner configuration, live forwarding/dashboard acceptance, a real Anthropic key and any deployment/cut-over approval. Read `docs/v2/OWNER-ACCEPTANCE.md`, `LATER-FEATURES.md` and `HOSTING.md`. Older deployment/backlog notes below describe V1 history; the phase-specific notes at the end supersede them.
+
 ## What the owner cares about
 
-1. **It must look like real production data.** Viewers must not be able to tell it is synthetic. Never put "demo", "fake", "test", "sample" or similar into session properties, attribute values, service names, IDs, URLs or log text. Use the formats real SDKs and backends produce.
+1. **Causal telemetry provenance (2026-10-31):** The owner explicitly requires synthetic provenance for the new causal scenarios. Allow the documented `demo.*` keys, synthetic identities and the canonical Vantra catalog. Do not conceal simulation or relax secret/PII checks. This supersedes the following historical V1 guidance for causal mode. **Historical V1 realism:** Viewers must not be able to tell it is synthetic. Never put "demo", "fake", "test", "sample" or similar into session properties, attribute values, service names, IDs, URLs or log text. Use the formats real SDKs and backends produce.
 2. **Enterprise realism.** Service names follow enterprise conventions (`<line-of-business>-experience-api`, `*-service`, `*-orchestrator`, `*-gateway`, `*-worker`). The owner rejected names like `travel-bff`. Errors must be believable root causes a real team would debug (connection pool exhaustion, deadlocks, timeouts), with exception types and stack traces in the right language.
 3. **Professional tone** in anything user-facing: no analogies or folksy wording.
 4. **Correctness over guesses.** Payload formats here were taken from the SDK source code and real captures, not invented. Keep it that way: when you add a signal, find how the real SDK emits it first.
@@ -107,3 +179,60 @@ Commit and push as **Aissa-emb** (`git config user.name "Aissa-emb"`, `git confi
 - Python's `http.server` hangs on macOS doing a reverse DNS lookup in `server_bind`; local test servers must override it.
 - zsh does not word-split `$var`; use `${=var}` or arrays in shell loops.
 - The Chronosphere query API returns at most ~10 traces per call; page by time window and operation.
+
+
+### V2 browser implementation (2026-10-30)
+
+`BrowserSession` now drives both V2 web targets and the legacy `--platform web` path. `web_session.py` only preserves the import and timestamp-shift API. The adapter uses the Vantra estate, origin-scoped identities, browser capability gates, hard/soft/bfcache lifecycles, real JS exception families, resource timing, vitals, LoAF, DOM state, and explicitly controlled Origin headers. Scenario allocation and payload-derived reporting handle web targets. The web examples and browser contract tests run in CI.
+
+Source correction: WebVitalsInstrumentation's rounded TTFB breakdown uses `responseEnd - startTime`, whereas the metric uses `responseStart - startTime`; do not force those totals to be identical. LoafInstrumentation does not emit `emb.was_from_inp`; its IDs use `embracev2-`. Source and per-engine goldens take precedence over the original build prompt.
+
+Phase 2 local checks: 13 browser tests plus the 57 existing tests; all three 120-session V1 dry runs, baseline/verification specs, and Android+web dry runs pass payload checks. Live ingestion, forwarding, retention and dashboard acceptance remain owner-gated. Next work is handoff 4.2 (four backend faults), then durable backfill receipts/resume, server, UI, MCP/copilot, hosting and later items.
+
+### V2 backend fault builders
+
+Handoff 4.2 is implemented in `backend_faults.py`: cache fallback or fail-closed, gateway admission with one Retry-After retry, delayed Kafka processing with pending status reconciliation, and canary-specific serializer failures with rollback. Resource cache keys include service version; internal routing metadata never enters request evidence. Presets expose all variants. Six new tests cover quotas, failure structure, retry timing, asynchronous timing, rollout attribution and lag bounds.
+
+### Durable bounded runs
+
+Handoff 4.3 uses `journal.py` (stdlib SQLite, FULL synchronous commits). A frozen RNG/pool/clock snapshot regenerates the same IDs, allocations and payload hashes. Intent is committed before each POST; accepted deliveries are never retried, and complete-session receipts follow delivery. In-flight, ambiguous and partially accepted exports block automatic resume. Retry-free strict receipt mode prevents hidden duplicate POSTs. At live send time stale backend exports expire and stale app payloads lose trace context. Five interruption/security tests exercise resume. Live stream persistence is provided by the server phase.
+
+### V2 control plane
+
+Handoff 4.4 now has `server/` with generated Pydantic v2 contracts, SQLAlchemy/SQLite persistence, versioned specs, isolated workers, receipt capture, SSE, run/stream controls, previews, readiness kits, write-only secrets and verification. Job processes use an OS lock and re-read the latest live spec before starting a session. Tests exercise API workflows and certificate-verified loopback ingest. `tests/server` intentionally runs separately so stdlib engine tests do not require server dependencies.
+
+Embrace MCP source correction: `get_session_distribution` groups by a dimension, not hour. Web-vital tools use `name` (uppercase) and `dimension`, not `metric`/`group_by`. The server discovers and validates remote tool schemas; hourly platform exports can be attached through the observations endpoint for comparison with the sent cohort. API acceptance never establishes dashboard visibility.
+
+### V2 scenario studio
+
+Handoff 4.5 provides the React 18/TypeScript/Vite application in `apps/web`. Generated Zod validation supplements server validation; Radix controls, TanStack Query, RHF, Framer Motion, Recharts and cmdk provide the requested interactions. Browser tests cover every screen, keyboard commands, capability restrictions, laptop overflow, and a complete confirmed dry run. Future live incident previews use a projected clock and cannot send telemetry. UI tests own a separate `.state/ui-tests` server on loopback port 8001.
+
+### V2 MCP and Copilot
+
+Handoff 4.6 uses MCP SDK 2's `MCPServer` (the former FastMCP name was removed). SDK model properties are snake_case (`input_schema`, `is_error`, `structured_content`), while protocol JSON remains camelCase. HTTP and stdio integration tests exercise the actual protocol. REST authentication supplies caller attribution through a context variable. Copilot exposes only read operations and a terminal proposal tool; do not give it mutating MCP tools. Recorded responses cover all seven requested examples, unsupported capabilities, key gating, confirmation and optimistic concurrency. No live Anthropic calls are part of tests.
+
+### V2 demo preparation
+
+Handoff 4.7 adds durable preparation plans and a checklist in the studio. Each stage reuses a deterministic spec ID and run idempotency key. Separate process and transition locks protect orchestration restart and cancellation. Readiness is destination-sensitive; only explicit dry runs bypass live readiness, visibly marked simulated. Live mode switches retain existing delivery ownership and record the first trace-eligible session time. Three integration tests execute bounded stages locally, check no trace exports for history, exercise restart/cancellation, gate readiness and schedule the live incident.
+
+### V2 hosted streams
+
+Handoff 4.8 adds a multi-stage, non-root Docker image, hardened local Compose configuration, local-only token bootstrap and network-disabled container acceptance. Authorized active streams recover after restart; paused/stopped streams do not. Graceful shutdown drains then pauses managed streams. Operational logs use an explicit field allowlist. The live worker preserves cumulative counters across process restart. `HOSTING.md` documents private deployment, actual egress-based geography and an owner-approved cut-over; the existing LaunchAgent remains untouched.
+
+
+### V2 later capabilities and final audit
+
+Handoff 4.9 adds `IOSSession` and device/contract checks, `backend_metrics.py` with cumulative service RED exports, `regions.py` plus regional plan/apply tooling, and real executable JS bundles/maps in `web_symbols.py`. Source-map upload is explicitly confirmed and recorded before live symbolication; no upload occurred during development. Shared customer identities span platforms without adding nondeterministic resume state. Browser major-version ranges and lazy chunks without part rollover now work; UserTiming includes SDK mark logs.
+
+Apple SDK source `a2e0e5c33766ea35b5ba85dcc983b29145fd384b` (6.21.0): envelope version `1.0`; `session.id` rather than Android user-session attributes; lowercase span status, omitted root parent, links arrays; string log nanoseconds. NSF emits `emb.w3c_traceparent` without Android's `emb.forward_telemetry`. Startup is `sys.startup`; thread samples use the exact SDK term `thread_blockage_sample`, narrowly allowlisted by the realism linter. Apple foreground sessions are separate SDK sessions and verification accounts for them. The iOS app must be created by the owner.
+
+Web source correction: `_EmbraceFileBundleIDs` maps captured injection stack strings to bundle IDs, not URL keys. Use a map debugId without hyphens, or the original JS MD5 before snippet injection. The upload host is `dsym-store.emb-api.com`, not the app ingest host. Source code and exact-source tests govern these details.
+
+Server visitor pools are per job, eliminating concurrent writers. Start idempotency and stream-limit checks share an OS lock; streams also have creation idempotency. Live reports state their process/version scope and retain completed version reports. Tests use temporary state and local transports. Never change `~/xcor-demo-generator` or restart its LaunchAgent without owner approval, even though the older workflow section lists restart as a historical step.
+
+
+### Selective V3 statistical modeling (2026-11-02)
+
+`docs/v3/ADOPTION.md` records the reference audit and adopted subset. Optional `ScenarioSpec.modeling` version 1.0 controls four pre-execution duration components through eight stdlib distributions, cohort priority, scale/tail effects, endpoint-exposed sticky experiments, and piecewise release adoption at visit boundaries. Defaults remain unchanged when omitted. Exact diagnostic fixtures cannot be combined with general numerical overrides. Do not apply effects by rewriting serialized timestamps or independently overriding business outcomes. Native release curves retain build/SDK tuples and require explicit permission in the spec to downgrade an installed version.
+
+Customize uses one Scenario picker and one optional Fine-tune editor (Population, Performance, Journey, Experiments, Release, Faults; diagnostic stories keep their focused Scenario controls). Preserve advanced configuration during navigation, reload, and configuration export/import. The CLI and preview produce modeling evidence separately from observed payload metrics. `tools/modeling_audit.py` measures 600 visits on each platform locally. Model RNG streams are independent; new runs use fresh emission IDs while bounded resume retains IDs and receipts. Live model indices continue across applied spec versions.

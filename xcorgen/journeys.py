@@ -1,6 +1,7 @@
 """Business-state-driven journeys shared by Android and web capture adapters."""
-from .client_faults import blockage, fault
+from .client_faults import blockage, fault, followup
 from .milestones import mark
+from .util import lat
 
 ROOT_OPERATIONS = {
     "search": "search_products", "get_product": "load_product", "get_recommendations": "load_recommendations",
@@ -17,13 +18,33 @@ ROOT_OPERATIONS = {
 def traced_attempt(s, key, params):
     name = ROOT_OPERATIONS.get(key)
     if not name:
-        return s.api(key, **params)
+        result = s.api(key, **params)
+        crash_after(s, key, result)
+        return result
+    started = s.t
     with s.flow(name) as task:
         result = s.api(key, **params)
+        slow = getattr(s.plan, "slow_root_span", None)
+        if slow and slow["span"] == name:
+            # Client-side work (parsing, mapping, rendering) holds the operation open.
+            s.t = max(s.t, started + lat(slow["p50_ms"], slow["p95_ms"], s.rng))
         task["failed"] = not result.ok
         task["attributes"] = {"app.operation": key, "http.response.status_code": result.status,
                               "app.fallback.used": any(result.data.get(k) for k in ("fallback", "snapshot", "cached", "partial"))}
+    crash_after(s, key, result)
     return result
+
+
+def crash_after(s, key, result):
+    """A crash planned for the moment a named request's response is handled."""
+    plan = s.plan
+    details = getattr(plan, "crash_details", None) or {}
+    if plan.client_fault != "crash" or details.get("endpoint") != key or getattr(plan, "crashed", False):
+        return
+    if details.get("on_failure_only") and result.ok:
+        return
+    plan.crashed = True
+    fault(s, fatal=True)
 
 
 def tap(s, label):
@@ -32,9 +53,12 @@ def tap(s, label):
 
 def request(s, key, **params):
     """One failed attempt, optional bounded retry, without duplicate side effects."""
-    transport = getattr(s.plan, "transport", None)
-    if transport and not s.plan.used and key == s.plan.target:
+    plan = s.plan
+    transport = getattr(plan, "transport", None)
+    target = getattr(plan, "transport_target", None) or plan.target
+    if transport and not getattr(plan, "transport_used", False) and (target == "*" or key == target):
         params["_transport"] = transport
+        plan.transport_used = True
     r = traced_attempt(s, key, params)
     if r.status is None:
         mark(s, "request_retry_requested")
@@ -42,6 +66,17 @@ def request(s, key, **params):
         mark(s, "connectivity_restored")
         params.pop("_transport", None)
         r = traced_attempt(s, key, params)
+    if r.status == 429:
+        s.log("warning", "Request rate exceeded; retrying after the server delay")
+        delay = max(1, min(60, r.data.get("retry_after_seconds", 3)))
+        s.wait(delay, delay)
+        r = traced_attempt(s, key, params)
+    if r.data.get("cache_fallback"):
+        s.log("warning", "Cache unavailable; database fallback served the request")
+    if r.data.get("processing_delayed") and key != "operation_status":
+        s.log("info", "Processing is pending; confirmation will follow")
+        s.wait(1, 2)
+        traced_attempt(s, "operation_status", {})
     return r
 
 
@@ -53,11 +88,23 @@ def begin(s, page, **params):
 
 
 def client_issue(s, stage="content"):
-    if stage == "content" and s.plan.client_fault != "crash" and hasattr(s, "background") and s.rng.random() < .08:
+    background_share = getattr(s, "population_settings", {}).get("native_background_share", .12) if s.persona.get("population_model") else .08
+    if s.persona.get("population_model") and s.persona.get("platform") not in ("android", "ios"):
+        background_share = 0
+    if stage == "content" and s.plan.client_fault != "crash" and hasattr(s, "background") and s.rng.random() < background_share:
         mark(s, "app_backgrounded")
-        s.background(4, 12)
+        s.background(6, 45) if s.persona.get("population_model") else s.background(4, 12)
         mark(s, "session_resumed")
-    if s.plan.client_fault == "crash":
+    plan = s.plan
+    if stage == "content":
+        if getattr(plan, "blockage", False) and not getattr(plan, "blockage_done", False):
+            plan.blockage_done = True
+            blockage(s)
+        if getattr(plan, "handled", False) and not getattr(plan, "handled_done", False):
+            plan.handled_done = True
+            fault(s)
+            mark(s, "local_cache_rebuilt")
+    if s.plan.client_fault == "crash" and not (getattr(s.plan, "crash_details", None) or {}).get("endpoint"):
         stages = {"ecommerce": ("authorization", "callback", "cart", "content", "content"),
                   "banking": ("content", "callback", "content", "content", "content"),
                   "travel": ("authorization", "callback", "content", "content", "content")}
@@ -71,15 +118,20 @@ def client_issue(s, stage="content"):
         fault(s, fatal=True)
     elif stage == "content" and s.plan.client_fault == "blockage":
         blockage(s)
-    elif stage == "content" and s.plan.primary == "handled":
+    elif stage == "content" and s.plan.primary == "handled" and not getattr(plan, "handled_done", False):
         fault(s)
         mark(s, "local_cache_rebuilt")
 
 
 def done(s):
-    if s.plan.primary == "mobile" and s.rng.random() < .6:
-        # A concrete response-mapping defect is caught by the UI's error boundary.
-        fault(s)
+    rate = getattr(s.plan, "handled_followup", .6)
+    if s.plan.primary == "mobile" and s.rng.random() < rate:
+        if hasattr(s.plan, "fault_ids"):
+            # V2: the screen catches the failed response itself and logs it as a handled exception.
+            followup(s)
+        else:
+            # A concrete response-mapping defect is caught by the UI's error boundary.
+            fault(s)
     mark(s, "session_exit")
     s.wait(2, 8)
     s.leave()
@@ -118,23 +170,30 @@ def payment(s, key):
 
 
 def ecommerce(s):
+    if (getattr(s.plan, "shape", None) or {}).get("intent"):
+        from .population_journeys import retail
+        return retail(s)
     from .profiles.ecommerce import PRODUCTS, SEARCHES
     plan, rng = s.plan, s.rng
     priority = plan.primary == "mobile" and not getattr(plan, "transport", None) or rng.random() < plan.settings.get("journey_weights", {}).get("ecommerce_priority", .23)
     if plan.primary == "backend":
         priority = rng.random() < plan.settings.get("journey_weights", {}).get("ecommerce_priority", .23)
     priority |= plan.client_fault == "crash" and plan.crash_family in (0, 1, 2)
+    shape = getattr(plan, "shape", None)
+    if shape is not None:
+        priority = shape["priority"]
     plan.target = {"payments-db-pool": "place_order", "payment-timeouts": "place_order",
                    "inventory-sync": "add_to_cart", "reviews-n-plus-one": "get_product",
+                   "inventory-deadlock": "place_order",
                    "recs-latency": "get_recommendations"}.get(plan.incident)
     if getattr(plan, "transport", None):
-        plan.target = "search"
+        plan.transport_target = plan.transport_target or "search"
     product = rng.choice(PRODUCTS)
     sku, name, category, _ = product
     begin(s, "home")
     request(s, "home")
     mark(s, "home_content_rendered")
-    if plan.primary == "clean" and not plan.client_fault and rng.random() < .35:
+    if (shape["short"] if shape is not None else plan.primary == "clean" and not plan.client_fault and rng.random() < .35):
         request(s, "get_recommendations", sku="home")
         mark(s, "recommendations_displayed")
         s.wait(4, 14)
@@ -166,7 +225,7 @@ def ecommerce(s):
         tap(s, "Back to search results")
         mark(s, "product_sort_changed")
     client_issue(s)
-    if priority or plan.primary == "handled" or rng.random() < .3:
+    if priority or (shape["add"] if shape is not None else plan.primary == "handled" or rng.random() < .3):
         tap(s, "Add to bag")
         r = request(s, "add_to_cart", sku=sku)
         if not r.ok:
@@ -208,7 +267,9 @@ def ecommerce(s):
 def banking(s):
     from .profiles.banking import ACCOUNTS
     plan, rng = s.plan, s.rng
-    if plan.primary == "clean" and not plan.client_fault and plan.ring == "stable" and rng.random() < .42:
+    shape = getattr(plan, "shape", None)
+    if (shape["short"] if shape is not None else
+            plan.primary == "clean" and not plan.client_fault and plan.ring == "stable" and rng.random() < .42):
         begin(s, "cards")
         mark(s, "card_controls_opened")
         mark(s, "card_status_displayed")
@@ -224,31 +285,46 @@ def banking(s):
     priority = plan.primary == "mobile" and not getattr(plan, "transport", None) or plan.incident == "fraud-latency" or rng.random() < plan.settings.get("journey_weights", {}).get("banking_priority", .18)
     priority |= plan.client_fault == "crash" and plan.crash_family == 1
     statement = plan.incident == "statements-slow" or (not priority and rng.random() < .25)
+    if shape is not None:
+        priority, statement = shape["priority"], shape["statement"] and not shape["priority"]
     plan.target = {"fraud-latency": "create_transfer", "rails-outage": "create_transfer",
                    "account-read-fallback": "accounts", "core-banking-latency": "accounts",
                    "statements-slow": "statement"}.get(plan.incident)
     if getattr(plan, "transport", None):
-        plan.target = "accounts"
+        plan.transport_target = plan.transport_target or "accounts"
     begin(s, "signin" if not s.user_id else "dashboard")
     if not s.user_id:
         s.type_text(rng.randint(18, 25))
         mark(s, "credentials_submitted")
-        request(s, "login")
+        if not request(s, "login").ok:
+            s.properties["visit_outcome"] = "signin_failed"
+            return done(s)
         s.page_view("mfa")
         mark(s, "identity_challenge_presented")
         s.wait(3, 8)
-        request(s, "mfa_verify")
+        if not request(s, "mfa_verify").ok:
+            s.properties["visit_outcome"] = "challenge_failed"
+            return done(s)
         s.login()
         mark(s, "identity_verified")
     s.page_view("dashboard")
     mark(s, "account_overview_opened")
     account_result = request(s, "accounts")
+    if not account_result.ok:
+        s.properties["visit_outcome"] = "overview_unavailable"
+        return done(s)
     if account_result.data.get("snapshot"):
         mark(s, "cached_account_snapshot_displayed")
         mark(s, "account_snapshot_as_of_displayed")
         s.log("warning", "Account snapshot is read-only; recent activity may be missing", **{
             "account.snapshot_as_of_ms": str(account_result.data["as_of_ms"])})
     mark(s, "account_overview_rendered")
+    if shape and shape.get("overview_only"):
+        from .population import read
+        read(s)
+        s.properties["visit_outcome"] = "balance_checked"
+        client_issue(s)
+        return done(s)
     s.wait(2, 8)
     acct, label = rng.choice(ACCOUNTS)
     tap(s, label)
@@ -261,7 +337,14 @@ def banking(s):
     tap(s, "View transaction details")
     mark(s, "transaction_details_viewed")
     client_issue(s)
-    if priority:
+    if shape and shape.get("power"):
+        from .population import read
+        other, other_label = next((a, name) for a, name in ACCOUNTS if a != acct)
+        tap(s, other_label)
+        s.page_view("account", account=other, label=other_label)
+        request(s, "transactions", account=other)
+        read(s)
+    if priority or shape and shape.get("abandon"):
         tap(s, "Move money")
         s.page_view("transfer")
         mark(s, "transfer_started")
@@ -278,6 +361,9 @@ def banking(s):
         s.page_view("transfer_review")
         mark(s, "transfer_review_displayed")
         s.wait(2, 5)
+        if shape and shape.get("abandon"):
+            s.properties["visit_outcome"] = "transfer_abandoned"
+            return done(s)
         tap(s, "Send transfer")
         mark(s, "fraud_check_started")
         r = request(s, "create_transfer")
@@ -291,8 +377,10 @@ def banking(s):
                 r = request(s, "create_transfer")
         if r.ok:
             s.page_view("transfer_done", transfer_id=r.data["transfer_id"])
+            s.properties["visit_outcome"] = "transfer_completed"
             mark(s, "transfer_confirmation_viewed")
         else:
+            s.properties["visit_outcome"] = "transfer_unconfirmed"
             mark(s, "transfer_help_opened")
     elif statement:
         s.page_view("statements")
@@ -313,7 +401,9 @@ def banking(s):
 def travel(s):
     from .profiles.travel import ROUTES
     plan, rng = s.plan, s.rng
-    if plan.primary == "clean" and not plan.client_fault and plan.ring == "stable" and rng.random() < .42:
+    shape = getattr(plan, "shape", None)
+    if (shape["short"] if shape is not None else
+            plan.primary == "clean" and not plan.client_fault and plan.ring == "stable" and rng.random() < .42):
         begin(s, "trips")
         mark(s, "trip_list_opened")
         request(s, "trips")
@@ -328,11 +418,13 @@ def travel(s):
     priority = plan.primary == "mobile" and not getattr(plan, "transport", None) or rng.random() < plan.settings.get("journey_weights", {}).get("travel_priority", .23)
     priority |= plan.client_fault == "crash" and plan.crash_family in (0, 1)
     hotel = plan.incident == "hotel-supplier-outage" or (not priority and plan.incident not in ("supplier-timeouts", "search-complexity") and rng.random() < .3)
+    if shape is not None:
+        priority, hotel = shape["priority"], shape["hotel"] and not shape["priority"]
     plan.target = {"payments-db-pool": "create_booking", "gds-pnr-timeouts": "create_booking",
                    "supplier-timeouts": "flight_search", "search-complexity": "flight_search",
                    "hotel-supplier-outage": "hotel_search"}.get(plan.incident)
     if getattr(plan, "transport", None):
-        plan.target = "hotel_search" if hotel else "flight_search"
+        plan.transport_target = plan.transport_target or ("hotel_search" if hotel else "flight_search")
     origin, dest, from_city, city = rng.choice(ROUTES)
     begin(s, "home")
     s.wait(2, 5)
@@ -389,7 +481,12 @@ def travel(s):
         tap(s, "Earlier departures")
         mark(s, "flight_departure_filter_changed")
     client_issue(s)
-    if priority or rng.random() < .5:
+    if shape and shape.get("power"):
+        tap(s, "Compare flight options")
+        request(s, "flight_search", origin=origin, dest=dest)
+        from .population import read
+        read(s)
+    if priority or (shape["offer"] if shape is not None else rng.random() < .5):
         tap(s, "Select itinerary")
         mark(s, "itinerary_selected")
         s.page_view("offer")
@@ -397,7 +494,7 @@ def travel(s):
         mark(s, "fare_rules_displayed")
         mark(s, "fare_revalidated")
         s.wait(3, 8)
-    if priority:
+    if priority or shape and shape.get("abandon"):
         s.page_view("checkout")
         mark(s, "booking_started")
         s.type_text(rng.randint(25, 50))
@@ -407,12 +504,17 @@ def travel(s):
             mark(s, "traveler_details_corrected")
         mark(s, "traveler_details_validated")
         mark(s, "booking_review_displayed")
+        if shape and shape.get("abandon"):
+            s.properties["visit_outcome"] = "booking_abandoned"
+            return done(s)
         r = payment(s, "create_booking")
         if r.ok:
+            s.properties["visit_outcome"] = "booking_completed"
             s.page_view("confirmation", ref=r.data["ref"])
             mark(s, "booking_confirmation_viewed")
             request(s, "trips")
         else:
+            s.properties["visit_outcome"] = "booking_unconfirmed"
             mark(s, "booking_cancelled")
     done(s)
 

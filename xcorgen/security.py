@@ -90,6 +90,14 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         raise TransportError("HTTP redirect refused; configure the final HTTPS endpoint.", status=code)
 
 
+class ResponseBytes(bytes):
+    """Response body with status metadata; compatible with existing byte decoders."""
+    def __new__(cls, body, status):
+        value = super().__new__(cls, body)
+        value.status = status
+        return value
+
+
 def post(url, body, headers, *, timeout=30, max_response_bytes=1024 * 1024):
     validate_endpoint(url, headers)
     handlers = [_NoRedirect()]
@@ -103,7 +111,7 @@ def post(url, body, headers, *, timeout=30, max_response_bytes=1024 * 1024):
             result = response.read(max_response_bytes + 1)
             if len(result) > max_response_bytes:
                 raise TransportError("HTTP response exceeds the configured size limit.")
-            return result
+            return ResponseBytes(result, response.status)
     except urllib.error.HTTPError as error:
         status = error.code
         error.close()

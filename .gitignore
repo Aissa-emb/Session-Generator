@@ -16,3 +16,9 @@ config.*.json
 secrets/
 .venv/
 security-*.json
+.runs/
+node_modules/
+apps/web/dist/
+apps/web/test-results/
+apps/web/playwright-report/
+*.tsbuildinfo

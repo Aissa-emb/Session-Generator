@@ -1,0 +1,300 @@
+{
+ "spec_version": "2.0",
+ "name": "V1 verification plan",
+ "notes": "The 45 bounded verification cases from docs/verification-plan.json, generated before one normal session.",
+ "seed": 7331,
+ "targets": [
+  {
+   "id": "vantra-android",
+   "platform": "android",
+   "embrace_app_id": "5nrc2",
+   "app_name": "Vantra"
+  }
+ ],
+ "chronosphere": {
+  "tenant": "demo-sandbox",
+  "token_ref": "file:/Users/aissamamdouh/Library/Application Support/Session-Generator/chronosphere.token"
+ },
+ "destinations": {
+  "mode": "end_to_end"
+ },
+ "traffic": {
+  "mode": "burst",
+  "count": 1,
+  "window": {
+   "last_minutes": 6
+  }
+ },
+ "verification_cases": [
+  {
+   "name": "ecommerce/payments-db-pool",
+   "line_of_business": "retail",
+   "backend_fault": "payments-db-pool",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "travel/payments-db-pool",
+   "line_of_business": "travel",
+   "backend_fault": "payments-db-pool",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "ecommerce/payment-timeouts",
+   "line_of_business": "retail",
+   "backend_fault": "payment-timeouts",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "ecommerce/reviews-n-plus-one",
+   "line_of_business": "retail",
+   "backend_fault": "reviews-n-plus-one",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "ecommerce/recs-latency",
+   "line_of_business": "retail",
+   "backend_fault": "recs-latency",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "ecommerce/inventory-sync",
+   "line_of_business": "retail",
+   "backend_fault": "inventory-sync",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "banking/fraud-latency",
+   "line_of_business": "banking",
+   "backend_fault": "fraud-latency",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "banking/rails-outage",
+   "line_of_business": "banking",
+   "backend_fault": "rails-outage",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "banking/core-banking-latency",
+   "line_of_business": "banking",
+   "backend_fault": "core-banking-latency",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "banking/statements-slow",
+   "line_of_business": "banking",
+   "backend_fault": "statements-slow",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "banking/account-read-fallback",
+   "line_of_business": "banking",
+   "backend_fault": "account-read-fallback",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "travel/supplier-timeouts",
+   "line_of_business": "travel",
+   "backend_fault": "supplier-timeouts",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "travel/gds-pnr-timeouts",
+   "line_of_business": "travel",
+   "backend_fault": "gds-pnr-timeouts",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "travel/hotel-supplier-outage",
+   "line_of_business": "travel",
+   "backend_fault": "hotel-supplier-outage",
+   "incident_phase": "incident"
+  },
+  {
+   "name": "ecommerce/crash/0",
+   "line_of_business": "retail",
+   "primary_scenario": "crash",
+   "crash_family": 0
+  },
+  {
+   "name": "banking/crash/0",
+   "line_of_business": "banking",
+   "primary_scenario": "crash",
+   "crash_family": 0
+  },
+  {
+   "name": "travel/crash/0",
+   "line_of_business": "travel",
+   "primary_scenario": "crash",
+   "crash_family": 0
+  },
+  {
+   "name": "ecommerce/crash/1",
+   "line_of_business": "retail",
+   "primary_scenario": "crash",
+   "crash_family": 1
+  },
+  {
+   "name": "banking/crash/1",
+   "line_of_business": "banking",
+   "primary_scenario": "crash",
+   "crash_family": 1
+  },
+  {
+   "name": "travel/crash/1",
+   "line_of_business": "travel",
+   "primary_scenario": "crash",
+   "crash_family": 1
+  },
+  {
+   "name": "ecommerce/crash/2",
+   "line_of_business": "retail",
+   "primary_scenario": "crash",
+   "crash_family": 2
+  },
+  {
+   "name": "banking/crash/2",
+   "line_of_business": "banking",
+   "primary_scenario": "crash",
+   "crash_family": 2
+  },
+  {
+   "name": "travel/crash/2",
+   "line_of_business": "travel",
+   "primary_scenario": "crash",
+   "crash_family": 2
+  },
+  {
+   "name": "ecommerce/crash/3",
+   "line_of_business": "retail",
+   "primary_scenario": "crash",
+   "crash_family": 3
+  },
+  {
+   "name": "banking/crash/3",
+   "line_of_business": "banking",
+   "primary_scenario": "crash",
+   "crash_family": 3
+  },
+  {
+   "name": "travel/crash/3",
+   "line_of_business": "travel",
+   "primary_scenario": "crash",
+   "crash_family": 3
+  },
+  {
+   "name": "ecommerce/crash/4",
+   "line_of_business": "retail",
+   "primary_scenario": "crash",
+   "crash_family": 4
+  },
+  {
+   "name": "banking/crash/4",
+   "line_of_business": "banking",
+   "primary_scenario": "crash",
+   "crash_family": 4
+  },
+  {
+   "name": "travel/crash/4",
+   "line_of_business": "travel",
+   "primary_scenario": "crash",
+   "crash_family": 4
+  },
+  {
+   "name": "ecommerce/blockage/migration",
+   "line_of_business": "retail",
+   "primary_scenario": "blockage",
+   "blockage_cause": "migration"
+  },
+  {
+   "name": "banking/blockage/migration",
+   "line_of_business": "banking",
+   "primary_scenario": "blockage",
+   "blockage_cause": "migration"
+  },
+  {
+   "name": "travel/blockage/migration",
+   "line_of_business": "travel",
+   "primary_scenario": "blockage",
+   "blockage_cause": "migration"
+  },
+  {
+   "name": "ecommerce/blockage/worker_lock",
+   "line_of_business": "retail",
+   "primary_scenario": "blockage",
+   "blockage_cause": "worker_lock"
+  },
+  {
+   "name": "banking/blockage/worker_lock",
+   "line_of_business": "banking",
+   "primary_scenario": "blockage",
+   "blockage_cause": "worker_lock"
+  },
+  {
+   "name": "travel/blockage/worker_lock",
+   "line_of_business": "travel",
+   "primary_scenario": "blockage",
+   "blockage_cause": "worker_lock"
+  },
+  {
+   "name": "ecommerce/blockage/layout",
+   "line_of_business": "retail",
+   "primary_scenario": "blockage",
+   "blockage_cause": "layout"
+  },
+  {
+   "name": "banking/blockage/layout",
+   "line_of_business": "banking",
+   "primary_scenario": "blockage",
+   "blockage_cause": "layout"
+  },
+  {
+   "name": "travel/blockage/layout",
+   "line_of_business": "travel",
+   "primary_scenario": "blockage",
+   "blockage_cause": "layout"
+  },
+  {
+   "name": "ecommerce/healthy",
+   "line_of_business": "retail",
+   "primary_scenario": "clean",
+   "full_journey": true
+  },
+  {
+   "name": "banking/healthy",
+   "line_of_business": "banking",
+   "primary_scenario": "clean",
+   "full_journey": true
+  },
+  {
+   "name": "travel/healthy",
+   "line_of_business": "travel",
+   "primary_scenario": "clean",
+   "full_journey": true
+  },
+  {
+   "name": "ecommerce/payments-db-pool/onset",
+   "line_of_business": "retail",
+   "backend_fault": "payments-db-pool",
+   "incident_phase": "onset"
+  },
+  {
+   "name": "travel/payments-db-pool/onset",
+   "line_of_business": "travel",
+   "backend_fault": "payments-db-pool",
+   "incident_phase": "onset"
+  },
+  {
+   "name": "ecommerce/payments-db-pool/recovery",
+   "line_of_business": "retail",
+   "backend_fault": "payments-db-pool",
+   "incident_phase": "recovery"
+  },
+  {
+   "name": "travel/payments-db-pool/recovery",
+   "line_of_business": "travel",
+   "backend_fault": "payments-db-pool",
+   "incident_phase": "recovery"
+  }
+ ]
+}

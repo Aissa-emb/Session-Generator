@@ -1,6 +1,7 @@
 """Config, senders and scheduling for generated sessions and traces."""
 
 import gzip
+import copy
 import heapq
 import itertools
 import json
@@ -22,6 +23,7 @@ from .util import uuid4, weighted
 from .security import (SecurityError, TransportError, post, read_token_file,
                        require_private_file, tenant_url, validate_endpoint, validate_headers)
 from .android_session import AndroidSession, SessionEnded, shift_envelope
+from .ios_session import IOSSession
 from .web_session import WebSession, shift
 from .scenarios import Plan, Runtime
 from .journeys import JOURNEYS
@@ -40,6 +42,8 @@ def append_manifest(path, record):
         with os.fdopen(fd, "a") as f:
             fd = None
             f.write(json.dumps(record, separators=(",", ":")) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
     finally:
         if fd is not None:
             os.close(fd)
@@ -101,6 +105,34 @@ def app_id_for(cfg, profile_key):
     return apps.get(profile_key) or apps.get("default")
 
 
+def fresh_delivery(delivery, now_ms):
+    """Apply ingest physics at the last possible moment, including live stop/flush."""
+    from .limits import TRACE_ELIGIBLE_MS
+    d=delivery
+    if d['kind']=='metrics':
+        from .backend_metrics import timely
+        return d if timely(d['payload'],now_ms,d.get('_metrics_policy','aggregated')) else None
+    if d['target']=='otlp':
+        spans=[sp for rs in d['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']]
+        logs=[row for rs in d['payload'].get('resourceLogs',[]) for ss in rs['scopeLogs'] for row in ss['logRecords']]
+        times=[int(sp['startTimeUnixNano'])/1e6 for sp in spans]+[int(row['timeUnixNano'])/1e6 for row in logs]
+        return None if any(not -TRACE_ELIGIBLE_MS <= now_ms-t <= TRACE_ELIGIBLE_MS for t in times) else d
+    native=d.get('fmt')=='envelope'
+    spans=d['payload'].get('data',{}).get('spans',[]) if native else [sp for rs in d['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']]
+    logs=d['payload'].get('data',{}).get('logs',[]) if native else [row for rs in d['payload'].get('resourceLogs',[]) for ss in rs['scopeLogs'] for row in ss['logRecords']]
+    start='start_time_unix_nano' if native else 'startTimeUnixNano'
+    logtime='time_unix_nano' if native else 'timeUnixNano'
+    times=[int(sp[start])/1e6 for sp in spans]+[int(row[logtime])/1e6 for row in logs]
+    if times and all(now_ms-t>24*3600000 for t in times):return None
+    if any(now_ms-int(sp[start])/1e6>TRACE_ELIGIBLE_MS for sp in spans):
+        d=copy.deepcopy(d)
+        spans=d['payload'].get('data',{}).get('spans',[]) if native else [sp for rs in d['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']]
+        for sp in spans:
+            if now_ms-int(sp[start])/1e6>TRACE_ELIGIBLE_MS:
+                sp['attributes']=[a for a in sp.get('attributes',[]) if a['key'] not in ('emb.w3c_traceparent','emb.forward_telemetry')]
+    return d
+
+
 class Sender:
     """Posts Embrace payloads and backend OTLP data; or writes them to disk in dry-run mode."""
 
@@ -109,9 +141,10 @@ class Sender:
         self.pool = ThreadPoolExecutor(max_workers=workers)
         self.pending_slots = threading.BoundedSemaphore(workers * 4)
         self.lock = threading.Lock()
-        self.stats = {"embrace_spans": 0, "embrace_logs": 0, "otlp_traces": 0, "otlp_logs": 0, "errors": 0}
+        self.stats = {"embrace_spans": 0, "embrace_logs": 0, "otlp_traces": 0, "otlp_logs": 0, "otlp_metrics": 0, "errors": 0}
         self.counter = itertools.count(1)
         self.last_errors = []
+        self.strict_receipts = False
         ch = cfg["chronosphere"]
         o = cfg["otlp"]
         if o.get("endpoint"):
@@ -125,6 +158,8 @@ class Sender:
         self.encoding = o.get("encoding", "protobuf")
         if dry_run_dir:
             os.makedirs(dry_run_dir, exist_ok=True)
+            numbers = [int(f.split("-", 1)[0]) for f in os.listdir(dry_run_dir) if re.match(r"^\d+-", f)]
+            self.counter = itertools.count(max(numbers, default=0) + 1)
 
     def submit(self, d):
         self.pending_slots.acquire()
@@ -134,18 +169,33 @@ class Sender:
             self.pending_slots.release()
             raise
         future.add_done_callback(lambda _: self.pending_slots.release())
+        return future
 
     def _send(self, d):
         key = f"{d['target']}_{d['kind']}"
+        receipt = {"target": d["target"], "kind": d["kind"], "time_ms": time.time() * 1000,
+                   "status": "accepted", "http_status": None, "accepted": 0, "rejected": 0, "trace_ids": sorted({
+                       sp["traceId"] for rs in d["payload"].get("resourceSpans", [])
+                       for ss in rs["scopeSpans"] for sp in ss["spans"]})}
         try:
+            if not self.dry:
+                d=fresh_delivery(d,receipt['time_ms'])
+                if d is None:
+                    return dict(receipt,status='expired',reason='outside_ingest_window')
             if self.dry:
                 n = next(self.counter)
                 with open(os.path.join(self.dry, f"{n:05d}-{key}.json"), "w") as f:
-                    json.dump({k: v for k, v in d.items() if k != "due"}, f, indent=1)
+                    json.dump({k: v for k, v in d.items() if k != "due" and not k.startswith("_")}, f, indent=1)
+                    f.flush()
+                    os.fsync(f.fileno())
             elif d["target"] == "embrace":
-                self._post_embrace(d)
+                receipt["http_status"] = getattr(self._post_embrace(d), "status", 200)
             else:
-                self._post_otlp(d)
+                receipt["http_status"] = getattr(self._post_otlp(d), "status", 200)
+            receipt["accepted"] = sum(len(ss.get("spans", ss.get("logRecords", []))) for rs in d["payload"].get("resourceSpans", d["payload"].get("resourceLogs", [])) for ss in rs.get("scopeSpans", rs.get("scopeLogs", []))) or len(d["payload"].get("data", {}).get("spans", d["payload"].get("data", {}).get("logs", [])))
+            if d['kind'] == 'metrics':
+                from .backend_metrics import points
+                receipt['accepted'] = sum(1 for _ in points(d['payload']))
             with self.lock:
                 self.stats[key] += 1
                 if not self.dry and self.cfg.get("generation", {}).get("manifest_path"):
@@ -154,13 +204,17 @@ class Sender:
                     append_manifest(self.cfg["generation"]["manifest_path"] + ".receipts", {
                         "stage": "accepted", "target": d["target"], "kind": d["kind"], "time_ms": time.time() * 1000,
                         "device_id": d["device_id"], "trace_ids": sorted(set(ids))})
-        except Exception as e:  # keep generating; report at the end
+        except Exception as e:  # preserve delivery uncertainty without leaking remote response bodies
+            receipt["http_status"] = getattr(e, "status", None)
+            receipt["rejected"] = getattr(e, "rejected", 0)
+            receipt["status"] = "partial" if receipt["rejected"] else ("rejected" if isinstance(e, SecurityError) or (getattr(e, "status", None) is not None and 400 <= e.status < 500) else "uncertain")
             with self.lock:
                 self.stats["errors"] += 1
                 detail = str(e) if isinstance(e, (SecurityError, TransportError)) else "Payload delivery failed (details suppressed)."
                 self.last_errors = (self.last_errors + [f"{key}: {detail}"])[-5:]
             if self.verbose:
                 print(f"  ! {key} failed: {detail}", file=sys.stderr)
+        return receipt
 
     def _post(self, url, body, headers):
         compressed = gzip.compress(body)
@@ -168,7 +222,7 @@ class Sender:
             try:
                 return post(url, compressed, dict(headers, **{"Content-Encoding": "gzip"}))
             except TransportError as e:
-                if (e.status is not None and e.status != 429 and e.status < 500) or attempt == 2:
+                if self.strict_receipts or (e.status is not None and e.status != 429 and e.status < 500) or attempt == 2:
                     raise
             time.sleep(0.5 * (attempt + 1))
 
@@ -177,20 +231,25 @@ class Sender:
         body = json.dumps(d["payload"], separators=(",", ":")).encode()
         headers = {"Content-Type": "application/json", "X-EM-AID": d["app_id"], "X-EM-DID": d["device_id"]}
         headers.update(d.get("headers") or {"User-Agent": d["ua"], "Origin": d["origin"]})
-        self._post(f"{base}/v2/{d['kind']}", body, headers)
+        return self._post(f"{base}/v2/{d['kind']}", body, headers)
 
     def _post_otlp(self, d):
         if not self.otlp_base:
+            if self.strict_receipts:
+                raise SecurityError("No backend destination is configured.")
             return
         if self.encoding == "json":
             body, ctype = json.dumps(d["payload"], separators=(",", ":")).encode(), "application/json"
         else:
-            enc = otlp.encode_traces if d["kind"] == "traces" else otlp.encode_logs
+            enc = {"traces":otlp.encode_traces,"logs":otlp.encode_logs,"metrics":otlp.encode_metrics}[d["kind"]]
             body, ctype = enc(d["payload"]), "application/x-protobuf"
         resp = self._post(f"{self.otlp_base}/v1/{d['kind']}", body, dict(self.otlp_headers, **{"Content-Type": ctype}))
         rejected, _ = otlp.partial_success(resp or b"", json_body=self.encoding == "json")
         if rejected:
-            raise TransportError(f"Backend rejected {rejected} {d['kind']} records.")
+            error = TransportError(f"Backend rejected {rejected} {d['kind']} records.", status=getattr(resp, "status", 200))
+            error.rejected = rejected
+            raise error
+        return resp
 
     def close(self):
         self.pool.shutdown(wait=True)
@@ -198,12 +257,24 @@ class Sender:
 
 class Generator:
     def __init__(self, profile_keys, cfg, incident=None, emit_client_spans=False, backend_logs=False, persist=True,
-                 platform="android"):
+                 platform="android", shared=None, app_overrides=None, pool_options=None, runtime=None,
+                 state_dir=None, web_options=None):
+        """shared=True forces super-app mode (one app, lines of business by business_unit), as V2 targets are.
+
+        app_overrides: {profile key: dict merged into the Android app definition}. pool_options:
+        PersonaPool keyword arguments (returning_share, android_overrides). runtime is shared across
+        targets so backend caches, idempotency records and incident occupants are one backend.
+        """
         self.profiles = [load(k) for k in profile_keys]
         self.cfg, self.incident, self.emit_client_spans = cfg, incident, emit_client_spans
         self.backend_logs, self.persist, self.platform = backend_logs, persist, platform
-        self.session_cls = AndroidSession if platform == "android" else WebSession
-        self.runtime = Runtime()
+        self.session_cls = {"android":AndroidSession,"ios":IOSSession,"web":WebSession}[platform]
+        self.web_options = web_options
+        if platform == "web" and web_options is not None:
+            from .browser_session import BrowserSession
+            self.session_cls = BrowserSession
+        self.runtime = runtime or Runtime()
+        self.app_overrides = app_overrides or {}
         self.settings = cfg.get("generation", {})
         self.verification_queue = list(self.settings.get("verification_plan", []))
         from .scenarios import validate_settings
@@ -214,7 +285,7 @@ class Generator:
             validate_settings(dict(self.settings, **case.get("settings", {})))
         for profile in self.profiles:
             install(profile)
-        state = os.path.join(ROOT, ".state")
+        state = state_dir or os.path.join(ROOT, ".state")
         # Profiles that share one Android app ID are lines of business in one super app, with one user base.
         by_app = {}
         for p in self.profiles:
@@ -222,41 +293,84 @@ class Generator:
             if not isinstance(app, str) or not re.fullmatch(r"[A-Za-z0-9]{5}", app):
                 raise SecurityError("Each selected profile needs a five-character alphanumeric Embrace app ID.")
             by_app.setdefault(app, []).append(p)
-        self.shared = {p.key for group in by_app.values() if len(group) > 1 and platform == "android" for p in group}
+        if shared:
+            self.shared = {p.key for p in self.profiles}
+        else:
+            self.shared = {p.key for group in by_app.values() if len(group) > 1 and platform == "android" for p in group}
         self.pools = {}
+        pool_options = pool_options or {}
         for app, group in by_app.items():
             if self.shared and group[0].key in self.shared:
-                pool = PersonaPool(f"app-{app}", state, size=4000, platform=platform)
+                pool = PersonaPool(f"app-{app}", state, size=4000, platform=platform, **pool_options)
                 for p in group:
                     self.pools[p.key] = pool
             else:
                 for p in group:
-                    self.pools[p.key] = PersonaPool(p.key, state, platform=platform)
+                    self.pools[p.key] = PersonaPool(p.key, state, platform=platform, **pool_options)
         self._make_user = {}
         for p in self.profiles:
             app = app_id_for(cfg, p.key)
             if self.incident and self.incident not in p.incidents and len(self.profiles) == 1:
                 raise SystemExit(f"Unknown incident '{incident}' for {p.key}. Options: {', '.join(p.incidents)}")
 
-    def session(self, start_ms):
-        selection = self.verification_queue.pop(0) if self.verification_queue else {}
-        profile = next((p for p in self.profiles if p.key == selection.get("profile")), None) or random.choice(self.profiles)
+    def pick(self, profile_key=None, now_s=None, weights=None):
+        """Choose the line of business and visitor for one session (a planner skeleton)."""
+        if profile_key:
+            profile = next(p for p in self.profiles if p.key == profile_key)
+        elif weights:
+            profile = weighted([(p, weights.get(p.key, 0)) for p in self.profiles])
+        else:
+            profile = random.choice(self.profiles)
         pool = self.pools[profile.key]
-        persona = pool.pick(self._shared_make_user if profile.key in self.shared else profile.make_user)
+        persona = pool.pick(self._shared_make_user if profile.key in self.shared else profile.make_user, now=now_s)
+        return profile, persona
+
+    def session(self, start_ms, skeleton=None, assignment=None, settings=None):
+        selection = self.verification_queue.pop(0) if self.verification_queue and skeleton is None else {}
+        if skeleton:
+            profile, persona = skeleton["profile"], skeleton["persona"]
+            # Batch allocation may select this visitor again before generation.
+            # Freeze visit conditions, but retain shared identity/session counters.
+            persona.update(skeleton.get("visit", {}))
+        else:
+            profile = next((p for p in self.profiles if p.key == selection.get("profile")), None) or random.choice(self.profiles)
+            pool = self.pools[profile.key]
+            persona = pool.pick(self._shared_make_user if profile.key in self.shared else profile.make_user)
         journey = JOURNEYS[profile.key]
         incident = selection.get("incident") or (self.incident if self.incident in profile.incidents else None)
         kwargs = {"shared": True} if profile.key in self.shared else {}
+        if self.platform in ("android","ios"):
+            if self.app_overrides.get(profile.key):
+                kwargs["app"] = self.app_overrides[profile.key]
+            if skeleton and skeleton.get("version"):
+                kwargs["version"] = skeleton["version"]
+        elif self.web_options is not None:
+            kwargs.update(self.web_options)
+            kwargs["api_host"] = self.app_overrides[profile.key]["api_host"]
+            if skeleton:
+                kwargs["release"] = skeleton["app_version"]
         s = self.session_cls(profile, persona, app_id_for(self.cfg, profile.key), start_ms, incident,
                              self.emit_client_spans, **kwargs)
-        settings = dict(self.settings, **selection.get("settings", {}))
-        s.plan = Plan(s, self.runtime, settings, incident)
+        if skeleton is not None:
+            s.traces = skeleton.get("traces", True)
+        settings = dict(settings if settings is not None else self.settings, **selection.get("settings", {}))
+        s.plan = Plan(s, self.runtime, settings, incident, assignment=assignment)
+        if skeleton is not None and assignment is not None:
+            s.plan.shape = skeleton.get("shape")
+        from .population import configure_session
+        configure_session(s, getattr(self, "population_settings", {}), getattr(s.plan, "shape", None))
+        model_context = getattr(self, "model_context", None)
+        if model_context and model_context[0]:
+            from .modeling import Model
+            s.performance_model = Model(s, *model_context)
         s.verification_case = selection.get("name")
-        if s.plan.primary == "mobile" and s.plan.ring == "stable" and random.random() < self.settings.get("transport_share", .4) and not incident:
+        if assignment is None and s.plan.primary == "mobile" and s.plan.ring == "stable" and random.random() < self.settings.get("transport_share", .4) and not incident:
             s.plan.transport = random.choice(("dns", "offline", "reset", "timeout", "cancelled"))
             s.plan.incident = None
         try:
             journey(s)
         except SessionEnded:  # the app crashed; the process is gone
+            s.persona.pop("native_process_id", None)
             if self.platform == "android" and s.persona.pop("pending_crash_upload", False):
                 due = s.crash_upload_due
                 for delivery in s.deliveries:
@@ -311,9 +425,13 @@ class Generator:
             if prof.key in self.shared:
                 prof.make_user(p)
                 traits.update(p["traits"])
-        traits["membership"] = weighted([("standard", 62), ("plus", 29), ("premium", 9)])
+        traits["membership"] = weighted(getattr(self, "membership_weights", None) or
+                                        [("standard", 62), ("plus", 29), ("premium", 9)])
         p["traits"] = traits
-        p["user_id"] = uuid4() if random.random() < 0.82 else None
+        p["user_id"] = uuid4() if random.random() < getattr(self, "signed_in_share", 0.82) else None
+        if p["user_id"] and getattr(self, "cross_platform_customers", False) and random.random() < .3:
+            from uuid import uuid5, NAMESPACE_URL
+            p["user_id"] = str(uuid5(NAMESPACE_URL, "https://vantra.com/customer/" + str(random.randrange(64))))
 
     def save(self):
         if not self.persist:
@@ -325,7 +443,7 @@ class Generator:
 def describe(s, journey, tenant):
     errors = [c for c in s.calls if c[1] is None or c[1] >= 400]
     p = s.persona
-    device = p["model"] if p.get("platform") == "android" else p["kind"]
+    device = p["model"] if p.get("platform") in ("android","ios") else p["kind"]
     line = (f"{s.profile.key:<9} {journey:<20} {device:<22} parts={s.part.index:<2} api={len(s.calls):<3} "
             f"errors={len(errors):<2} {s.start_ms / 1000:.0f}->{s.end_ms / 1000:.0f} user_session={s.user_session_id}")
     if tenant and s.calls:
@@ -342,18 +460,27 @@ def run_burst(gen, sender, count, spread_min, quiet=False):
     tenant = gen.cfg["chronosphere"].get("tenant")
     for _ in range(count):
         s, journey, deliveries = gen.session(now - random.uniform(0, spread_min * 60_000))
-        sessions.append((s, journey))
+        sessions.append((s, journey, deliveries))
         all_deliveries.extend(deliveries)
     # One shift for the complete batch preserves shared pool-occupant links.
     delta_ms = min(0, now - 15000 - max(d["due"] for d in all_deliveries))
     for d in all_deliveries:
         (shift_envelope if d.get("fmt") == "envelope" else shift)(d["payload"], int(delta_ms * 1_000_000))
         d["due"] += delta_ms
-    for s, journey in sessions:
+    # Cortex XCOR drops spans dated more than 10 minutes before ingest, so older sessions are sent
+    # without trace context: no traceparent on their requests and no backend traces.
+    from .limits import trace_eligible
+    from .spec_runner import strip_traces
+    kept = []
+    for s, journey, deliveries in sessions:
         s.start_ms += delta_ms
         s.end_ms += delta_ms
+        if not trace_eligible(s.start_ms, now):
+            deliveries = strip_traces(s, deliveries)
+        kept.extend(deliveries)
         if not quiet:
-            print(describe(s, journey, tenant))
+            print(describe(s, journey, tenant if s.traces else None))
+    all_deliveries = kept
     gen.save()
     all_deliveries.sort(key=lambda d: d["due"])
     # Backend traces go first so Chronosphere has them before Embrace forwards the client spans.

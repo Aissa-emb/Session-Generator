@@ -31,6 +31,17 @@ class SecurityTests(unittest.TestCase):
     def config(self):
         return load_config(None)
 
+    def test_keychain_lookup_keeps_service_and_account_with_their_flags(self):
+        from xcorgen.secrets import resolve
+        for reference, expected in (
+            ('keychain:Session-Generator/chronosphere', ['-s', 'Session-Generator', '-a', 'chronosphere', '-w']),
+            ('keychain:Session-Generator', ['-s', 'Session-Generator', '-w']),
+        ):
+            with self.subTest(reference=reference), patch('xcorgen.secrets.subprocess.run', return_value=Mock(stdout='fixture-value\n')) as lookup:
+                self.assertEqual(resolve(reference), 'fixture-value')
+                lookup.assert_called_once_with(['/usr/bin/security', 'find-generic-password', *expected],
+                    capture_output=True, text=True, timeout=10, check=True)
+
     def test_rejects_untrusted_url_forms(self):
         for url in ("file:///etc/passwd", "ftp://example.com", "http://example.com",
                     "https://user:password@example.com", "https://example.com?token=secret",

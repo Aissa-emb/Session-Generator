@@ -23,6 +23,8 @@ import sys
 from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+from xcorgen.web_contract import COMMON, LOG_COMMON as WEB_LOG_COMMON, EXTRA, compatible, check as check_web
 REF = os.path.join(ROOT, "reference", "web-sdk-2.31.0-capture")
 TP = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-01$")
 
@@ -33,6 +35,10 @@ CUSTOM_OK = re.compile(r"^(emb\.properties\.|journey\.|product\.|checkout\.|orde
 # rather than treating them as built-in keys present in the reference capture.
 CUSTOM_TASK_ATTRIBUTES = {"app.operation": "stringValue", "app.fallback.used": "boolValue",
                           "http.response.status_code": "intValue"}
+from xcorgen.causal.registry import PROVENANCE, SERVICES
+CAUSAL_ATTRIBUTES = {k: 'boolValue' if k in ('demo.synthetic','demo.feature.detail_optional','demo.feature.transfer_view') else 'stringValue' for k in PROVENANCE}
+CAUSAL_ATTRIBUTES.update({k:'stringValue' for k in ('response.schema','response.merchant.display_name','view.state','script.origin')})
+CAUSAL_ATTRIBUTES['interaction.processing_ms']='number'
 
 
 GOLDEN = os.path.join(ROOT, "reference", "android-sdk-golden")
@@ -58,6 +64,9 @@ def golden_session_keys():
     for name in ("user_session_basic_span.json", "user_session_jvm_crash_span.json"):
         keys.update(a["key"] for a in json.load(open(os.path.join(GOLDEN, name)))["attributes"])
     return keys
+
+
+no_forwarding = [0]
 
 
 def check_envelope(doc, problem, client_spans, devices):
@@ -107,10 +116,17 @@ def check_envelope(doc, problem, client_spans, devices):
             if missing:
                 problem(f"span missing common attributes {missing}: {s['name']}")
         if a.get("emb.type") == "perf.network_request":
-            url, tp = a["url.full"], a.get("emb.w3c_traceparent", "")
+            url, tp = a["url.full"], a.get("emb.w3c_traceparent")
             path = url.split("/", 3)[3] if url.count("/") >= 3 else ""
             if s["name"] != f"emb-{a['http.request.method']} /{path}" or "?" in url:
                 problem("network span name must be 'emb-<METHOD> <path>' with the query stripped")
+            if (tp is None) != ("emb.forward_telemetry" not in a):
+                problem("emb.w3c_traceparent and emb.forward_telemetry are set together, only for forwarded domains")
+            if tp is None:
+                no_forwarding[0] += 1
+                continue
+            if a.get("emb.forward_telemetry") != "true":
+                problem("emb.forward_telemetry must be the string true when forwarding is on")
             m = TP.match(tp)
             if not m or m.group(1) != s["trace_id"] or m.group(2) != s["span_id"]:
                 problem("traceparent does not match the network span IDs")
@@ -149,8 +165,17 @@ def kind_of(item):
 
 def reference_schema():
     schema = defaultdict(dict)
-    for fn in glob.glob(os.path.join(REF, "*.json")):
-        body = json.load(open(fn))["body"]
+    paths = glob.glob(os.path.join(REF, "*.json")) + glob.glob(os.path.join(ROOT, "reference", "web-sdk-golden", "*.json"))
+    paths += glob.glob(os.path.join(ROOT, "reference", "web-sdk-2.29-sample", "*.json"))
+    documents = [json.load(open(fn)) for fn in paths]
+    for fn in glob.glob(os.path.join(ROOT, "reference", "web-sdk-2.29-sample", "*.jsonl")):
+        documents.extend(json.loads(line) for line in open(fn) if line.strip())
+    for doc in documents:
+        if not isinstance(doc, dict):
+            continue
+        body = doc.get("body", doc.get("payload", doc))
+        if not isinstance(body, dict):
+            continue
         for rs in body.get("resourceSpans", []) + body.get("resourceLogs", []):
             for a in rs["resource"]["attributes"]:
                 schema["resource"][a["key"]] = vtype(a["value"])
@@ -189,9 +214,18 @@ def main(d):
         doc = json.load(open(fn))
         p = doc["payload"]
         if doc.get("fmt") == "envelope":
-            check_envelope(doc, problem, browser_spans, devices)
+            if p.get('resource',{}).get('sdk_platform')=='ios':
+                from xcorgen.ios_contract import check as check_ios
+                check_ios(doc,problem,browser_spans,devices)
+            else:
+                check_envelope(doc, problem, browser_spans, devices)
             continue
         if doc["target"] == "embrace":
+            # V2 uses the current SDK lifecycle; V1's historical adapter remains checked by its capture.
+            resource = (p.get("resourceSpans") or p.get("resourceLogs"))[0]["resource"]
+            app_version = next((a["value"].get("stringValue", "") for a in resource["attributes"] if a["key"] == "app_version"), "")
+            if app_version.startswith("2026."):
+                check_web(p, problem)
             res = p.get("resourceSpans") or p.get("resourceLogs")
             if len(res) != 1:
                 problem("embrace payload must have exactly one resource")
@@ -201,25 +235,33 @@ def main(d):
                 ref = schema["resource"].get(a["key"])
                 if ref is None:
                     problem(f"resource key not in capture: {a['key']}")
-                elif ref != vtype(a["value"]):
+                elif not compatible(vtype(a["value"]), ref):
                     problem(f"resource {a['key']}: {vtype(a['value'])} vs {ref}")
             groups = [("span", ss["scope"]["name"], ss["spans"]) for ss in res[0].get("scopeSpans", [])] + \
                      [("log", sl["scope"]["name"], sl["logRecords"]) for sl in res[0].get("scopeLogs", [])]
             for what, scope, items in groups:
                 for it in items:
                     k = (what, scope, kind_of(it))
-                    if k[2] not in ("ux.surface", "perf") and k not in schema:
+                    if k[2] not in ("ux.surface", "perf") and k not in schema and scope not in EXTRA and scope != "@opentelemetry/instrumentation-xml-http-request":
                         # Surface span names are routes and perf spans are custom; others must exist in the capture.
                         problem(f"{what} type not in capture: {k}")
                         continue
-                    ref = schema.get(k) or schema.get(next((x for x in schema if x[:2] == k[:2]), None), {})
+                    ref = dict(schema.get(k) or schema.get(next((x for x in schema if x[:2] == k[:2]), None), {}))
+                    if scope == "@opentelemetry/instrumentation-xml-http-request":
+                        ref.update(schema.get(("span", "@opentelemetry/instrumentation-fetch", "perf.network_request"), {}))
+                    ref.update(COMMON)
+                    if what == "log":
+                        ref.update(WEB_LOG_COMMON)
+                    ref.update(EXTRA.get(scope, {}))
                     for a in it.get("attributes", []):
                         r = ref.get(a["key"])
                         if r is None and k[2] == "perf":
                             r = CUSTOM_TASK_ATTRIBUTES.get(a["key"])
+                        if r is None and k[2] in ('perf','sys.exception'):
+                            r = CAUSAL_ATTRIBUTES.get(a['key'])
                         if r is None and not CUSTOM_OK.match(a["key"]):
                             problem(f"{k[1]}/{k[2]}: key not in capture: {a['key']}")
-                        elif r is not None and r != vtype(a["value"]) and r != "empty":
+                        elif r is not None and not compatible(vtype(a["value"]), r) and r != "empty":
                             problem(f"{k[1]}/{k[2]}: {a['key']} is {vtype(a['value'])}, capture has {r}")
                     for e in it.get("events", []):
                         er = schema.get(("event", e["name"]))
@@ -249,6 +291,21 @@ def main(d):
         b = browser_spans.get(tid)
         if not b:
             roots = [s for _, s in spans if not s.get("parentSpanId")]
+            all_nodes={(t,s['spanId']):s for t,group in backend.items() for _,s in group}
+            if roots and all(svc in SERVICES for svc,_ in spans) and all(s.get('links') and s['kind'] in (1,5) for s in roots):
+                ids={s['spanId']:s for _,s in spans}
+                for _,s in spans:
+                    a={x['key']:next(iter(x['value'].values())) for x in s['attributes']}
+                    if a.get('demo.synthetic') is not True: problem('async trace lacks synthetic provenance')
+                    parent=ids.get(s.get('parentSpanId'))
+                    if s.get('parentSpanId') and not parent: problem('async trace has missing parent')
+                    if int(s['endTimeUnixNano']) < int(s['startTimeUnixNano']): problem('async negative duration')
+                    if parent and not (int(parent['startTimeUnixNano'])<=int(s['startTimeUnixNano'])<=int(s['endTimeUnixNano'])<=int(parent['endTimeUnixNano'])):
+                        problem('async child outside its synchronous parent')
+                    for link in s.get('links',[]):
+                        cause=all_nodes.get((link['traceId'],link['spanId']))
+                        if not cause or int(cause['endTimeUnixNano']) > int(s['startTimeUnixNano']):problem('async link missing or precedes cause')
+                continue
             if len(roots) == 1 and roots[0]["name"] == "authorization_worker.batch":
                 a = {x["key"]: next(iter(x["value"].values())) for x in roots[0]["attributes"]}
                 if a.get("workload.source") == "scheduled_authorizations" and len(spans) == 52:
@@ -281,7 +338,8 @@ def main(d):
         if root and int(root["endTimeUnixNano"]) > int(b["endTimeUnixNano"]):
             problem("backend root ends after the browser span")
 
-    print(f"{len(browser_spans)} API network spans with traceparent, {len(backend)} backend traces")
+    print(f"{len(browser_spans)} API network spans with traceparent, {len(backend)} backend traces"
+          + (f", {no_forwarding[0]} network spans without forwarding (sessions only)" if no_forwarding[0] else ""))
     n_spans = sum(len(v) for v in backend.values())
     services = {svc for v in backend.values() for svc, _ in v}
     print(f"{n_spans} backend spans across {len(services)} services; "
@@ -291,7 +349,7 @@ def main(d):
         for msg, n in sorted(problems.items(), key=lambda x: -x[1]):
             print(f"  {n:5d}  {msg}")
         return 1
-    print("OK: payloads match the SDK formats and every backend trace hangs off its client network span")
+    print("OK: SDK payloads and client/worker trace relationships validated")
     return 0
 
 

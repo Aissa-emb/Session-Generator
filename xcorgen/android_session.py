@@ -19,6 +19,7 @@ from contextlib import contextmanager
 
 from . import otlp
 from .calls import Result, deliver_backend, release_backend, simulate
+from .catalog import NETWORK_FAILURES
 from .profiles import ENTRY_POINTS, SHARED_ANDROID_APP
 from .util import emb_id, hex_id, lat, uuid4, weighted
 
@@ -84,39 +85,48 @@ def view_name(html):
 
 
 class Part:
-    def __init__(self, index, number, start, start_type, cold):
-        self.id = emb_id()
+    def __init__(self, index, number, start, start_type, cold, rng=random):
+        self.id = emb_id(rng)
         self.index, self.number, self.start, self.start_type, self.cold = index, number, start, start_type, cold
         self.end = None
         self.spans, self.events, self.logs = [], [], []
-        self.trace_id, self.span_id = hex_id(16), hex_id(8)
+        self.trace_id, self.span_id = hex_id(16, rng), hex_id(8, rng)
         self.error_logs = 0
         self.crash_id = None
         self.end_type = "state"
 
 
+def pick_version(versions, persona, rng=random):
+    """Installed app version: a returning device keeps its version, a new one follows adoption shares."""
+    installed = next((x for x in versions if x[0] == persona.get("installed_version")), None)
+    return installed[:3] if installed else weighted([((v, c, s), w) for v, c, s, w in versions], rng)
+
+
 class AndroidSession:
     def __init__(self, profile, persona, app_id, start_ms, incident=None, emit_client_spans=False, rng=random,
-                 shared=False):
+                 shared=False, app=None, version=None):
         self.profile, self.persona, self.app_id, self.rng = profile, persona, app_id, rng
         self.incident, self.emit_client_spans = incident, emit_client_spans
+        # Whether network requests carry a forwarded traceparent and produce backend traces
+        # (end-to-end mode, and only for activity Cortex XCOR can still ingest).
+        self.traces = True
         if shared:
             self.app = dict(profile.android, **SHARED_ANDROID_APP)
             self.api_host = profile.android["shared_api_host"]
         else:
             self.app = profile.android
             self.api_host = profile.api_host
+        if app:
+            self.app = dict(self.app, **app)
+            self.api_host = self.app.get("api_host", self.api_host)
         self.t = self.start_ms = start_ms
-        versions = self.app["versions"]
-        installed = next((x for x in versions if x[0] == persona.get("installed_version")), None)
-        self.app_version, self.version_code, self.sdk_version = (installed[:3] if installed else weighted(
-            [((v, c, s), w) for v, c, s, w in versions], rng))
+        self.app_version, self.version_code, self.sdk_version = version or pick_version(self.app["versions"], persona, rng)
         if persona.get("installed_version") != self.app_version:
             persona["installed_version"] = self.app_version
             persona["version_starts"] = 0
         persona["version_starts"] = persona.get("version_starts", 0) + 1
         self.process_id = hex_id(8, rng)
-        self.user_session_id = emb_id()
+        self.user_session_id = emb_id(rng)
         self.previous_user_session_id = persona["previous_user_session_id"]
         self.user_session_number = persona["user_session_number"] + 1
         self.part_number = persona["session_part_number"]
@@ -136,9 +146,10 @@ class AndroidSession:
             self.login()  # one account across the app: signed-in users stay signed in
 
     def _shared_properties(self):
-        props = {"business_unit": self.app["business_unit"], "market": "US",
+        market = weighted(self.app["markets"], self.rng) if self.app.get("markets") else "US"
+        props = {"business_unit": self.app["business_unit"], "market": market,
                  "membership_tier": self.persona["traits"].get("membership", "standard"),
-                 "entry_point": weighted(ENTRY_POINTS, self.rng)}
+                 "entry_point": weighted(self.app.get("entry_points") or ENTRY_POINTS, self.rng)}
         props.update({k: v for k, v in self.profile.properties(self.persona, self.rng).items()
                       if k not in SHARED_REPLACED_PROPERTIES})
         return props
@@ -203,13 +214,13 @@ class AndroidSession:
         a.update({f"emb.properties.{k}": v for k, v in self.properties.items()})
         a.update({"emb.state.network": self.persona["network"],
                   "emb.state.screen-automatic": self.screen["route"] if self.screen else "Initializing",
-                  "log.record.uid": emb_id()})
+                  "log.record.uid": emb_id(self.rng)})
         return a
 
     def _span(self, name, start, end, attrs, status="Unset", trace_id=None, span_id=None, parent=None, events=None):
         a = dict(attrs)
         a.update(self._span_common())
-        span = {"trace_id": trace_id or hex_id(16), "span_id": span_id or hex_id(8),
+        span = {"trace_id": trace_id or hex_id(16, self.rng), "span_id": span_id or hex_id(8, self.rng),
                 "parent_span_id": parent or "0000000000000000", "name": name,
                 "start_time_unix_nano": nanos(start), "end_time_unix_nano": nanos(end), "status": status,
                 "events": events or [], "attributes": kv(a)}
@@ -219,21 +230,30 @@ class AndroidSession:
     # --- time ----------------------------------------------------------------------
 
     def wait(self, lo_s, hi_s):
-        self.t += self.rng.uniform(lo_s, hi_s) * 1000
+        if getattr(self, "population_settings", {}).get("model") == "varied" and lo_s >= 2 and hi_s >= 5:
+            from .population import read
+            return read(self, max(3, lo_s), max(15, hi_s))
+        from .modeling import sample
+        self.t += sample(self, "reading_ms", lambda: self.rng.uniform(lo_s, hi_s) * 1000) if lo_s >= 2 and hi_s >= 5 else self.rng.uniform(lo_s, hi_s) * 1000
 
     def _think(self):
         self.t += self.rng.uniform(60, 260)
 
     def type_text(self, chars):
-        self.t += chars * self.rng.uniform(170, 360)
+        from .modeling import sample
+        if getattr(self, "population_settings", {}).get("model") == "varied":
+            self.t += sum(sample(self, "typing_ms", lambda: self.rng.triangular(200, 800, 300)) for _ in range(chars))
+        else:
+            self.t += chars * sample(self, "typing_ms", lambda: self.rng.uniform(170, 360))
 
     # --- lifecycle -------------------------------------------------------------------
 
     def _start_part(self, start_type):
         index = 1 if self.part is None else self.part.index + 1
         self.part_number += 1
-        cold = index == 1 and self.rng.random() < 0.78
-        self.part = Part(index, self.part_number, self.t, start_type, cold)
+        cold = index == 1 and (self.forced_cold_start if hasattr(self, 'forced_cold_start') else
+            self.rng.random() < 0.78 or bool(getattr(getattr(self, "plan", None), "slow_startup", None)))
+        self.part = Part(index, self.part_number, self.t, start_type, cold, self.rng)
         if index == 1:
             self._startup(cold)
 
@@ -277,7 +297,7 @@ class AndroidSession:
                    "name": "emb-session", "start_time_unix_nano": nanos(part.start),
                    "end_time_unix_nano": nanos(part.end), "status": "Error" if part.crash_id else "Unset",
                    "events": sorted(part.events, key=lambda e: e["time_unix_nano"]), "attributes": kv(a)}
-        net = {"trace_id": hex_id(16), "span_id": hex_id(8), "parent_span_id": "0000000000000000",
+        net = {"trace_id": hex_id(16, self.rng), "span_id": hex_id(8, self.rng), "parent_span_id": "0000000000000000",
                "name": "emb-network-status", "start_time_unix_nano": nanos(part.start),
                "end_time_unix_nano": nanos(part.end), "status": "Unset", "events": [],
                "attributes": kv(dict({"emb.type": "sys.network_status", "network": self.persona["network"]},
@@ -328,8 +348,10 @@ class AndroidSession:
     def _startup(self, cold):
         rng, mid = self.rng, self.persona["model"]
         slow = 1.0 if any(x in mid for x in ("SM-S9", "Pixel 9", "Pixel 10", "SM-F9", "CPH")) else 1.6
+        if self.persona.get("population_model"):
+            slow = self.persona["cpu_factor"]
         t0 = self.t
-        tid, root = hex_id(16), hex_id(8)
+        tid, root = hex_id(16, self.rng), hex_id(8, self.rng)
         act = self.app["activity"]
         root_attrs = {"emb.type": "perf", "emb.startup_activity": act}
         if int(self.persona["os_version"]) >= 15:
@@ -340,6 +362,20 @@ class AndroidSession:
             gap = lat(40, 160, rng) * slow
             create = lat(90, 260, rng) * slow
             render = lat(120, 420, rng) * slow
+            regression = getattr(getattr(self, "plan", None), "slow_startup", None)
+            if regression:
+                # The regressed phase absorbs the extra time: application init (process start and
+                # Application.onCreate), SDK init, or first render of the launch activity.
+                total = rng.uniform(regression.get("min_ms", 4200), regression.get("max_ms", 7500))
+                extra = max(0.0, total - (proc + init + gap + create + render))
+                phase = regression.get("phase", "application_init")
+                if phase == "sdk_init":
+                    init += extra
+                elif phase == "first_render":
+                    render += extra * .7
+                    create += extra * .3
+                else:
+                    proc += extra
             t1, t2, t3, t4 = t0 + proc, t0 + proc + init, t0 + proc + init + gap, t0 + proc + init + gap + create
             end = t4 + render
             self._span("emb-process-init", t0, t1, {"emb.type": "perf"}, trace_id=tid, parent=root)
@@ -480,7 +516,7 @@ class AndroidSession:
         return jtype, jmsg, frames
 
     def _crash(self, jtype, jmsg, frames):
-        crash_id = emb_id()
+        crash_id = emb_id(self.rng)
         self.part.crash_id = crash_id
         self.crash_evidence = {"record_id": crash_id, "part_id": self.part.id, "time_ms": self.t,
                                "exception_type": jtype, "message": jmsg, "frames": frames}
@@ -535,24 +571,24 @@ class AndroidSession:
         c = simulate(self, key, params, start, self.rng)
         url = c.url.split("?")[0]
         path = url.split(self.api_host, 1)[1] or ""
-        a = {"emb.type": "perf.network_request", "url.full": url, "http.request.method": c.ep.method,
-             "emb.w3c_traceparent": c.traceparent, "emb.forward_telemetry": True,
-             "http.response.status_code": c.status, "http.request.body.size": c.request_bytes,
-             "http.response.body.size": c.response_bytes, "user_agent.name": "okhttp", "user_agent.version": "4.12.0"}
+        a = {"emb.type": "perf.network_request", "url.full": url, "http.request.method": c.ep.method}
+        if self.traces:
+            # NetworkRequestDataSourceImpl sets both only for domains with network span forwarding.
+            a.update({"emb.w3c_traceparent": c.traceparent, "emb.forward_telemetry": True})
+        a.update({"http.response.status_code": c.status, "http.request.body.size": c.request_bytes,
+                  "http.response.body.size": None if c.transport else c.response_bytes,
+                  "user_agent.name": "okhttp", "user_agent.version": "4.12.0"})
         failed = c.status is None or c.status >= 400
         if c.transport:
-            errors = {"dns": ("java.net.UnknownHostException", "Unable to resolve host"),
-                      "offline": ("java.net.ConnectException", "Network is unreachable"),
-                      "reset": ("java.net.SocketException", "Connection reset before request headers"),
-                      "timeout": ("java.net.SocketTimeoutException", "Connect timed out"),
-                      "cancelled": ("java.io.IOException", "Canceled")}
-            a["error.type"], a["exception.message"] = errors[c.transport]
-            a["emb.forward_telemetry"] = False
+            # OkHttpDataSource: error.type is the exception's canonical class name, exception.message its message.
+            exc, message, _ = NETWORK_FAILURES[c.transport]
+            a["error.type"], a["exception.message"] = exc, message.format(host=self.api_host)
         if failed:
             a["emb.error_code"] = "failure"
         self._span(f"emb-{c.ep.method} {path}", start, c.end, a, status="Error" if failed else "Unset",
                    trace_id=c.trace_id, span_id=c.span_id)
-        deliver_backend(self, c, self.rng)
+        if self.traces:
+            deliver_backend(self, c, self.rng)
         self.calls.append((key, c.status, c.trace_id))
         return Result(c.status, c.outcome, c.data, c.trace_id, start, c.end)
 
@@ -583,18 +619,18 @@ class AndroidSession:
         return self.deliveries
 
 
-ENVELOPE_TIME_KEYS = ("start_time_unix_nano", "end_time_unix_nano", "time_unix_nano")
+ENVELOPE_TIME_KEYS = ("start_time_unix_nano", "end_time_unix_nano", "time_unix_nano", "process_start_time")
 
 
 def shift_envelope(obj, delta_ns):
     """Shift every timestamp in an Embrace envelope (integer nanoseconds; user session start in ms)."""
     if isinstance(obj, dict):
         for k, v in obj.items():
-            if k in ENVELOPE_TIME_KEYS and isinstance(v, int):
-                obj[k] = v + delta_ns
+            if k in ENVELOPE_TIME_KEYS and (isinstance(v,int) or isinstance(v,str) and v.isdigit()):
+                obj[k] = str(int(v)+delta_ns) if isinstance(v,str) else v+delta_ns
             elif k == "key" and v == "emb.user_session_start_ts":
                 obj["value"] = str(int(obj["value"]) + delta_ns // 1_000_000)
-            elif k == "key" and v == "last_known_time_unix_nano":
+            elif k == "key" and v in ("last_known_time_unix_nano","emb.heartbeat_time_unix_nano"):
                 obj["value"] = str(int(obj["value"]) + delta_ns)
             elif k == "key" and v == "account.snapshot_as_of_ms":
                 obj["value"] = str(int(obj["value"]) + delta_ns // 1_000_000)

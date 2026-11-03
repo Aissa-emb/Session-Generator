@@ -12,6 +12,7 @@ from xcorgen import otlp
 from google.protobuf import json_format
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest
+from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
 
 def norm_ids(obj):
     # OTLP/JSON uses hex IDs; protobuf's canonical JSON uses base64 for bytes.
@@ -29,12 +30,15 @@ files = sorted(glob.glob(sys.argv[1] + '/*otlp_*.json')) + sorted(glob.glob(sys.
 for f in files:
     d = json.load(open(f))
     p = d['payload']
-    is_trace = 'resourceSpans' in p
-    raw = (otlp.encode_traces if is_trace else otlp.encode_logs)(p)
-    msg = (ExportTraceServiceRequest if is_trace else ExportLogsServiceRequest)()
+    if d.get('fmt') == 'envelope': continue
+    encoder, cls = ((otlp.encode_traces, ExportTraceServiceRequest) if 'resourceSpans' in p else
+                    (otlp.encode_metrics, ExportMetricsServiceRequest) if 'resourceMetrics' in p else
+                    (otlp.encode_logs, ExportLogsServiceRequest))
+    raw = encoder(p)
+    msg = cls()
     msg.ParseFromString(raw)
     # Reference: parse our JSON with the official parser, then compare messages field by field.
-    ref = (ExportTraceServiceRequest if is_trace else ExportLogsServiceRequest)()
+    ref = cls()
     json_format.ParseDict(norm_ids(json.loads(json.dumps(p))), ref, ignore_unknown_fields=False)
     n += 1
     if msg != ref:
@@ -42,3 +46,4 @@ for f in files:
         if bad < 3:
             print('MISMATCH', f)
 print(f'{n} payloads round-tripped, {bad} mismatches')
+sys.exit(bool(bad))

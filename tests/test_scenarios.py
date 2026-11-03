@@ -211,11 +211,22 @@ class ScenarioTests(unittest.TestCase):
     def test_no_backend_or_http_status_for_pre_server_transport_failure(self):
         from xcorgen.calls import simulate
         s = generate("banking", primary="clean")
-        for cause in ("dns", "offline", "reset", "timeout", "cancelled"):
+        for cause in ("dns", "offline", "cancelled", "tls"):
             c = simulate(s, "accounts", {"_transport": cause}, s.t)
             self.assertIsNone(c.status)
             self.assertIsNone(c.trace_build)
             self.assertEqual(c.response_bytes, 0)
+
+    def test_timeout_after_gateway_keeps_backend_trace_without_client_response(self):
+        from xcorgen.calls import simulate
+        s = generate("banking", primary="clean")
+        for cause in ("timeout", "reset"):
+            c = simulate(s, "accounts", {"_transport": cause}, s.t)
+            self.assertIsNone(c.status)
+            self.assertEqual(c.response_bytes, 0)
+            self.assertIsNotNone(c.trace_build)
+            backend_end = max(int(x["endTimeUnixNano"]) for _, _, _, x in c.trace_build.spans) / 1e6
+            self.assertLessEqual(backend_end, c.end)
 
     def test_idempotency_replay_never_reauthorizes_or_confirms_pending(self):
         from xcorgen.calls import simulate

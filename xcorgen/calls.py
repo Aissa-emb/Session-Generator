@@ -11,6 +11,7 @@ import random
 from . import backend
 from .util import hex_id, lat, weighted
 from .scenarios import REQUEST
+from .catalog import REACHED_SERVER
 
 
 class Result:
@@ -58,7 +59,13 @@ class Call:
 
 def simulate(session, key, params, start, rng=random):
     """Pick an outcome, build the backend trace and lay out the network phases of the request."""
+    if hasattr(session, "execution"):
+        from .causal.adapter import planned_call
+        return planned_call(session, key, start)
     profile, p = session.profile, session.persona
+    model = getattr(session, "performance_model", None)
+    if model:
+        model.expose(key)
     ep = profile.endpoints[key]
     weights = dict(ep.outcomes)
     for name, w in (profile.incidents.get(session.incident, {}).get(key, {}) or {}).items():
@@ -67,20 +74,35 @@ def simulate(session, key, params, start, rng=random):
     outcome = req["outcome"] if req else weighted(list(weights.items()), rng)
     token = REQUEST.set(req)
     replayed = False
+    transport = params.get("_transport")
+    # Timeouts and resets happen after the request reached the gateway, so the backend still did the work.
+    reached = transport is None or transport in REACHED_SERVER
     try:
         prior = req["plan"].runtime.operations.get(req["plan"].operation_id) if req else None
-        if not params.get("_transport") and key in ("place_order", "create_booking", "create_transfer") and prior and prior["state"] in ("confirmed", "pending"):
+        if reached and key in ("place_order", "create_booking", "create_transfer") and prior and prior["state"] in ("confirmed", "pending"):
             from .operations import replay
             root, status, data = replay(Ctx(session, params, outcome), prior, ep)
             replayed = True
+        elif reached and req and req.get("backend_fault"):
+            from .backend_faults import build
+            root, status, data = build(Ctx(session, params, outcome), ep, key, req["backend_fault"])
+        elif reached and req and req.get("http_error"):
+            from .generic_faults import http_error
+            root, status, data = http_error(Ctx(session, params, outcome), ep, key, req["http_error"])
         else:
-            root, status, data = ep.build(Ctx(session, params, outcome)) if not params.get("_transport") else (None, None, {})
+            root, status, data = ep.build(Ctx(session, params, outcome)) if reached else (None, None, {})
     finally:
         REQUEST.reset(token)
+    server_status = status
+    if root and params.get("_origin_latency"):
+        root.min_ms = max(root.min_ms or 0, params["_origin_latency"])
 
     trace_id, span_id = hex_id(16, rng), hex_id(8, rng)
     host = session.api_host
-    rtt = p["rtt"] * rng.uniform(0.85, 1.3)
+    from .modeling import sample
+    rtt = sample(session, "network_rtt_ms", lambda: p["rtt"] * rng.uniform(0.85, 1.3), key)
+    if root and model:
+        root.modeled_cost = lambda fallback: model.sample("backend_work_ms", fallback, key)
     first = host not in session.connected_hosts
     session.connected_hosts.add(host)
     dns = lat(5, 25, rng) if first else 0.0
@@ -88,20 +110,28 @@ def simulate(session, key, params, start, rng=random):
     tls = rtt * rng.uniform(1.0, 1.4) if first else 0.0
     req_start = start + rng.uniform(0.3, 4) + dns + tcp + tls
     context = req["attributes"] if req else {}
-    tb = backend.build_trace(root, trace_id, span_id, req_start + rtt / 2, rng, context) if root else None
+    build_context = dict(context, _service_versions=req.get("service_versions", {})) if req else context
+    tb = backend.build_trace(root, trace_id, span_id, req_start + rtt / 2, rng, build_context) if root else None
     size = (rng.randint(*ep.size) if status < 400 else rng.randint(90, 420)) if root else 0
-    resp_start = root.end + rtt / 2 if root else start + (1200 if params.get("_transport") == "dns" else 450)
+    resp_start = root.end + rtt / 2 if root else start + (1200 if transport == "dns" else 450)
     resp_end = resp_start + size * 8 / (p["mbps"] * 1000) + rng.uniform(0.2, 2.5)
     end = resp_end + rng.uniform(0.4, 3)
+    if transport:
+        # The client never receives a response: no status code and no response body.
+        status, size = None, 0
+        if transport == "timeout":
+            end = max(end, req_start + rng.choice((10_000, 15_000, 30_000)) + rng.uniform(0, 40))
+        elif transport == "reset":
+            end = max(end, resp_start + rng.uniform(1, 30))
     marks = {"dns": dns, "tcp": tcp, "tls": tls, "req_start": req_start, "resp_start": resp_start,
              "resp_end": resp_end, "first": first}
     call = Call(ep, f"https://{host}{ep.path(params)}", status, outcome, data, trace_id, span_id, marks, start, end, tb)
     call.response_bytes = size
     call.request_bytes = rng.randint(180, 1400) if ep.method in ("POST", "PUT", "PATCH") else 0
-    call.transport = params.get("_transport")
+    call.transport = transport
     call.context = context
-    if req and not replayed and key in ("place_order", "create_booking", "create_transfer") and status is not None:
-        state = "confirmed" if status < 400 else "pending" if status == 504 and key != "create_transfer" else "not_submitted"
+    if req and not replayed and key in ("place_order", "create_booking", "create_transfer") and server_status is not None:
+        state = data.get("state") or ("confirmed" if server_status < 400 else "pending" if server_status == 504 and key != "create_transfer" else "not_submitted")
         req["plan"].runtime.operations[req["plan"].operation_id] = dict(data, state=state)
         if len(req["plan"].runtime.operations) > 20000:
             req["plan"].runtime.operations.pop(next(iter(req["plan"].runtime.operations)))
@@ -113,7 +143,8 @@ def simulate(session, key, params, start, rng=random):
             "backend_errors": sum(bool(n[3].get("status", {}).get("code") == 2) for n in tb.spans) if tb else 0,
             "first_backend_span_id": tb.spans[0][3]["spanId"] if tb else None})
     from .pool_evidence import companions
-    call.companions = companions(call, req)
+    # Occupant traces are only produced for sessions whose traces Cortex XCOR can still ingest.
+    call.companions = companions(call, req) if getattr(session, "traces", True) else []
     return call
 
 

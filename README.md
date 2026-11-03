@@ -1,10 +1,48 @@
-# XCOR demo data generator
+# Session Generator V2
 
-This project creates realistic demo sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. All of that activity is simulated by the generator; it does not run a real app or backend.
+This project creates realistic Android, iOS and web sessions for shopping, banking and travel, including normal activity, slow requests, errors, crashes and freezes. The guided UI and REST API configure one versioned ScenarioSpec. All of that activity is simulated by the generator; it does not run a real app or backend.
 
-The generator sends session data directly to Embrace using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Embrace's Network Spans Forwarding integration sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the Embrace session timeline.
+The generator sends session data directly to XCOR RUM using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Network Spans Forwarding sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the XCOR RUM session timeline when forwarding and retention are configured.
 
-Three lines of business are included:
+## Start Session Generator
+
+Use Python 3.12+ and Node.js 22+ for the control server and UI. The core CLI remains dependency-free.
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r server/requirements.txt
+npm --prefix apps/web ci
+npm --prefix apps/web run build
+python3 tools/studio.py start --open
+```
+
+After setup, double-click **Start Session Generator.command** in the project folder, or use the start command above. The server runs in the background after the terminal closes. It reuses an existing server and never replaces another application on the port. No LaunchAgent is installed or changed.
+
+The UI has one four-step workflow:
+
+1. **Destination:** choose Android, iOS and/or web, enter each app's five-character ID and name, then choose sessions only or sessions plus distributed traces. For traces, enter your Chronosphere tenant and API token. The token stays on the server; it is never stored in the browser draft.
+2. **Customize:** choose a healthy population, a performance regression, a failure, or one of nine connected diagnostic stories from one Scenario picker. Optional **Fine-tune** settings cover population and intent weights, eight distribution families, audience effects, sticky experiments, and release adoption.
+3. **Preview:** inspect locally generated timelines, fault rates, web performance and a real backend trace waterfall. Preview sends nothing.
+4. **Send:** choose destination delivery or a **Local test**. A batch stops after its configured count. **Continuous sending** uses an average sessions-per-minute rate for 30 minutes, one hour, two hours or a custom duration. The running view shows a live receipt timeline, fully acknowledged sessions, backend spans, elapsed/remaining time and pause/stop controls. XCOR RUM uploads are counted by complete session; backend logs and metrics do not inflate the span total. Storage is marked unverified because an ingestion acknowledgement does not prove retention. Refreshing restores the current run.
+
+Continuous traffic uses randomized intervals around the chosen average. Keep the server running and the Mac awake. Pausing stops new sessions and drains in-flight sessions; the scheduled end time stays fixed. At the duration limit, new sessions stop and pending payloads finish. Stopping flushes pending deliveries. API acceptance is not proof of dashboard visibility.
+
+```sh
+python3 tools/studio.py status
+python3 tools/studio.py stop  # Stop active/paused runs in the UI first.
+```
+
+The server log is `.state/studio/server.log`. If the UI reports the server is offline, start it again and click **Reconnect**. Choices are saved on this device. Unconfirmed start requests retain an idempotency key, so retrying does not create a duplicate job.
+
+AI/Copilot and MCP controls have been removed from the UI. Their experimental HTTP endpoints are disabled by default; the legacy implementation remains behind `SG_ENABLE_EXPERIMENTAL=1` for future development. No model key is needed for this workflow.
+
+[Owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) lists app forwarding and live checks; [hosting](docs/v2/HOSTING.md) covers authenticated containers and deployment.
+
+[Statistical modeling](docs/v3/ADOPTION.md) describes the selectively adopted V3 features, their limits, and how modeled inputs relate to serialized outcomes. Try `spec/examples/performance-tail.json` locally with `generate.py run … --dry-run`; its `reports/signals.json` keeps component distributions separate from observed request durations.
+
+[Visitor distributions](docs/v2/POPULATION-MODEL.md) explains the varied Android, iOS and web visit model, native cold/warm starts, conditional performance, configurable weights and offline population audit. New standard/regression runs use it by default; existing saved specs retain their behavior.
+
+[Causal telemetry](docs/v2/CAUSAL-TELEMETRY.md) documents the new canonical service catalog, three-platform fixtures, ready-to-run examples, evidence gates and both presenter navigation directions. The existing standard/regression profiles remain available:
 
 | Profile | Brand | What visitors do | Backend |
 | --- | --- | --- | --- |
@@ -12,21 +50,44 @@ Three lines of business are included:
 | `banking` | Money (Corvia Bank when it has its own app) | Sign in with MFA, check balances and transactions, transfers, bill pay, statements, card lock | `banking-experience-api`, `strong-auth-service`, `account-summary-service`, `core-banking-gateway`, `transaction-history-service` (Cassandra), `payee-management-service`, `funds-transfer-service`, `transaction-limits-service`, `payment-rails-gateway`, `general-ledger-service` (Kafka), `bill-payment-service`, `card-management-service`, `statement-rendering-service` |
 | `travel` | Travel (Vantra Travel) | Search flights and hotels, review fares, book, manage trips | `travel-experience-api`, `geo-location-service`, `air-shopping-service` with parallel supplier fan-out (`gds-connector-service`, `ndc-connector-service`), `fare-pricing-service`, `fare-rules-service`, `lodging-search-service`, `lodging-content-service`, `reservation-service`, `pnr-management-service`, `loyalty-accrual-service`, `trip-itinerary-service`, `ticketing-fulfillment-worker` (Kafka) |
 
+## V2: runs described by a ScenarioSpec
+
+On the `v2` branch, a run is described by one JSON document, the ScenarioSpec (`spec/scenario.schema.json`): targets, population, traffic (live, burst or backfill), client faults, backend faults, incidents, rollouts and the destination mode. The web workflow and REST API build the same document.
+
+```bash
+python3 generate.py preset list                                   # Android, backend and story presets
+python3 generate.py preset apply release-regression > my-spec.json
+python3 generate.py validate my-spec.json                         # schema, platform limits, realism checks
+python3 generate.py explain my-spec.json                          # what the run will generate
+python3 generate.py run my-spec.json --dry-run out/run            # writes payloads, prints requested versus emitted
+python3 generate.py run my-spec.json                              # sends
+```
+
+- **Destination modes.** `sessions_only` sends Cortex XCOR RUM data only: no traceparents, so nothing is forwarded and no "View trace" links appear. `end_to_end` also sends backend traces to Cortex XCOR, joined through network span forwarding.
+- **Exact distributions.** "One in three sessions crashes" means exactly that in bursts and backfills (`quota: auto` or `exact`); live streams draw per session unless `quota` is `exact`. After every run the generator reports requested versus emitted rates, computed from the generated payloads.
+- **Backfill.** Up to 24 hours of sessions appear at their original times in rolling ranges. Present history with "Last 24 hours", not a calendar "Yesterday"; alerts, metric exports and version-over-version views do not include history.
+
+> Cortex XCOR accepts trace data only for the last 10 minutes, so distributed traces cannot be backfilled. Traces are generated from the moment this run starts; sessions dated earlier are sent to Cortex XCOR RUM without trace links. For a fuller trace history, start the run at least two hours before the demo.
+
+`python3 generate.py capabilities` prints every platform limit, fault type and backfill rule. Examples are in `spec/examples/`: `live-end-to-end.json` is the always-on Baseline stream, `baseline-burst.json` an 8-minute burst and `verification-plan.json` the V1 verification cases. The Android, web and iOS generators, control server, guided workflow, preparation APIs and container are implemented. See [owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) for the configuration and live checks that still require owner action.
+
 ## One app, three lines of business
 
 When several profiles use the same Embrace Android app ID (the default config does this with one app), the sessions come from a single super app, **Vantra** (`com.vantra.android`), with three lines of business that share one user base and one account system:
 
 | Line of business | Session property | API domain | Backend in Chronosphere |
 | --- | --- | --- | --- |
-| Shop (Northline profile) | `business_unit = retail` | `api.vantrashop.com` | `northline` services |
-| Money (Corvia profile) | `business_unit = banking` | `api.vantramoney.com` | `corvia` services |
-| Travel (Vantra profile) | `business_unit = travel` | `api.vantratravel.com` | `vantra` services |
+| Shop (Northline profile) | `business_unit = retail` | `api.vantrashop.com` | `shop-experience-api` and retail services |
+| Money (Corvia profile) | `business_unit = banking` | `api.vantramoney.com` | `banking-experience-api` and banking services |
+| Travel (Vantra profile) | `business_unit = travel` | `api.vantratravel.com` | `travel-experience-api` and travel services |
 
 Filter or group by the `business_unit` session property in Embrace to split the three. Every session also carries `market`, `membership_tier` (standard, plus, premium) and `entry_point` (home_tab, push_notification, deep_link, widget, search), plus properties for its line of business: `experiment.checkout_v3` for retail, `customer.segment` and `mfa.method` for banking, `experiment.flex_dates` for travel. Most users stay signed in across the app, and the same person can shop, bank and book travel on different days.
 
 With a separate app ID per profile, each profile keeps its own brand, package and API domain instead.
 
-## Always-on mode
+## Existing V1 LaunchAgent
+
+This existing deployment uses the separate `~/xcor-demo-generator` checkout. Migrating it to V2 requires owner approval after live acceptance; the V2 server does not change it.
 
 The generator runs as a macOS LaunchAgent (`~/Library/LaunchAgents/local.xcor-demo-generator.plist`): it starts at login, restarts if it exits, and targets 10 sessions per minute total across all three profiles. It pauses while the Mac sleeps and catches up on wake. Status lines go to `logs/generator.log` every 10 minutes. Add `--diurnal` only when an hourly traffic curve is wanted.
 
@@ -68,7 +129,7 @@ To change the rate or add an incident, edit the arguments in the plist, then sto
 
    `CHRONOSPHERE_API_TOKEN` overrides token-file settings. Inline `chronosphere.api_token` is supported for existing installations, but a config containing credentials or custom OTLP headers must have owner-only permissions. The trace inspection tool uses the same credential loading rules. The ingestion token should have only trace-write permission; use a separate identity for administrative changes.
 
-Python 3.10+ only; there are no packages to install.
+The core CLI needs Python 3.10+ and no third-party packages. The V2 server and UI use the separate dependencies in the local studio setup above.
 
 ## Run
 
@@ -216,3 +277,87 @@ python3 tools/check_output.py out/
 | `reference/` | Payloads captured from the real Web SDK |
 
 The current sparse-timeline/failure-intensity deployment is documented in `docs/session-tuning-verification.json`. Its fresh runtime cohort is separate from the earlier full incident audit in `docs/verification-summary.json`; percentages from that earlier snapshot have been superseded.
+
+
+### V2 browser scenarios
+
+Web targets use the Vantra estate: retail multi-page at `www.vantra.com`, banking single-page at `app.vantra.com`, and hybrid travel at `www.vantra.com/travel`. The same adapter serves the legacy web CLI. Capabilities are enforced per engine: Safari/Firefox omit unsupported CLS, INP, LoAF and Chromium resource fields. Releases determine stable bundle URLs and exception stacks.
+
+```sh
+python3 generate.py run spec/examples/web-burst.json --dry-run out/web-spec --quiet --seed 7331
+python3 tools/check_output.py out/web-spec
+python3 generate.py report out/web-spec spec/examples/web-burst.json
+python3 generate.py lint out/web-spec
+python3 generate.py run spec/examples/android-web-end-to-end.json --dry-run out/both --quiet --seed 7331
+```
+
+The preset catalog includes web release failures, mobile product LCP, promo-banner CLS, chat-widget INP, origin latency, banking routes and payment rage clicks. `web_performance` sets p75 targets per page group, browser and device. Payload-derived reports include per-segment percentiles and stable exception groups; latency-based fault evidence is approximate because healthy and regressed distributions overlap. Small percentile samples are marked insufficient for tolerance checks. The local URL rollup preview models static segment classifications and sampled sibling cardinality; actual rollups also depend on the server's history.
+
+No live forwarding or dashboard acceptance is implied by a passing dry run or HTTP 200. Follow the owner-approved checks in `docs/v2/CODEX-HANDOFF.md` before live use.
+
+### Backend fault scenarios
+
+Backend presets include `catalog-cache-outage`, `accounts-cache-outage`, `gateway-rate-limited`, `fulfillment-consumer-lag`, and `catalog-deploy-regression`. Cache outages default to database fallback; `details.fallback=false` returns 503. Gateway 429 responses have one bounded Retry-After retry. Kafka lag is limited to 10–240 seconds and produces pending status polls. Service-version rollouts select stable canary cohorts and stop regressions at rollback.
+
+### Resume a bounded run
+
+Every V2 burst/backfill stores a private SQLite journal alongside its manifest. Resume with `python3 generate.py run spec.json --resume RUN_ID` (add the original `--dry-run DIR` for a local run). The original random states, visitor pools, timestamp and spec digest regenerate the exact plan. Delivered payloads are skipped, including partially delivered sessions; a session receipt is appended only after its deliveries finish. The spec and dry/live destination must match. Delivery defaults to 20 payloads/second, stops after 20 failures, and removes expired trace context at send time.
+
+An interrupted POST or lost acknowledgement can leave acceptance uncertain. Resume then blocks instead of risking duplicate sessions. HTTP acceptance remains distinct from platform verification. Keep the journal and inspect the known IDs through the platform before resolving an uncertain delivery.
+
+### Local control server
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r server/requirements.txt
+python3 tools/studio.py start
+```
+
+The detached server stays available after the terminal closes. `python3 tools/studio.py status` checks it, and `stop` refuses to interrupt active or paused runs. For foreground development, use `.venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8000`.
+
+The API reference is at `http://127.0.0.1:8000/docs`. SQLite state lives in `.state/server` (`SG_DATA_DIR` overrides it). The API stores immutable scenario versions, validates JSON Patch edits, previews without network access, runs isolated jobs, and records delivery receipts and SSE events. Start actions require `confirm: true`; use `dry_run: true` for local payload files. Live edits apply at the next session; pause drains pending deliveries and stop flushes them. Bounded resume uses the original plan and spec version. An OS lock prevents duplicate workers.
+
+Readiness APIs include evidence and Markdown/JSON setup kits. Forwarding probes require confirmation and a five-minute settling period. Verification queries every known trace ID in batches of eight and counts missing IDs in retention/completeness denominators. An Embrace service account token enables read-only MCP verification; without it the API returns the exact operator calls. `POST /api/runs/{id}/observations` compares observed hourly user-session counts and segmented p75 values with the sent cohort. Use rolling ranges and exclude unrelated app traffic.
+
+Secrets are write-only: the same native macOS Keychain API saves and reads local credentials; `SG_<NAME>_TOKEN` or `SG_<NAME>_TOKEN_FILE` in hosted environments (`CHRONOSPHERE`, `EMBRACE_API`, `ANTHROPIC`, `SYMBOL_UPLOAD`). On non-macOS hosts, saving a token requires `SG_SECRET_DIR` pointing to a private mounted directory. Remote API access requires a bearer token and an explicit `SG_ALLOWED_HOSTS` hostname. Set `SG_REQUIRE_AUTH=1` to require a token locally too. Never expose the port without TLS at the reverse proxy.
+
+Server checks: `.venv/bin/python -m unittest discover -s tests/server -v` and `.venv/bin/python tools/generate_models.py --check`.
+
+### Guided generation workflow
+
+Build the React UI with `npm --prefix apps/web ci && npm --prefix apps/web run build`, then start the local server as above. Vite development (`npm --prefix apps/web run dev`) proxies API calls to port 8000. The four steps are Destination, Customize, Preview and Send. Choose app IDs and a tenant, select a regression or individual signals, inspect generated payloads, then send a batch or continuous traffic for a finite duration. Running jobs show progress, delivery counts, pause and stop controls. Reloading recovers the run; an unconfirmed start retains its idempotency key for a safe retry. A credential preflight failure returns to an editable workflow before any worker starts. AI and MCP controls are absent from this UI.
+
+The UI bundles Source Sans 3 locally and uses the approved Cortex XCOR logo and navy/slate palette. Preview filters find session events and trace operations, with a structured attribute inspector and copyable payloads. Recent delivery receipts can be filtered by outcome. Tactile controls and the branching traffic animation respect reduced-motion preferences; activity stops when the worker is paused or connectivity is uncertain. Packet motion indicates generator activity, while receipt timestamps reflect recorded upload responses.
+
+Generated Zod contracts are checked with `npm --prefix apps/web run schema:check`. Run `npm --prefix apps/web exec -- playwright install chromium` once, then `npm --prefix apps/web test` for isolated local browser checks. No production destinations are used by these tests.
+
+### Experimental MCP and Copilot APIs
+
+These integrations are disabled on HTTP by default and have no controls in the guided UI. Set `SG_ENABLE_EXPERIMENTAL=1` before starting the server only when deliberately using these APIs. The official MCP Python SDK serves streamable HTTP at `/mcp` and stdio with `.venv/bin/python -m server.mcp` (run from this checkout, with the same `SG_DATA_DIR`). Create a named access token with `.venv/bin/python -m server.admin create-token --name Desktop`, then configure the client's Authorization header as `Bearer <token>`; HTTP requires a token even on loopback. Tokens are hashed, revocable, and record last use. The stdio process uses local filesystem permissions. Tools expose capabilities, targets, readiness/setup, presets, versioned specs, previews, runs, incidents and verification; four resources and two prompts are discoverable. `start_run` and `stop_run` require `confirm: true`; reuse an idempotency key for a start retry.
+
+Copilot uses the official Anthropic SDK and the configured `claude-sonnet-5-5` or `claude-opus-5-5` model. Supply its key through `SG_ANTHROPIC_TOKEN_FILE` or the write-only settings API when experimental routes are enabled. It can only inspect data and propose a patch: eight tool rounds maximum, bounded inputs/output, static prompt caching, capability/schema/lint validation and payload preview before review. Apply records a `copilot` version and refuses a stale proposal. History and discarded proposals persist. Model access depends on the configured account; tests use recorded protocol responses for all seven build-prompt examples and make no model calls.
+
+### Demo preparation APIs
+
+Use `POST /api/preparations/preview` to select the destination, history (0–24 hours), rate, duration and optional incident. These advanced preparation APIs are separate from the simplified batch/continuous UI. Review the exact generated scenarios and sample evidence, then confirm a local dry run or live delivery. The persisted checklist checks readiness, creates sessions-only history, adds a fresh eight-minute stitched burst in end-to-end mode, and starts a managed live stream. The history and recent burst are separate cohorts; both appear in run reports. Readiness blocks live end-to-end preparation until forwarding, retention, probe and applicable Origin evidence exist. Dry runs label those checks simulated.
+
+**Prepare ahead** starts end-to-end live traffic immediately with a default two-hour duration. It is recommended when the demo is over two hours away; increase duration to cover your demo. An optional incident begins three minutes after the supplied demo start. Mode changes saved on a live scenario apply at the next session start; existing sessions retain their original destination. Preparation stages keep run IDs and idempotency keys across orchestration restarts. Cancellation stops their managed jobs. Failed or uncertain delivery requires receipt review, never an automatic resend.
+
+REST: `POST /api/preparations/preview`, then `POST /api/preparations/{id}/start` with explicit `confirm: true`; inspect `GET /api/preparations/{id}` or cancel with `/cancel`. Equivalent MCP tools are `plan_preparation`, `start_preparation`, and `get_preparation`.
+
+### Container hosting
+
+`docker compose up --build -d` starts the non-root control server with persistent state and loopback-only access. Bootstrap an access token with `docker compose exec generator python -m server.admin create-token --name 'Workspace owner'`. Follow [HOSTING.md](docs/v2/HOSTING.md) for private VM access, mounted secrets, stream restart behavior, multiple regions and the owner-approved LaunchAgent cut-over. CI builds the image and exercises the actual authenticated HTTP API, dry-run receipts and stream controls in a container with networking disabled.
+
+
+### iOS, RED metrics, regions and symbolication
+
+`spec/examples/ios-burst.json` exercises native crashes, freezes, slow startup and network errors against the Apple SDK 6.21 wire contract. Replace `ios00` with a newly created iOS app ID before live delivery; the server and CLI enforce this. iOS foreground sessions have separate `session.id` values, so reports show both journey and SDK-session counts. Verification counts each iOS SDK session at its own timestamp.
+
+Enable `destinations.backend_metrics` to export cumulative request/error counters and duration histograms from emitted SERVER spans. `metrics_policy` defaults to `aggregated` (two-minute maximum lateness); `raw` allows two hours. Both refuse points more than one minute ahead. These metrics cover recent traced traffic; they do not manufacture two hours of backend history. [LATER-FEATURES.md](docs/v2/LATER-FEATURES.md) documents names, resets and source references.
+
+Regional plans split total rates/counts, derive separate seeds and dispatch to independently hosted authenticated servers. They preserve a private local receipt file and idempotency keys for retries. Location follows each server's actual egress IP. See the exact planning/apply commands in [LATER-FEATURES.md](docs/v2/LATER-FEATURES.md).
+
+Web exceptions automatically use captured browser stacks with readable function names and exact compiled-file positions. No stack-trace setup panel is needed. If a symbol-upload token is configured on the server, the workflow enables `target.web.symbolication` and uploads matching maps before live delivery; otherwise it sends the readable raw stacks. Original-source files and lines in Embrace require uploaded maps. The symbols API and `tools/symbols.py` review and upload executable release bundles/maps using the write-only token and explicit confirmation. Explicitly symbolicated live runs reject missing maps. Local tests never upload assets.
+
+Live report tables describe the current process segment of the current scenario version; cumulative delivery counters remain separate, and completed version reports are retained. Visitor state is isolated per job to prevent concurrent writers from corrupting device history. Connection-link filters allocate correctly but cannot be independently verified from SDK payloads: browsers expose effective speed, not whether a connection is fiber, cable, Wi-Fi or cellular. Such report rows are explicitly marked unverified.

@@ -1,0 +1,117 @@
+{
+  "spec_version": "2.0",
+  "name": "Sign-in pool timeout \u00b7 scheduled",
+  "seed": 7331,
+  "targets": [
+    {
+      "id": "vantra-web",
+      "platform": "web",
+      "embrace_app_id": "kfs9f",
+      "app_name": "Vantra Web",
+      "environment": "production",
+      "region": "us",
+      "api_domains": {
+        "retail": "api.vantrashop.com",
+        "banking": "api.vantramoney.com",
+        "travel": "api.vantratravel.com"
+      },
+      "web": {
+        "sdk_version": "2.31.0",
+        "cdn": "https://static.vantra.com",
+        "router_integration": "route_templates",
+        "sdk_upload_spans": false,
+        "origin_header": {
+          "policy": "none"
+        },
+        "estate": {
+          "retail": {
+            "origin": "https://www.vantra.com",
+            "archetype": "multi_page"
+          },
+          "banking": {
+            "origin": "https://app.vantra.com",
+            "archetype": "single_page"
+          },
+          "travel": {
+            "origin": "https://www.vantra.com",
+            "archetype": "hybrid"
+          }
+        },
+        "propagation_allow_list": [
+          "api.vantrashop.com",
+          "api.vantramoney.com",
+          "api.vantratravel.com"
+        ],
+        "symbolication": false
+      }
+    }
+  ],
+  "chronosphere": {
+    "tenant": "demo-sandbox",
+    "token_ref": "env:CHRONOSPHERE_API_TOKEN"
+  },
+  "destinations": {
+    "mode": "end_to_end",
+    "backend_logs": true
+  },
+  "population": {
+    "line_of_business_mix": {
+      "retail": 0,
+      "banking": 1,
+      "travel": 0
+    },
+    "signed_in_share": 0.82,
+    "returning_share": 0.45,
+    "journey_depth": {
+      "retail": 0.23,
+      "banking": 0.18,
+      "travel": 0.23
+    },
+    "session_properties": {
+      "market": {
+        "US": 1
+      },
+      "membership_tier": {
+        "standard": 62,
+        "plus": 29,
+        "premium": 9
+      },
+      "entry_point": {
+        "home_tab": 55,
+        "push_notification": 15,
+        "deep_link": 12,
+        "widget": 6,
+        "search": 12
+      }
+    },
+    "platform_mix": {
+      "vantra-web": 1
+    }
+  },
+  "traffic": {
+    "mode": "live",
+    "rate_per_minute": 10,
+    "duration_minutes": 60
+  },
+  "client_faults": [],
+  "backend_faults": [],
+  "incidents": [],
+  "rollouts": [],
+  "causal": {
+    "scenario": "signin-outage",
+    "variant": "affected",
+    "reference": false,
+    "mode": "mixed",
+    "cache": "cold",
+    "network": "wifi",
+    "mix": {
+      "healthy": 70,
+      "hero": 15,
+      "slow": 10,
+      "other": 5
+    }
+  },
+  "web_performance": [],
+  "verification_cases": [],
+  "stories": []
+}

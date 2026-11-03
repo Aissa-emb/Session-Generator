@@ -3,7 +3,7 @@
 import random
 
 from .. import backend as b
-from ..util import uuid4
+from ..util import lat, uuid4
 from ..scenarios import current, cache_read
 from . import Endpoint, Page, Profile, platform, services
 
@@ -218,11 +218,22 @@ def pay_bill(ctx):
 
 def statement(ctx):
     slow = ctx.incident == "statements-slow"
+    render_ms = (600, 1700)
+    request = current()
+    if slow:
+        duration = random.uniform(3000, 6000)
+        render_ms = (duration, duration)
+    elif request and hasattr(request["plan"], "fault_ids"):
+        # Exact spec quotas include every slow render observed in the payload.
+        # Keep unassigned renders below the regression band; the legacy path
+        # retains its unrestricted lognormal tail.
+        duration = min(lat(*render_ms), 2800)
+        render_ms = (duration, duration)
     srv = b.http(S["banking-experience-api"], S["statement-rendering-service"], "GET", "/v1/statements/{id}/pdf",
                  "/v1/statements/2026-09/pdf", 200, (4, 12), [
                      b.external(S["statement-rendering-service"], "GET", "https://vantra-money-statements-prod.s3.us-east-1.amazonaws.com/2026/09/<id>.json",
                                 "aws.s3", ms=(30, 90)),
-                     b.internal(S["statement-rendering-service"], "pdf.render", ms=((lambda d: (d, d))(random.uniform(3000, 6000))) if slow else (600, 1700),
+                     b.internal(S["statement-rendering-service"], "pdf.render", ms=render_ms,
                                 attrs={"pdf.pages": random.randint(2, 6), "pdf.engine": "weasyprint"})])
     return bff(ctx, "GET", "/api/v1/statements/:statementId/pdf", "/api/v1/statements/2026-09/pdf", [srv]), 200, {}
 
