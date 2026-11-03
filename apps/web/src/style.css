@@ -162,11 +162,11 @@ pre {
 }
 .tool-name {
   font-family: "Manrope", system-ui, sans-serif;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: -0.025em;
-  color: var(--text);
+  font-size: 1.625rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+  color: #f5f8ff;
 }
 .tool-location {
   border-left: 1px solid var(--control-border);
@@ -247,7 +247,7 @@ nav {
   min-width: 0;
 }
 .topbar {
-  min-height: 56px;
+  min-height: 64px;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -1904,10 +1904,16 @@ details[open] > summary::before {
     font-size: 0.8125rem;
   }
   .tool-identity {
-    gap: 4px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .tool-name {
+    font-size: 1.375rem;
   }
   .tool-location {
-    padding-left: 12px;
+    border-left: 0;
+    padding-left: 0;
   }
   .server-connection {
     font-size: 0.8125rem;
