@@ -14,6 +14,7 @@ export type Signal =
   | "pages"
   | "payments";
 export type Draft = {
+  networkDefaultsVersion: 1;
   modeling?: Json;
   populationOverrides?: Json;
   modelingPreset?: string;
@@ -53,6 +54,7 @@ export type Draft = {
   duration: number;
 };
 export const defaults: Draft = {
+  networkDefaultsVersion: 1,
   apps: [{ platform: "android", appId: "", name: "Vantra", region: "us" }],
   destination: "end_to_end",
   tenant: "",
@@ -84,7 +86,7 @@ export const defaults: Draft = {
     crashes: false,
     exceptions: false,
     freezes: false,
-    network: false,
+    network: true,
     pages: false,
     payments: false,
   },
@@ -116,6 +118,17 @@ export const signalNames: Record<Signal, string> = {
   pages: "Slow page loads",
   payments: "Payment failures",
 };
+export function restoreDraft(value: Partial<Draft>): Draft {
+  const signals = { ...defaults.signals, ...value.signals };
+  const rates = { ...defaults.rates, ...value.rates };
+  // Older drafts silently inherited network=false. Adopt the new baseline once;
+  // a deliberate opt-out saved by this UI remains an opt-out on future loads.
+  if (!value.networkDefaultsVersion && !signals.network) {
+    signals.network = true;
+    rates.network = defaults.rates.network;
+  }
+  return { ...structuredClone(defaults), ...value, networkDefaultsVersion: 1, signals, rates };
+}
 export function loadDraft(): Draft {
   try {
     const value = JSON.parse(localStorage.getItem("sg_workflow_v1") || "null");
@@ -130,12 +143,7 @@ export function loadDraft(): Draft {
           typeof a.name === "string",
       )
     )
-      return {
-        ...structuredClone(defaults),
-        ...value,
-        signals: { ...defaults.signals, ...value.signals },
-        rates: { ...defaults.rates, ...value.rates },
-      };
+      return restoreDraft(value);
   } catch {
     /* A stale local draft should never prevent opening the generator. */
   }
@@ -298,7 +306,8 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
         type,
         platform,
         rate: d.rates[key] / 100,
-        quota: d.mode === "burst" ? "exact" : "probability",
+        quota: key === "network" || d.mode === "burst" ? "exact" : "probability",
+        ...(key === "network" ? { steer_journey: false } : {}),
         filters,
         details,
       });

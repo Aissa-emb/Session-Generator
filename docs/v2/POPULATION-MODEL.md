@@ -5,6 +5,19 @@ regression traffic on Android, iOS and web. Existing saved specs that omit this
 field retain the previous journey distribution. The explicit causal demo mode
 keeps its separate scenario, cohort and timing contracts.
 
+Standard and regression workflows include network failures in 15% of eligible
+visits by default, using the existing timeout/reset serializers and a successful
+retry. This is a configurable demo setting, not a production reliability claim.
+Batch counts use exact allocation; continuous traffic uses randomly positioned
+failures in 20-visit blocks (three per block at the default rate). Untargeted,
+non-steered failures occur on the first actual request, including short visits,
+without changing the visitor's intent. XCOR RUM's Overview metric is the share of
+failed **requests**, so its percentage differs from the share of affected visits.
+The UI shows the default and allows an explicit opt-out. Older browser
+drafts and workflow configuration files migrate once from the old disabled
+default; subsequent explicit opt-outs and custom rates survive reload and import.
+Previously created ScenarioSpecs and completed runs remain unchanged.
+
 ## Assessment of the older Web RUM demo proposal
 
 The proposal improves the demo's **behavioral variety**, but its architecture and

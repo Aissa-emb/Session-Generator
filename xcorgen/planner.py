@@ -188,12 +188,20 @@ class Fault:
         if self.type in ("main_thread_blockage", "handled_exception"):
             return d.get("endpoint") or "content"
         if self.type in ("network_failure", "http_error"):
+            if self.first_request_failure:
+                return None  # Happens on the first actual request, whatever the visit intent.
             return d.get("endpoint") or ("content" if self.type == "network_failure" else None)
         if self.type == "slow_root_span":
             return ROOT_ENDPOINT.get(d.get("span"))
         if self.type == "slow_startup":
             return "startup"
         return None
+
+    @property
+    def first_request_failure(self):
+        return (self.type == "network_failure" and not self.steer and not self.details.get("endpoint")
+                and not self.details.get("page")
+                and not any(self.filters.get(k) for k in ("endpoints", "page_groups", "routes")))
 
     def requested_at(self, t_ms):
         """Share of eligible sessions that should show the fault (the pool incident fails only at its peak)."""
@@ -456,7 +464,7 @@ class Planner:
             endpoint = f.endpoint(lob, skel, self.rng)
             if f.steer or f.kind == "backend":
                 steer(lob, shape, endpoint)
-            else:
+            elif not f.first_request_failure:
                 shape["short"] = False
             for e in f.filters.get("endpoints") or []:
                 if f.steer:
@@ -486,7 +494,7 @@ class Planner:
             elif f.type == "network_failure":
                 kinds = d.get("kinds") or sorted(catalog.NETWORK_FAILURES)
                 a["transport"] = self.rng.choice(kinds)
-                a["transport_target"] = d.get("endpoint")
+                a["transport_target"] = "*" if f.first_request_failure else d.get("endpoint")
                 if d.get("story"):
                     a["primary"] = a["primary"] if a["incident"] else d["story"]
                     handled_followup = d.get("handled_followup", handled_followup)
@@ -502,9 +510,10 @@ class Planner:
                 if f.type in ("chunk_load_failures", "soft_navigation_slowness"):
                     shape["short"] = False
                     shape["priority"] = True
-        if fault_ids:
+        shaping_faults = [x for x in fault_ids if not self.by_id[x].first_request_failure]
+        if shaping_faults:
             shape["short"] = shape["short"] and all(self.by_id[x].endpoint(lob, skel, self.rng) == "lock_card"
-                                                    for x in fault_ids)
+                                                    for x in shaping_faults)
         a["handled_followup"] = handled_followup
         if self.cohort_rollback and skel["start_ms"] >= self.cohort_rollback:
             a["rollback_clears_canary"] = True

@@ -50,6 +50,50 @@ async function preview(page: Page) {
   await page.getByRole("button", { name: "Local test", exact: false }).click();
 }
 
+test("network defaults survive old drafts, scenario selection and explicit opt-outs", async ({page}) => {
+  await connect(page, ["web"]);
+  const oldDraft = await page.evaluate(() => {
+    const draft = JSON.parse(localStorage.getItem("sg_workflow_v1")!);
+    delete draft.networkDefaultsVersion;
+    draft.signals.network = false;
+    draft.rates.network = 80;
+    localStorage.setItem("sg_workflow_v1", JSON.stringify(draft));
+    return draft;
+  });
+  await page.reload();
+  await page.getByRole("button", {name:"Continue",exact:true}).click();
+  await expect(page.getByLabel("Scenario", {exact:true})).toHaveValue("healthy");
+  await expect(page.getByText("Network failures · 15% of sessions", {exact:true})).toBeVisible();
+  await page.getByLabel("Scenario", {exact:true}).selectOption("fault:exceptions");
+  await expect(page.getByText("Network failures · 15% of sessions", {exact:true})).toBeVisible();
+  await page.getByLabel("Scenario", {exact:true}).selectOption("healthy");
+  const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
+  await page.getByRole("button", {name:"Generate preview",exact:true}).click();
+  const result = await response;
+  expect(result.ok()).toBeTruthy();
+  const net = result.request().postDataJSON().client_faults.find((f:any)=>f.type==="network_failure");
+  expect(net).toMatchObject({rate:.15,quota:"exact",steer_journey:false});
+  const payload = await result.json();
+  expect(payload.linter).toEqual([]);
+  expect(payload.report.faults.find((f:any)=>f.id===net.id)).toMatchObject({emitted_sessions:15,within_tolerance:true});
+  await page.getByRole("button", {name:"Back",exact:true}).click();
+  await page.getByText("Fine-tune", {exact:true}).click();
+  await page.getByLabel("Edit settings", {exact:true}).selectOption("Faults");
+  await page.getByRole("checkbox", {name:"Network failures",exact:true}).uncheck();
+  await page.reload();
+  await page.getByRole("button", {name:"Continue",exact:true}).click();
+  await expect(page.getByText("Network failures off", {exact:true})).toBeVisible();
+  await page.getByText("Fine-tune", {exact:true}).click();
+  await page.getByLabel("Edit settings", {exact:true}).selectOption("Faults");
+  await expect(page.getByRole("checkbox", {name:"Network failures",exact:true})).not.toBeChecked();
+  await page.locator("input[type=file]").setInputFiles({name:"older-workflow.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify({format:"vantra-workflow",version:1,draft:oldDraft}))});
+  await expect(page.getByText("Configuration opened.", {exact:true})).toBeVisible();
+  await expect(page.getByRole("checkbox", {name:"Network failures",exact:true})).toBeChecked();
+  await expect(page.getByLabel("Network failures affected percentage", {exact:true})).toHaveValue("15");
+  await page.getByLabel("Scenario", {exact:true}).selectOption("causal:healthy");
+  await expect(page.getByText("Network failures · 15% of sessions", {exact:true})).toHaveCount(0);
+});
+
 test("varied visitor model reaches preview with native lifecycle controls", async ({page}, testInfo) => {
   await connect(page, ["android", "ios", "web"]);
   await page.getByText("Fine-tune", {exact:true}).click();

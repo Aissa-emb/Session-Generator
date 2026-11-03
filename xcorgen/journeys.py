@@ -56,7 +56,7 @@ def request(s, key, **params):
     plan = s.plan
     transport = getattr(plan, "transport", None)
     target = getattr(plan, "transport_target", None) or plan.target
-    if transport and not getattr(plan, "transport_used", False) and key == target:
+    if transport and not getattr(plan, "transport_used", False) and (target == "*" or key == target):
         params["_transport"] = transport
         plan.transport_used = True
     r = traced_attempt(s, key, params)

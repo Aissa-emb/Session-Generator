@@ -29,6 +29,49 @@ def scenario(platform="android", lob="retail", **population):
 
 
 class PopulationTests(unittest.TestCase):
+    def test_network_baseline_emits_actual_failures_without_changing_visit_intents(self):
+        # Inspect serialized requests, not assignment labels. The live policy is
+        # balanced in shuffled blocks, so it cannot silently yield 250 clean visits.
+        for platform in TARGETS:
+            for mode in ("burst", "live"):
+                with self.subTest(platform=platform, mode=mode), tempfile.TemporaryDirectory() as state:
+                    random.seed(7331)
+                    s = scenario(platform)
+                    s["population"]["line_of_business_mix"] = {lob: 1 for lob in INTENTS}
+                    s["traffic"] = ({"mode": "burst", "count": 300, "window": {"last_minutes": 5}}
+                                    if mode == "burst" else {"mode": "live", "rate_per_minute": 20, "duration_minutes": 20})
+                    s["client_faults"] = [{"id": "network", "type": "network_failure", "rate": .15,
+                                           "quota": "exact", "steer_journey": False,
+                                           "details": {"kinds": ["timeout", "reset"]}}]
+                    run = SpecRun(s, load_config(None), persist=False, now_ms=NOW, state_dir=state)
+                    if mode == "burst":
+                        skeletons, allocations, _ = run.plan_batch()
+                    else:
+                        target, gen = next(iter(run.generators.values()))
+                        skeletons = [run.planner.skeleton(gen, target, NOW - 240000 + i * 500,
+                                                         NOW, run.mode) for i in range(300)]
+                        allocations = [run.planner.allocate_one(sk) for sk in skeletons]
+                    affected = requests = failures = 0
+                    for sk, faults in zip(skeletons, allocations):
+                        original_shape = copy.deepcopy(sk["shape"])
+                        target, session, _, deliveries, _ = run.session(sk["start_ms"], sk, faults)
+                        self.assertEqual(sk["shape"], original_shape)
+                        run.record(target, session, faults, deliveries)
+                        net = run.emitted.observations[-1]["net"]
+                        bad = [n for n in net if n["status"] is None and n["error_type"]]
+                        self.assertEqual(len(bad), int("network" in faults))
+                        for failure in bad:
+                            self.assertTrue(any(n["endpoint"] == failure["endpoint"] and n["status"] == 200
+                                                and n["start_ms"] > failure["start_ms"] for n in net))
+                        self.assertEqual(lint_payloads(deliveries), [])
+                        affected += bool(bad)
+                        failures += len(bad)
+                        requests += len(net)
+                    self.assertEqual(affected, 45)
+                    self.assertEqual(failures, 45)
+                    self.assertGreater(requests, failures)
+                    self.assertTrue(run.emitted.summary()["faults"][0]["within_tolerance"])
+
     def test_browser_margins_are_shares_not_multipliers(self):
         rng = random.Random(91)
         options = {"browser_mix": {"chrome": 50, "safari": 30, "edge": 10, "firefox": 5, "samsung_internet": 5},
