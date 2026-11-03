@@ -143,9 +143,7 @@ pre {
 .brand {
   padding: 0 12px 20px;
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 22px;
 }
 .brand img {
   display: block;
@@ -155,22 +153,27 @@ pre {
 }
 .tool-identity {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
 }
 .tool-name {
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-.tool-context {
-  font-size: 0.75rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 500;
   line-height: 1.5;
-  color: var(--muted);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.tool-location {
+  border-left: 1px solid var(--control-border);
+  padding-left: 18px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--secondary);
 }
 nav {
   display: grid;
@@ -244,7 +247,7 @@ nav {
   min-width: 0;
 }
 .topbar {
-  min-height: 52px;
+  min-height: 56px;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -260,9 +263,6 @@ nav {
   padding: 10px 32px;
   font-size: 0.875rem;
   gap: 10px;
-}
-.topbar strong {
-  font-weight: 500;
 }
 .server-connection {
   display: inline-flex;
@@ -1876,7 +1876,6 @@ details[open] > summary::before {
   }
   .brand {
     padding: 0 0 16px;
-    gap: 16px;
   }
   .brand img {
     width: 158px;
@@ -1904,8 +1903,11 @@ details[open] > summary::before {
     padding: 10px 16px;
     font-size: 0.8125rem;
   }
-  .topbar .muted {
-    padding: 0 5px;
+  .tool-identity {
+    gap: 4px 12px;
+  }
+  .tool-location {
+    padding-left: 12px;
   }
   .server-connection {
     font-size: 0.8125rem;

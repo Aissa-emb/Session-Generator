@@ -331,10 +331,6 @@ export default function App() {
       <aside className="workflow-rail">
         <div className="brand">
           <img src={cortexLogo} alt="Cortex XCOR" width="184" height="27" />
-          <div className="tool-identity">
-            <span className="tool-name">Session Generator</span>
-            <span className="tool-context">Internal tool</span>
-          </div>
         </div>
         <nav aria-label="Generation steps">
           {steps.map(([title, sub], i) => (
@@ -364,10 +360,10 @@ export default function App() {
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <span>
-            Session Generator <span className="muted">/</span>{" "}
-            <strong>{steps[step][0]}</strong>
-          </span>
+          <div className="tool-identity">
+            <span className="tool-name">Session Generator</span>
+            <span className="tool-location">{steps[step][0]}</span>
+          </div>
           <span
             className="server-connection"
             title="Connection to the local generator server"
