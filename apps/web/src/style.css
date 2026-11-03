@@ -2108,3 +2108,30 @@ details[open] > summary::before {
     border-color: HighlightText;
   }
 }
+
+/* Focused modeling workspace: one editor, consistent units, no dashboard wall. */
+.customize-layout > .scenario-picker, .customize-layout > .fine-tune { grid-column: 1 / -1; }
+.fine-tune > summary { font-weight: 600; cursor: pointer; }
+.editor-toolbar, .configuration-actions { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+.editor-toolbar .field { flex: 1; min-width: 180px; }
+.configuration-actions { border-top: 1px solid var(--border); padding-top: 20px; margin-bottom: 0; }
+.weight-editor { border: 0; padding: 16px 0; margin: 0; max-width: 680px; }
+.weight-editor legend { font-weight: 600; }
+.weight-editor > label { display: grid; grid-template-columns: minmax(100px,1fr) minmax(70px,110px) 45px; align-items: center; gap: 16px; padding: 7px 0; }
+.weight-editor small { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.distribution-editor { max-width: 900px; margin: 24px 0; }
+.distribution-plot { border: 1px solid var(--border); border-radius: 10px; background: rgba(12,27,42,.25); padding: 20px; margin: 18px 0 8px; }
+.distribution-plot svg { display: block; width: 100%; height: 160px; }
+.distribution-axis, .distribution-numbers { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.distribution-axis { color: var(--muted); font-size: 12px; }
+.distribution-numbers { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); }
+.distribution-numbers strong { display: block; font-size: 21px; font-weight: 500; color: var(--text); }
+.experiment-editor { border-bottom: 1px solid var(--border); padding: 20px 0; margin-bottom: 20px; }
+.fine-tune details { margin: 20px 0; }
+.fine-tune .signal-row > input { width: 100px; flex-shrink: 0; }
+@media (max-width: 600px) { .distribution-plot { padding: 12px; } .distribution-plot svg { height: 120px; } .editor-toolbar { align-items: stretch; } .weight-editor > label { gap: 8px; } }
+.customize-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+.customize-layout > .schedule-options { grid-column: auto; grid-row: auto; }
+.field-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; margin-top: 16px; }
+.field-grid > .field-grid { grid-column: 1/-1; margin-top: 0; }
+@media (max-width: 650px) { .field-grid { grid-template-columns: minmax(0,1fr); gap: 16px; } }

@@ -14,6 +14,9 @@ export type Signal =
   | "pages"
   | "payments";
 export type Draft = {
+  modeling?: Json;
+  populationOverrides?: Json;
+  modelingPreset?: string;
   apps: AppTarget[];
   destination: "end_to_end" | "sessions_only";
   tenant: string;
@@ -210,6 +213,7 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
   s.name =
     (d.story === "regression" ? "Regression · " : "Standard traffic · ") +
     flowNames[d.flow];
+  if (d.modelingPreset) s.name = ({tail:"Tail-only slowdown", "network-profile":"Constrained network", custom:"Custom performance"}[d.modelingPreset] || "Custom performance") + " · " + flowNames[d.flow];
   s.targets = d.apps.map((a) => ({
     ...structuredClone(
       a.platform === "web"
@@ -236,6 +240,11 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
       d.flow === "all" || d.flow === lob ? 1 : 0,
     ]),
   );
+  Object.assign(s.population, structuredClone(d.populationOverrides || {}));
+  if (d.modeling) {
+    s.modeling = structuredClone(d.modeling);
+    if (s.modeling.releases) s.modeling.releases = s.modeling.releases.filter((c:Json)=>s.targets.some((t:Json)=>t.id===c.target));
+  }
   s.population.model = d.population;
   s.population.returning_share = d.returning / 100;
   if (d.population === "varied") {
@@ -257,6 +266,7 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
   s.web_performance = [];
   if (d.story === "causal") {
     // Explicit diagnostic stories own their exact journey and timing contracts.
+    delete s.modeling;
     s.population.model = "legacy";
     const domain = d.causalScenario === "travel-provider" ? "travel" : "banking";
     s.name = "Causal demo · " + d.causalScenario + " · " + d.causalVariant;

@@ -52,7 +52,7 @@ async function preview(page: Page) {
 
 test("varied visitor model reaches preview with native lifecycle controls", async ({page}, testInfo) => {
   await connect(page, ["android", "ios", "web"]);
-  await page.getByText("Visitor mix", {exact:true}).click();
+  await page.getByText("Fine-tune", {exact:true}).click();
   await expect(page.getByLabel("Visit patterns", {exact:true})).toHaveValue("varied");
   await page.getByLabel("Returning visitors %", {exact:true}).fill("40");
   await page.getByLabel("Cold starts on return %", {exact:true}).fill("30");
@@ -79,19 +79,20 @@ test("one workflow, input validation, scoped platform controls, no AI or MCP", a
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("five-character app ID");
   await connect(page, ["web"]);
+  await page.getByText("Fine-tune",{exact:true}).click();
+  await page.getByLabel("Edit settings",{exact:true}).selectOption("Faults");
   await expect(
     page.getByRole("checkbox", { name: "Crashes", exact: false }),
   ).toBeDisabled();
   await expect(
     page.getByRole("checkbox", { name: "Slow page loads", exact: false }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Regression", exact: false }).click();
-  await page.getByLabel("Regression to reproduce").selectOption("pages");
+  await page.getByLabel("Scenario", {exact:true}).selectOption("fault:pages");
   await expect(
     page.getByRole("checkbox", { name: "Slow page loads", exact: false }),
   ).toBeChecked();
   await expect(
-    page.getByLabel("Slow page loads affected percentage"),
+    page.getByLabel("Affected sessions (%)",{exact:true}),
   ).toHaveValue("30");
   await capture(page, "redesign-customize.png");
   await expect(page.getByText(/copilot|MCP connection/i)).toHaveCount(0);
@@ -119,6 +120,8 @@ test("custom mixed-platform faults produce real session and distributed trace pr
     .fill("https://preview-tenant.chronosphere.io");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("User flow").selectOption("retail");
+  await page.getByText("Fine-tune",{exact:true}).click();
+  await page.getByLabel("Edit settings",{exact:true}).selectOption("Faults");
   for (const name of [
     "Crashes",
     "Exceptions",
@@ -709,9 +712,7 @@ test("web sending needs no stack settings or upload token when maps are not conf
     }),
   );
   await connect(page, ["web"]);
-  await page
-    .getByRole("checkbox", { name: "Exceptions", exact: false })
-    .check();
+  await page.getByLabel("Scenario", {exact:true}).selectOption("fault:exceptions");
   await preview(page);
   await page
     .getByRole("button", { name: "Send to destination", exact: false })
@@ -732,8 +733,8 @@ test("causal scenarios keep platform evidence and run through the workflow", asy
   await page.getByRole("button", { name: "Sessions + distributed traces", exact: false }).click();
   await page.getByLabel("Chronosphere tenant", { exact: true }).fill("preview-tenant");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Causal demo", exact: false }).click();
-  await page.getByLabel("Scenario", { exact: true }).selectOption("slow-history");
+  await page.getByLabel("Scenario", { exact: true }).selectOption("causal:slow-history");
+  await page.getByText("Fine-tune",{exact:true}).click();
   await page.getByLabel("Cohort", { exact: true }).selectOption("affected");
   await page.getByLabel("Number of sessions").fill("9");
   await page.screenshot({path:testInfo.outputPath("causal-controls.png"),fullPage:true});
@@ -752,4 +753,88 @@ test("causal scenarios keep platform evidence and run through the workflow", asy
   await page.getByRole("button", { name: "Continue to send", exact: true }).click();
   await expect(page.getByText("slow history", { exact: true })).toBeVisible();
   await expect(page.getByText("affected · single · seed 7331")).toBeVisible();
+});
+
+test('preset-led performance editor preserves advanced values and previews emitted evidence', async ({page}, testInfo)=>{
+ await connect(page,['web']);
+ await page.getByLabel('Scenario',{exact:true}).selectOption('tail');
+ await expect(page.getByLabel('Tail severity',{exact:true})).toHaveValue('4');
+ await expect(page.getByLabel('Edit settings',{exact:true})).not.toBeVisible();
+ await capture(page,'v3-customize.png');
+ await page.getByText('Fine-tune',{exact:true}).click();
+ await page.getByLabel('Edit settings',{exact:true}).selectOption('Performance');
+ await expect(page.getByRole('img',{name:'Distribution of baseline and affected durations'})).toBeVisible();
+ await page.getByText('Distribution details',{exact:true}).click();
+ await expect(page.getByLabel('Distribution family',{exact:true}).locator('option')).toHaveCount(8);
+ await page.getByLabel('Distribution family',{exact:true}).selectOption('bimodal');
+ await page.getByLabel('Second mean',{exact:true}).fill('720');
+ await expect(page.getByRole('img',{name:'Distribution of baseline and affected durations'})).toBeVisible();
+ await capture(page,'v3-distribution-editor.png');
+ const download=page.waitForEvent('download');
+ await page.getByRole('button',{name:'Save configuration',exact:true}).click();
+ const saved=await (await download).path();
+ await page.getByText('Fine-tune',{exact:true}).click();
+ await page.getByRole('button',{name:'Back',exact:true}).click();
+ await page.getByRole('button',{name:'Continue',exact:true}).click();
+ await page.getByText('Fine-tune',{exact:true}).click();
+ await page.getByLabel('Edit settings',{exact:true}).selectOption('Performance');
+ await page.getByText('Distribution details',{exact:true}).click();
+ await expect(page.getByLabel('Second mean',{exact:true})).toHaveValue('720');
+ await page.getByLabel('Second mean',{exact:true}).fill('840');
+ await page.locator('input[type=file]').setInputFiles(saved!);
+ await expect(page.getByText('Configuration opened.',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Second mean',{exact:true})).toHaveValue('720');
+ await page.getByLabel('Number of sessions',{exact:true}).fill('24');
+ const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Generate preview',exact:true}).click();
+ const data=await (await response).json();
+ expect(data.linter).toEqual([]);
+ expect(data.report.modeling.effects[0].modeled_after.count).toBeGreaterThan(0);
+ await page.getByText('Performance and experiment evidence',{exact:true}).click();
+ await expect(page.getByRole('columnheader',{name:'Observed in payloads'})).toBeVisible();
+ await capture(page,'v3-preview.png');
+ await page.screenshot({path:testInfo.outputPath('v3-preview.png'),fullPage:true});
+});
+
+test('advanced modeling controls fit narrow and zoomed viewports',async({page})=>{
+ await connect(page,['android','ios','web']);
+ await page.getByText('Fine-tune',{exact:true}).click();
+ await page.getByLabel('Edit settings',{exact:true}).selectOption('Performance');
+ await page.getByRole('button',{name:'Add override',exact:true}).click();
+ await page.getByText('Distribution details',{exact:true}).click();
+ for(const width of [320,390,768,1280,1920]){
+  await page.setViewportSize({width,height:1000});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
+ }
+ await page.setViewportSize({width:768,height:1000});
+ await page.addStyleTag({content:'html{font-size:200%}'});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
+});
+
+test('release adoption and experiment editors survive reload and reach payload evidence',async({page})=>{
+ await connect(page,['android','ios','web']);
+ await page.getByText('Fine-tune',{exact:true}).click();
+ await page.getByLabel('Edit settings',{exact:true}).selectOption('Release');
+ await page.getByRole('button',{name:'Set adoption curve',exact:true}).first().click();
+ await page.getByLabel('android point 1 version 10.28.0 share',{exact:true}).fill('100');
+ await page.getByLabel('android point 1 version 10.27.3 share',{exact:true}).fill('0');
+ await page.getByLabel('android point 2 version 10.28.0 share',{exact:true}).fill('100');
+ await page.getByLabel('android point 2 version 10.27.3 share',{exact:true}).fill('0');
+ for(const width of [320,768,1440]){
+  await page.setViewportSize({width,height:1000});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
+ }
+ await page.getByLabel('Edit settings',{exact:true}).selectOption('Experiments');
+ await page.getByRole('button',{name:'Add experiment',exact:true}).click();
+ await page.getByLabel('Exposure endpoints',{exact:true}).fill('home, accounts, locations');
+ await page.reload();
+ await page.getByRole('button',{name:'Continue',exact:true}).click();
+ await page.getByText('Fine-tune',{exact:true}).click();
+ await page.getByLabel('Edit settings',{exact:true}).selectOption('Release');
+ await expect(page.getByLabel('android point 1 version 10.28.0 share',{exact:true})).toHaveValue('100');
+ const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Generate preview',exact:true}).click();
+ const data=await(await response).json();
+ expect(data.report.modeling.releases[0].observed).toEqual([{version:'10.28.0',visits:data.report.modeling.releases[0].visits,percent:100}]);
+ expect(data.report.modeling.experiments[0].variants.reduce((n:number,v:any)=>n+v.exposed_visits,0)).toBeGreaterThan(0);
 });

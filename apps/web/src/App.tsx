@@ -29,6 +29,7 @@ import {
   tenantName,
 } from "./workflow";
 import PreviewStep from "./PreviewStep";
+import CustomizeScenario from "./CustomizeScenario";
 import RunView from "./RunView";
 import cortexLogo from "./assets/cortex-xcor-dark.svg";
 
@@ -38,14 +39,6 @@ const steps = [
   ["Preview", "Inspect sessions and traces"],
   ["Send", "Run once or continuously"],
 ];
-const descriptions: Record<Signal, string> = {
-  crashes: "Android & iOS",
-  exceptions: "Handled mobile & unhandled web errors",
-  freezes: "6–10 second mobile freezes",
-  network: "Timeouts & connection resets",
-  pages: "Slow-loading hero image",
-  payments: "Database or payment-rail outage",
-};
 const platformName = (p: string) =>
   p === "ios" ? "iOS" : p === "web" ? "Web" : "Android";
 const read = (key: string) => {
@@ -447,7 +440,7 @@ export default function App() {
                 {
                   [
                     "Choose your apps and trace destination.",
-                    "Pick a flow, signals, and schedule.",
+                    "Choose a scenario and schedule.",
                     "Review a local sample before sending.",
                     runId
                       ? "Follow your run here. You can leave this page and return to its progress."
@@ -600,228 +593,7 @@ export default function App() {
           )}
           {step === 1 && (
             <div className="customize-layout">
-              <Panel title="Traffic scenario" className="traffic-options">
-                <div className="choice-grid">
-                  <button
-                    className={
-                      "choice " + (draft.story === "standard" ? "selected" : "")
-                    }
-                    aria-pressed={draft.story === "standard"}
-                    onClick={() =>
-                      update({
-                        story: "standard",
-                        signals: { ...defaults.signals },
-                      })
-                    }
-                  >
-                    <strong>Standard traffic</strong>
-                    <span>Everyday user journeys</span>
-                  </button>
-                  <button
-                    className={
-                      "choice " +
-                      (draft.story === "regression" ? "selected" : "")
-                    }
-                    aria-pressed={draft.story === "regression"}
-                    onClick={() =>
-                      update({
-                        story: "regression",
-                        regression: "payments",
-                        signals: { ...defaults.signals, payments: true },
-                      })
-                    }
-                  >
-                    <strong>Regression</strong>
-                    <span>A specific failure or slowdown</span>
-                  </button>
-                  <button className={"choice " + (draft.story === "causal" ? "selected" : "")}
-                    aria-pressed={draft.story === "causal"} onClick={() => update({ story: "causal" })}>
-                    <strong>Causal demo</strong><span>Connected sessions, traces, and recovery</span>
-                  </button>
-                </div>
-                <div className="form-grid">
-                  {draft.story === "regression" && (
-                    <Field label="Regression to reproduce">
-                      <select
-                        value={draft.regression}
-                        onChange={(e) => {
-                          const key = e.target.value as Signal;
-                          update({
-                            regression: key,
-                            signals: { ...defaults.signals, [key]: true },
-                          });
-                        }}
-                      >
-                        {signalKeys
-                          .filter((k) => available(k, draft))
-                          .map((k) => (
-                            <option key={k} value={k}>
-                              {signalNames[k]}
-                            </option>
-                          ))}
-                      </select>
-                    </Field>
-                  )}
-                  {draft.story === "causal" ? <>
-                    <Field label="Scenario"><select value={draft.causalScenario} onChange={e => update({causalScenario:e.target.value})}>
-                      {[["healthy","Healthy account review"],["signin-outage","Sign-in pool timeout"],["slow-history","Slow transaction history"],
-                        ["contract-regression","Transaction detail contract"],["transfer-response-loss","Transfer response lost"],
-                        ["worker-backlog","Transfer worker backlog"],["frontend-regression","Client view-state failure"],
-                        ["connectivity","Connectivity transition"],["travel-provider","Travel provider degradation"]].map(([id,name])=><option key={id} value={id}>{name}</option>)}
-                    </select></Field>
-                    <Field label="Cohort"><select value={draft.causalVariant} onChange={e => update({causalVariant:e.target.value as Draft["causalVariant"]})}>
-                      <option value="affected">Affected</option><option value="control">Healthy control</option><option value="recovered">Recovered</option><option value="scheduled">Scheduled incident</option>
-                    </select></Field>
-                    <Field label="Traffic mix"><select value={draft.causalMode} onChange={e=>update({causalMode:e.target.value as Draft["causalMode"]})}>
-                      <option value="single">Selected story only</option><option value="mixed">Mixed traffic</option>
-                    </select></Field>
-                    <Field label="Cache"><select value={draft.causalCache} onChange={e=>update({causalCache:e.target.value as Draft["causalCache"]})}>
-                      <option value="cold">Cold account cache</option><option value="warm">Warm account cache</option>
-                    </select></Field>
-                    <Field label="Network"><select value={draft.causalNetwork} onChange={e=>update({causalNetwork:e.target.value as Draft["causalNetwork"]})}>
-                      <option value="wifi">Wi-Fi</option><option value="cellular">Cellular</option><option value="constrained">Constrained</option>
-                    </select></Field>
-                    <Field label="Seed"><input type="number" value={draft.causalSeed} onChange={e=>update({causalSeed:Number(e.target.value)})}/></Field>
-                    {draft.causalScenario === "contract-regression" && <Field label="Client failure"><select value={draft.causalFailure} onChange={e=>update({causalFailure:e.target.value as Draft["causalFailure"]})}>
-                      <option value="handled">Handled decoding error</option><option value="fatal">Unsafe native mapper · fatal</option>
-                    </select></Field>}
-                    {draft.causalScenario === "connectivity" && <Field label="Failure boundary"><select value={draft.causalConnectivity} onChange={e=>update({causalConnectivity:e.target.value as Draft["causalConnectivity"]})}>
-                      <option value="pre_send">Before reaching server</option><option value="post_send">After server response</option>
-                    </select></Field>}
-                  </> : <Field label="User flow">
-                    <select
-                      value={draft.flow}
-                      onChange={(e) => update({ flow: e.target.value })}
-                    >
-                      {Object.entries(flowNames).map(([k, v]) => (
-                        <option key={k} value={k}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>}
-                </div>
-              </Panel>
-              {step === 1 && draft.story !== "causal" && <details className="panel">
-                <summary>Visitor mix</summary>
-                <div className="field-grid">
-                  <Field label="Visit patterns"><select value={draft.population} onChange={e=>update({population:e.target.value as Draft["population"]})}>
-                    <option value="varied">Varied visits</option><option value="legacy">Previous distribution</option>
-                  </select></Field>
-                  <Field label="Returning visitors %" hint="Target after the visitor pool warms up."><input type="number" min="0" max="100" value={draft.returning} onChange={e=>update({returning:Number(e.target.value)})}/></Field>
-                  {draft.population === "varied" && draft.apps.some(a=>a.platform!=="web") && <>
-                    <Field label="Cold starts on return %" hint="First visits always start cold."><input type="number" min="0" max="100" value={draft.coldStarts} onChange={e=>update({coldStarts:Number(e.target.value)})}/></Field>
-                    <Field label="App interruptions %" hint="At eligible content stages."><input type="number" min="0" max="100" value={draft.interruptions} onChange={e=>update({interruptions:Number(e.target.value)})}/></Field>
-                  </>}
-                </div>
-              </details>}
-              {draft.story === "causal" && <details className="panel">
-                <summary>Scenario parameters</summary>
-                <div className="field-grid">
-                  <Field label="Backend region"><select value={draft.causalRegion} onChange={e=>update({causalRegion:e.target.value})}>
-                    <option>us-east-1</option><option>eu-west-1</option><option>ap-southeast-2</option>
-                  </select></Field>
-                  <Field label="Affected service release"><input value={draft.causalRelease} onChange={e=>update({causalRelease:e.target.value})}/></Field>
-                  <Field label="Timing"><select value={String(draft.causalReference)} onChange={e=>update({causalReference:e.target.value==="true"})}>
-                    <option value="false">Seeded variation</option><option value="true">Exact reference timings</option>
-                  </select></Field>
-                  {draft.apps.some(a=>a.platform==="web") && <Field label="Optional web provider"><select value={draft.causalProvider} onChange={e=>update({causalProvider:e.target.value})}>
-                    <option value="none">None</option><option value="analytics">Consented analytics</option><option value="support">Opened support widget</option>
-                  </select></Field>}
-                  {draft.causalScenario === "frontend-regression" && draft.apps.every(a=>a.platform==="web") && <Field label="Frontend variant"><select value={String(draft.causalWidget)} onChange={e=>update({causalWidget:e.target.value==="true"})}>
-                    <option value="false">View-state failure</option><option value="true">Blocking support interaction</option>
-                  </select></Field>}
-                  {draft.causalVariant === "scheduled" && <>
-                    <Field label="Incident starts"><input type="datetime-local" value={draft.causalStart} onChange={e=>update({causalStart:e.target.value})}/></Field>
-                    <Field label="Incident minutes"><input type="number" min="1" max="120" value={draft.causalMinutes} onChange={e=>update({causalMinutes:Number(e.target.value)})}/></Field>
-                    <Field label="Affected cohort %"><input type="number" min="0" max="100" value={draft.causalShare} onChange={e=>update({causalShare:Number(e.target.value)})}/></Field>
-                  </>}
-                  {draft.causalMode === "mixed" && ["Healthy","Selected story","Slow dependency","Recovered"].map((name,i)=><Field key={name} label={name+" weight"}>
-                    <input type="number" min="0" max="100" value={draft.causalMix[i]} onChange={e=>update({causalMix:draft.causalMix.map((n,j)=>i===j?Number(e.target.value):n)})}/>
-                  </Field>)}
-                </div>
-              </details>}
-              {draft.story !== "causal" && <Panel
-                title="Include in the data"
-                className="signal-options"
-                action={<Badge>{selected.length} selected</Badge>}
-              >
-                <p className="section-description">
-                  Share of eligible sessions.
-                </p>
-                <div className="signal-list">
-                  {signalKeys.map((key) => (
-                    <div
-                      key={key}
-                      className={
-                        "signal-row " +
-                        (!available(key, draft) ? "unavailable" : "")
-                      }
-                    >
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={draft.signals[key] && available(key, draft)}
-                          disabled={!available(key, draft)}
-                          onChange={(e) =>
-                            update({
-                              signals: {
-                                ...draft.signals,
-                                [key]: e.target.checked,
-                              },
-                            })
-                          }
-                        />
-                        <span>
-                          <strong>{signalNames[key]}</strong>
-                          <small>
-                            {descriptions[key]}
-                            {!available(key, draft) &&
-                              " · Requires another platform"}
-                          </small>
-                        </span>
-                      </label>
-                      {draft.signals[key] && available(key, draft) && (
-                        <div className="signal-rate">
-                          <input
-                            aria-label={
-                              signalNames[key] + " affected percentage"
-                            }
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={draft.rates[key]}
-                            onChange={(e) =>
-                              update({
-                                rates: {
-                                  ...draft.rates,
-                                  [key]: Number(e.target.value),
-                                },
-                              })
-                            }
-                          />
-                          <span>%</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {draft.signals.pages && available("pages", draft) && (
-                  <div className="compact-field">
-                    <Field label="Slow page LCP p75 (ms)">
-                      <input
-                        type="number"
-                        min="2500"
-                        max="30000"
-                        value={draft.lcp}
-                        onChange={(e) =>
-                          update({ lcp: Number(e.target.value) })
-                        }
-                      />
-                    </Field>
-                  </div>
-                )}
-              </Panel>}
+              <CustomizeScenario draft={draft} update={update} caps={caps.data} />
               <Panel title="Sending schedule" className="schedule-options">
                 <div
                   className="segmented"

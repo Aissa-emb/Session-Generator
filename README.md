@@ -21,7 +21,7 @@ After setup, double-click **Start Session Generator.command** in the project fol
 The UI has one four-step workflow:
 
 1. **Destination:** choose Android, iOS and/or web, enter each app's five-character ID and name, then choose sessions only or sessions plus distributed traces. For traces, enter your Chronosphere tenant and API token. The token stays on the server; it is never stored in the browser draft.
-2. **Customize:** select standard traffic or a regression and choose the signals to include. **Causal demo** provides nine coordinated banking/travel scenarios, affected/control/recovered cohorts, deterministic seeds, cache/network controls and scheduled incidents.
+2. **Customize:** choose a healthy population, a performance regression, a failure, or one of nine connected diagnostic stories from one Scenario picker. Optional **Fine-tune** settings cover population and intent weights, eight distribution families, audience effects, sticky experiments, and release adoption.
 3. **Preview:** inspect locally generated timelines, fault rates, web performance and a real backend trace waterfall. Preview sends nothing.
 4. **Send:** choose destination delivery or a **Local test**. A batch stops after its configured count. **Continuous sending** uses an average sessions-per-minute rate for 30 minutes, one hour, two hours or a custom duration. The running view shows a live receipt timeline, fully acknowledged sessions, backend spans, elapsed/remaining time and pause/stop controls. XCOR RUM uploads are counted by complete session; backend logs and metrics do not inflate the span total. Storage is marked unverified because an ingestion acknowledgement does not prove retention. Refreshing restores the current run.
 
@@ -37,6 +37,8 @@ The server log is `.state/studio/server.log`. If the UI reports the server is of
 AI/Copilot and MCP controls have been removed from the UI. Their experimental HTTP endpoints are disabled by default; the legacy implementation remains behind `SG_ENABLE_EXPERIMENTAL=1` for future development. No model key is needed for this workflow.
 
 [Owner acceptance](docs/v2/OWNER-ACCEPTANCE.md) lists app forwarding and live checks; [hosting](docs/v2/HOSTING.md) covers authenticated containers and deployment.
+
+[Statistical modeling](docs/v3/ADOPTION.md) describes the selectively adopted V3 features, their limits, and how modeled inputs relate to serialized outcomes. Try `spec/examples/performance-tail.json` locally with `generate.py run … --dry-run`; its `reports/signals.json` keeps component distributions separate from observed request durations.
 
 [Visitor distributions](docs/v2/POPULATION-MODEL.md) explains the varied Android, iOS and web visit model, native cold/warm starts, conditional performance, configurable weights and offline population audit. New standard/regression runs use it by default; existing saved specs retain their behavior.
 

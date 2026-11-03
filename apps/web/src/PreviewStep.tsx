@@ -6,7 +6,8 @@ import {
   CheckIcon,
 } from "@radix-ui/react-icons";
 import { Json, number, pretty } from "./api";
-import { Badge, Button, Modal, Panel } from "./ui";
+import { Badge, Button, Field, Modal, Panel } from "./ui";
+import { Histogram } from "./DistributionEditor";
 
 const attributes = (row: Json) =>
   Array.isArray(row.attributes)
@@ -38,6 +39,7 @@ export default function PreviewStep({
   refresh: () => void;
 }) {
   const [platform, setPlatform] = useState("");
+  const [effectId,setEffectId] = useState("");
   const [detail, setDetail] = useState<Json | null>(null);
   const [eventFilter, setEventFilter] = useState("");
   const [traceFilter, setTraceFilter] = useState("");
@@ -121,6 +123,22 @@ export default function PreviewStep({
           const a=document.createElement("a");a.href=url;a.download="scenario-evidence.json";a.click();URL.revokeObjectURL(url);
         }}>Download evidence</Button>
       </Panel>}
+      {data.report.modeling && <details className="panel">
+        <summary>Performance and experiment evidence</summary>
+        <p className="hint">Modeled work and serialized outcomes are measured separately. This sample does not verify destination storage.</p>
+        {!!data.report.modeling.effects.length && (() => {
+          const effects=data.report.modeling.effects;
+          const effect=effects.find((e:Json)=>e.id===effectId)||effects[0];
+          return <><Field label="View distribution"><select value={effect.id} onChange={e=>setEffectId(e.target.value)}>{effects.map((e:Json)=><option key={e.id} value={e.id}>{e.quantity.replaceAll("_", " ")} · {e.id}</option>)}</select></Field>
+            {data.performance_distributions?.[effect.id] && <Histogram data={data.performance_distributions[effect.id]}/>}
+            <p className="hint">Histogram: predicted component draws. {effect.selected_visits} of {effect.eligible_visits} eligible visits selected in the payload preview. {effect.note}</p>
+            <div className="table-scroll"><table><thead><tr><th>Observed in payloads</th><th>Visits</th><th>Request p50</th><th>Request p95</th><th>Errors</th></tr></thead><tbody>{Object.entries(effect.emitted).map(([group,value])=>{const v=value as Json;return <tr key={group}><td>{group}</td><td>{v.visits}</td><td>{v.request_ms.p50?.toFixed(1)??"—"} ms</td><td>{v.request_ms.p95?.toFixed(1)??"—"} ms</td><td>{v.request_errors}</td></tr>;})}</tbody></table></div>
+          </>;
+        })()}
+        {data.report.modeling.experiments.map((e:Json)=><div key={e.id}><h3>{e.id}</h3><div className="table-scroll"><table><thead><tr><th>Variant</th><th>Devices assigned</th><th>Visits assigned</th><th>Visits exposed</th></tr></thead><tbody>{e.variants.map((v:Json)=><tr key={v.variant}><td>{v.variant}</td><td>{v.assigned_devices}</td><td>{v.assigned_visits}</td><td>{v.exposed_visits}</td></tr>)}</tbody></table></div></div>)}
+        {(data.report.modeling.releases||[]).map((r:Json)=><div key={r.target}><h3>Release adoption · {r.target}</h3><div className="table-scroll"><table><thead><tr><th>Version in payload</th><th>Visits</th><th>Share</th></tr></thead><tbody>{r.observed.map((v:Json)=><tr key={v.version}><td>{v.version}</td><td>{v.visits}</td><td>{v.percent}%</td></tr>)}</tbody></table></div></div>)}
+        <Button onClick={()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({...data.report.modeling,preview_clock:data.preview_clock},null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="signals.json";a.click();URL.revokeObjectURL(url);}}>Download evidence</Button>
+      </details>}
       {!!data.report.population?.length && <details className="panel">
         <summary>Visitor distribution · this sample</summary>
         <div className="table-scroll"><table>
