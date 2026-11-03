@@ -32,6 +32,7 @@ import PreviewStep from "./PreviewStep";
 import CustomizeScenario from "./CustomizeScenario";
 import RunView from "./RunView";
 import cortexLogo from "./assets/cortex-xcor-dark.svg";
+import toolWordmark from "./assets/session-generator-wordmark.svg";
 
 const steps = [
   ["Destination", "Choose your apps and tenant"],
@@ -361,7 +362,7 @@ export default function App() {
       <div className="workspace">
         <header className="topbar">
           <div className="tool-identity">
-            <span className="tool-name">Session Generator</span>
+            <img className="tool-name" src={toolWordmark} alt="Session Generator" />
             <span className="tool-location">{steps[step][0]}</span>
           </div>
           <span
