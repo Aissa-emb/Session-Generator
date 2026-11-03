@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import "@fontsource/manrope/latin-600.css";
 import "@fontsource/source-sans-3/400.css";
 import "@fontsource/source-sans-3/500.css";
 import "@fontsource/source-sans-3/600.css";
