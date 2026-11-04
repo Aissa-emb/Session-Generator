@@ -1,4 +1,4 @@
-import { ReactNode, isValidElement, cloneElement, useId, useRef } from "react";
+import { CSSProperties, ReactNode, isValidElement, cloneElement, useId, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronDownIcon, Cross2Icon } from "@radix-ui/react-icons";
 export function Button({
@@ -136,5 +136,102 @@ export function Modal({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+/** A full-height side sheet for advanced settings; full screen on narrow viewports. */
+export function Sheet({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  footer,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: string;
+  description: string;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  const returnFocus = useRef<HTMLElement | null>(null);
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="overlay sheet-overlay" />
+        <Dialog.Content
+          className="sheet"
+          onOpenAutoFocus={() => {
+            returnFocus.current =
+              document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            if (returnFocus.current?.isConnected) {
+              event.preventDefault();
+              returnFocus.current.focus();
+            }
+          }}
+        >
+          <header className="sheet-head">
+            <div>
+              <Dialog.Title>{title}</Dialog.Title>
+              <Dialog.Description>{description}</Dialog.Description>
+            </div>
+            <Dialog.Close className="icon-button" aria-label="Close">
+              <Cross2Icon />
+            </Dialog.Close>
+          </header>
+          <div className="sheet-body">{children}</div>
+          {footer && <footer className="sheet-foot">{footer}</footer>}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+/** A labelled native range with a visible value readout; arrow keys step by `step`. */
+export function RangeField({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  readout,
+  valueText,
+  disabled = false,
+  id,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  readout: ReactNode;
+  valueText?: string;
+  disabled?: boolean;
+  id?: string;
+}) {
+  const fill = max > min ? ((Math.min(max, Math.max(min, value)) - min) / (max - min)) * 100 : 0;
+  return (
+    <label className={"range-field" + (disabled ? " disabled" : "")}>
+      <span className="range-label">{label}</span>
+      <output aria-hidden="true">{readout}</output>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        aria-label={label}
+        aria-valuetext={valueText}
+        style={{ "--fill": `${fill}%` } as CSSProperties}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+    </label>
   );
 }

@@ -24,13 +24,15 @@ import {
   defaults,
   flowNames,
   loadDraft,
+  profileName,
   scenario,
   scheduleError,
   signalNames,
   tenantName,
 } from "./workflow";
 import PreviewStep from "./PreviewStep";
-import CustomizeScenario from "./CustomizeScenario";
+import CustomizeScenario, { stories } from "./CustomizeScenario";
+import { shareText } from "./AdvancedSettings";
 import RunView from "./RunView";
 import cortexLogo from "./assets/cortex-xcor-dark.svg";
 import toolWordmark from "./assets/session-generator-wordmark.svg";
@@ -440,7 +442,7 @@ export default function App() {
                 {
                   [
                     "Choose your apps and trace destination.",
-                    "Choose a scenario and schedule.",
+                    "Choose a data profile and schedule.",
                     "Review a local sample before sending.",
                     runId
                       ? "Follow your run here. You can leave this page and return to its progress."
@@ -814,16 +816,16 @@ export default function App() {
                     </strong>
                   </div>
                   <div>
-                    <span>User flow</span>
-                    <strong>{draft.story === "causal" ? draft.causalScenario.replaceAll("-"," ") : flowNames[draft.flow]}</strong>
+                    <span>{draft.story === "causal" ? "Story" : "User flow"}</span>
+                    <strong>{draft.story === "causal" ? stories.find(([k]) => k === draft.causalScenario)?.[1] : flowNames[draft.flow]}</strong>
                   </div>
                   <div className="full">
-                    <span>Included signals</span>
+                    <span>{draft.story === "causal" ? "Story settings" : profileName(draft.profile)}</span>
                     <strong>
                       {draft.story === "causal" ? `${draft.causalVariant} · ${draft.causalMode} · seed ${draft.causalSeed}` : selected.length
                         ? selected
                             .map(
-                              (k) => `${signalNames[k]} (${draft.rates[k]}%)`,
+                              (k) => `${signalNames[k]} (${shareText(k, draft)}${draft.patterns[k].shape === "steady" ? "" : ", " + draft.patterns[k].shape})`,
                             )
                             .join(" · ")
                         : "Standard session activity"}

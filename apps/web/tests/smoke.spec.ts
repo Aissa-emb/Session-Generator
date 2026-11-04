@@ -37,6 +37,22 @@ async function connect(page: Page, platforms = ["android"]) {
     page.getByRole("heading", { name: "Customize traffic" }),
   ).toBeVisible();
 }
+async function setRange(page: Page, label: string, value: number) {
+  await page.getByLabel(label, { exact: true }).evaluate((el: HTMLInputElement, v) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, String(v));
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, value);
+}
+/** Radios are visually hidden behind their labels, so pick the visible card or chip. */
+async function pick(page: Page, name: string) {
+  await page.locator("label.profile-card, label.chip").filter({ hasText: name }).click();
+  await expect(page.getByRole("radio", { name: new RegExp(name) })).toBeChecked();
+}
+async function advanced(page: Page, tab = "Errors") {
+  await page.getByRole("button", { name: "Advanced settings", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Advanced settings" })).toBeVisible();
+  await page.getByRole("tab", { name: tab, exact: true }).click();
+}
 async function preview(page: Page) {
   await page
     .getByRole("button", { name: "Generate preview", exact: true })
@@ -50,56 +66,163 @@ async function preview(page: Page) {
   await page.getByRole("button", { name: "Local test", exact: false }).click();
 }
 
-test("network defaults survive old drafts, scenario selection and explicit opt-outs", async ({page}) => {
+test("error profiles default to production errors, migrate stored drafts once, and imports keep exact mixes", async ({page}) => {
   await connect(page, ["web"]);
   const oldDraft = await page.evaluate(() => {
     const draft = JSON.parse(localStorage.getItem("sg_workflow_v1")!);
-    delete draft.networkDefaultsVersion;
-    draft.signals.network = false;
+    for (const key of ["networkDefaultsVersion", "mixVersion", "profile", "patterns"]) delete draft[key];
+    draft.story = "regression";
+    draft.signals = { crashes: false, exceptions: false, freezes: false, network: false, pages: true, payments: false };
     draft.rates.network = 80;
+    draft.rates.pages = 30;
     localStorage.setItem("sg_workflow_v1", JSON.stringify(draft));
     return draft;
   });
   await page.reload();
   await page.getByRole("button", {name:"Continue",exact:true}).click();
-  await expect(page.getByLabel("Scenario", {exact:true})).toHaveValue("healthy");
-  await expect(page.getByText("Network failures · 15% of sessions", {exact:true})).toBeVisible();
-  await page.getByLabel("Scenario", {exact:true}).selectOption("fault:exceptions");
-  await expect(page.getByText("Network failures · 15% of sessions", {exact:true})).toBeVisible();
-  await page.getByLabel("Scenario", {exact:true}).selectOption("healthy");
+  // A stored draft from before error profiles adopts the default production mix once.
+  await expect(page.getByRole("radio", {name:/Production baseline/})).toBeChecked();
+  await expect(page.getByRole("button", {name:"Adjust Network failures: 15% of sessions, steady"})).toBeVisible();
+  await expect(page.getByRole("img", {name:/Requested share of sessions over the 5 min run/})).toBeVisible();
   const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
   await page.getByRole("button", {name:"Generate preview",exact:true}).click();
   const result = await response;
   expect(result.ok()).toBeTruthy();
-  const net = result.request().postDataJSON().client_faults.find((f:any)=>f.type==="network_failure");
+  const sent = result.request().postDataJSON();
+  expect(sent.name).toBe("Production baseline · All journeys");
+  expect(sent.incidents).toEqual([]);
+  const net = sent.client_faults.find((f:any)=>f.type==="network_failure");
   expect(net).toMatchObject({rate:.15,quota:"exact",steer_journey:false});
+  expect(Object.fromEntries(sent.client_faults.map((f:any)=>[f.type,f.rate]))).toEqual({js_exception:.2,network_failure:.15,lcp_regression:.25});
+  expect(sent.backend_faults.map((f:any)=>[f.variant,f.rate])).toEqual([["payments-db-pool",.12],["rails-outage",.12]]);
   const payload = await result.json();
   expect(payload.linter).toEqual([]);
   expect(payload.report.faults.find((f:any)=>f.id===net.id)).toMatchObject({emitted_sessions:15,within_tolerance:true});
   await page.getByRole("button", {name:"Back",exact:true}).click();
-  await page.getByText("Fine-tune", {exact:true}).click();
-  await page.getByLabel("Edit settings", {exact:true}).selectOption("Faults");
-  await page.getByRole("checkbox", {name:"Network failures",exact:true}).uncheck();
+  await page.getByRole("button", {name:"Adjust signals",exact:true}).click();
+  await page.getByLabel("Network failures share of sessions", {exact:true}).focus();
+  await page.keyboard.press("Home");
+  await expect(page.getByLabel("Network failures share of sessions", {exact:true})).toHaveValue("0");
+  await page.getByRole("button", {name:"Done",exact:true}).click();
+  await expect(page.getByText("Custom mix", {exact:true})).toBeVisible();
   await page.reload();
   await page.getByRole("button", {name:"Continue",exact:true}).click();
-  await expect(page.getByText("Network failures off", {exact:true})).toBeVisible();
-  await page.getByText("Fine-tune", {exact:true}).click();
-  await page.getByLabel("Edit settings", {exact:true}).selectOption("Faults");
-  await expect(page.getByRole("checkbox", {name:"Network failures",exact:true})).not.toBeChecked();
+  await expect(page.getByText("Off: Network failures", {exact:true})).toBeVisible();
+  await expect(page.getByRole("radio", {name:/Production baseline/})).not.toBeChecked();
+  await advanced(page);
   await page.locator("input[type=file]").setInputFiles({name:"older-workflow.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify({format:"vantra-workflow",version:1,draft:oldDraft}))});
   await expect(page.getByText("Configuration opened.", {exact:true})).toBeVisible();
-  await expect(page.getByRole("checkbox", {name:"Network failures",exact:true})).toBeChecked();
-  await expect(page.getByLabel("Network failures affected percentage", {exact:true})).toHaveValue("15");
-  await page.getByLabel("Scenario", {exact:true}).selectOption("causal:healthy");
-  await expect(page.getByText("Network failures · 15% of sessions", {exact:true})).toHaveCount(0);
+  // Imports keep their exact signals as a custom mix (older files adopt network failures once).
+  await expect(page.getByLabel("Network failures share of sessions", {exact:true})).toHaveValue("15");
+  await expect(page.getByLabel("Slow page loads share of sessions", {exact:true})).toHaveValue("30");
+  await expect(page.locator("#signal-exceptions")).toContainText("Off");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", {name:"Adjust Slow page loads: 30% of sessions, steady"})).toBeVisible();
+  await pick(page, "Diagnostic story");
+  await expect(page.getByRole("heading", {name:"Signal mix"})).toHaveCount(0);
+  await expect(page.getByLabel("Story", {exact:true})).toBeVisible();
+});
+
+test("signal patterns send smooth incidents placed in the run window", async ({page}) => {
+  await connect(page, ["android", "web"]);
+  await pick(page, "Incident spike");
+  await page.getByRole("button", {name:"Continuous sending",exact:true}).click();
+  await expect(page.getByRole("img", {name:/over the 60 min run/})).toBeVisible();
+  await expect(page.getByRole("button", {name:"Adjust Network failures: 8–45% of sessions, spike"})).toBeVisible();
+  // Keyboard: the legend opens the sheet on that signal's slider; tabs use arrow keys; Escape returns focus.
+  const legend = page.getByRole("button", {name:/^Adjust Crashes/});
+  await legend.click();
+  await expect(page.getByLabel("Crashes share of sessions", {exact:true})).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#signal-crashes .signal-value")).toHaveText("7%");
+  await page.getByRole("group", {name:"Crashes pattern"}).getByRole("button", {name:"Rise",exact:true}).click();
+  await setRange(page, "Crashes rise start", 50);
+  await expect(page.locator("#signal-crashes")).toContainText("Starts at 30 min");
+  await page.getByRole("tab", {name:"Errors",exact:true}).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", {name:"Population",exact:true})).toBeFocused();
+  await expect(page.getByRole("tabpanel")).toContainText("Returning visitors");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", {name:/^Adjust Crashes/})).toBeFocused();
+  await expect(page.getByText("Custom mix", {exact:true})).toBeVisible();
+  const before = Date.now();
+  const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
+  await page.getByRole("button", {name:"Generate preview",exact:true}).click();
+  const result = await response;
+  expect(result.ok()).toBeTruthy();
+  const sent = result.request().postDataJSON();
+  const byFault = Object.fromEntries(sent.incidents.map((i:any)=>[i.fault_ref,i]));
+  expect(Object.keys(byFault).sort()).toEqual(["crashes-android","exceptions-android","exceptions-web","network-android","network-web","payments-db-pool","rails-outage"]);
+  expect(byFault["network-web"]).toMatchObject({curve:"smooth",peak_rate:.45,baseline_rate:.08});
+  // A 24-minute spike centred 30 minutes into the run.
+  const centre = Date.parse(byFault["network-web"].start) + (byFault["network-web"].onset_minutes + byFault["network-web"].peak_minutes / 2) * 60000;
+  expect(Math.abs(centre - before - 30 * 60000)).toBeLessThan(60000);
+  expect(byFault["crashes-android"]).toMatchObject({curve:"smooth",peak_rate:.07,baseline_rate:.01,recovery_minutes:0});
+  expect(Math.abs(Date.parse(byFault["crashes-android"].start) - before - 30 * 60000)).toBeLessThan(60000);
+  expect(byFault["payments-db-pool"]).not.toHaveProperty("baseline_rate");
+  const payload = await result.json();
+  expect(payload.linter).toEqual([]);
+  await expect(page.getByText("Passed", {exact:true})).toBeVisible({timeout:45000});
+  await page.getByRole("button", {name:"Continue to send",exact:true}).click();
+  await expect(page.getByText("Crashes (1–7%, rise)", {exact:false})).toBeVisible();
+});
+
+test("runs longer than a day send steady shares instead of timed patterns", async ({page}) => {
+  await connect(page, ["web"]);
+  await pick(page, "Incident spike");
+  await page.getByRole("button", {name:"Continuous sending",exact:true}).click();
+  await page.getByLabel("Run for", {exact:true}).selectOption("custom");
+  await page.getByLabel("Duration (minutes)", {exact:true}).fill("2000");
+  await expect(page.getByRole("button", {name:"Adjust Network failures: 8–45% of sessions, spike"})).toBeVisible();
+  await page.getByRole("button", {name:"Adjust signals",exact:true}).click();
+  await expect(page.getByRole("group", {name:"Network failures pattern"}).getByRole("button", {name:"Spike",exact:true})).toBeDisabled();
+  await expect(page.locator("#signal-network")).toContainText("Patterns apply to runs of up to 24 hours");
+  await page.keyboard.press("Escape");
+  const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
+  await page.getByRole("button", {name:"Generate preview",exact:true}).click();
+  const sent = (await response).request().postDataJSON();
+  expect(sent.incidents).toEqual([]);
+  expect(sent.client_faults.find((f:any)=>f.type==="network_failure").rate).toBe(.45);
+});
+
+test("bad release and flaky network batches stay inside the five-minute window", async ({page}) => {
+  await connect(page, ["android", "web"]);
+  for (const [profile, faults] of [["Bad release", 4], ["Flaky network", 2]] as const) {
+    await pick(page, profile);
+    const before = Date.now();
+    const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
+    await page.getByRole("button", {name:"Generate preview",exact:true}).click();
+    const result = await response;
+    expect(result.ok()).toBeTruthy();
+    const sent = result.request().postDataJSON();
+    expect(sent.name).toBe(profile + " · All journeys");
+    expect(sent.incidents).toHaveLength(faults);
+    for (const i of sent.incidents) {
+      const start = Date.parse(i.start);
+      expect(start).toBeGreaterThanOrEqual(before - 5 * 60000 - 2000);
+      expect(start).toBeLessThan(before + 1000);
+    }
+    if (profile === "Flaky network") {
+      expect(sent.incidents.every((i:any)=>i.repeat_every_minutes > 0)).toBeTruthy();
+      expect(sent.modeling.bindings.map((b:any)=>b.quantity)).toEqual(["network_rtt_ms"]);
+    }
+    expect((await result.json()).linter).toEqual([]);
+    await expect(page.getByText("Passed", {exact:true})).toBeVisible({timeout:45000});
+    await page.getByRole("button", {name:"Back",exact:true}).click();
+  }
+  await expect(page.getByText("Also: Constrained network", {exact:false})).toBeVisible();
+  await pick(page, "Healthy");
+  await expect(page.getByText("Also: Constrained network", {exact:false})).toHaveCount(0);
 });
 
 test("varied visitor model reaches preview with native lifecycle controls", async ({page}, testInfo) => {
   await connect(page, ["android", "ios", "web"]);
-  await page.getByText("Fine-tune", {exact:true}).click();
+  await advanced(page, "Population");
   await expect(page.getByLabel("Visit patterns", {exact:true})).toHaveValue("varied");
-  await page.getByLabel("Returning visitors %", {exact:true}).fill("40");
-  await page.getByLabel("Cold starts on return %", {exact:true}).fill("30");
+  await setRange(page, "Returning visitors", 40);
+  await setRange(page, "Cold starts on return", 30);
+  await page.getByRole("button", {name:"Done",exact:true}).click();
   const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
   await page.getByRole("button", {name:"Generate preview",exact:true}).click();
   const result = await response;
@@ -123,22 +246,15 @@ test("one workflow, input validation, scoped platform controls, no AI or MCP", a
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("five-character app ID");
   await connect(page, ["web"]);
-  await page.getByText("Fine-tune",{exact:true}).click();
-  await page.getByLabel("Edit settings",{exact:true}).selectOption("Faults");
-  await expect(
-    page.getByRole("checkbox", { name: "Crashes", exact: false }),
-  ).toBeDisabled();
-  await expect(
-    page.getByRole("checkbox", { name: "Slow page loads", exact: false }),
-  ).toBeEnabled();
-  await page.getByLabel("Scenario", {exact:true}).selectOption("fault:pages");
-  await expect(
-    page.getByRole("checkbox", { name: "Slow page loads", exact: false }),
-  ).toBeChecked();
-  await expect(
-    page.getByLabel("Affected sessions (%)",{exact:true}),
-  ).toHaveValue("30");
   await capture(page, "redesign-customize.png");
+  await expect(page.getByRole("button", { name: /^Adjust Crashes/ })).toHaveCount(0);
+  await advanced(page);
+  await expect(page.locator("#signal-crashes")).toContainText("Needs an Android or iOS app");
+  await expect(page.getByLabel("Crashes share of sessions", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Slow page loads share of sessions", { exact: true })).toHaveValue("25");
+  await setRange(page, "Slow page loads share of sessions", 30);
+  await expect(page.locator("#signal-pages .signal-value")).toHaveText("30%");
+  await capture(page, "redesign-advanced.png");
   await expect(page.getByText(/copilot|MCP connection/i)).toHaveCount(0);
   expect((await request.post("/mcp", { data: {} })).status()).toBe(404);
   expect(
@@ -163,18 +279,10 @@ test("custom mixed-platform faults produce real session and distributed trace pr
     .getByLabel("Chronosphere tenant", { exact: true })
     .fill("https://preview-tenant.chronosphere.io");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByLabel("User flow").selectOption("retail");
-  await page.getByText("Fine-tune",{exact:true}).click();
-  await page.getByLabel("Edit settings",{exact:true}).selectOption("Faults");
-  for (const name of [
-    "Crashes",
-    "Exceptions",
-    "App freezes",
-    "Network failures",
-    "Slow page loads",
-    "Payment failures",
-  ])
-    await page.getByRole("checkbox", { name, exact: false }).check();
+  await pick(page, "Shopping & checkout");
+  // Every signal is on by default.
+  for (const name of ["Crashes", "Exceptions", "App freezes", "Network failures", "Slow page loads", "Payment failures"])
+    await expect(page.getByRole("button", { name: new RegExp("^Adjust " + name + ":") })).toBeVisible();
   await page.getByLabel("Number of sessions").fill("24");
   await page
     .getByRole("button", { name: "Generate preview", exact: true })
@@ -913,7 +1021,6 @@ test("web sending needs no stack settings or upload token when maps are not conf
     }),
   );
   await connect(page, ["web"]);
-  await page.getByLabel("Scenario", {exact:true}).selectOption("fault:exceptions");
   await preview(page);
   await page
     .getByRole("button", { name: "Send to destination", exact: false })
@@ -934,9 +1041,12 @@ test("causal scenarios keep platform evidence and run through the workflow", asy
   await page.getByRole("button", { name: "Sessions + distributed traces", exact: false }).click();
   await page.getByLabel("Chronosphere tenant", { exact: true }).fill("preview-tenant");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByLabel("Scenario", { exact: true }).selectOption("causal:slow-history");
-  await page.getByText("Fine-tune",{exact:true}).click();
+  await pick(page, "Diagnostic story");
+  await page.getByLabel("Story", { exact: true }).selectOption("slow-history");
   await page.getByLabel("Cohort", { exact: true }).selectOption("affected");
+  await advanced(page, "Story");
+  await expect(page.getByLabel("Traffic mix", { exact: true })).toHaveValue("single");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByLabel("Number of sessions").fill("9");
   await page.screenshot({path:testInfo.outputPath("causal-controls.png"),fullPage:true});
   await page.getByRole("button", { name: "Generate preview", exact: true }).click();
@@ -952,18 +1062,16 @@ test("causal scenarios keep platform evidence and run through the workflow", asy
   }
   await page.screenshot({path:testInfo.outputPath("causal-preview.png"),fullPage:true});
   await page.getByRole("button", { name: "Continue to send", exact: true }).click();
-  await expect(page.getByText("slow history", { exact: true })).toBeVisible();
+  await expect(page.getByText("Slow transaction history", { exact: true })).toBeVisible();
   await expect(page.getByText("affected · single · seed 7331")).toBeVisible();
 });
 
 test('preset-led performance editor preserves advanced values and previews emitted evidence', async ({page}, testInfo)=>{
  await connect(page,['web']);
- await page.getByLabel('Scenario',{exact:true}).selectOption('tail');
- await expect(page.getByLabel('Tail severity',{exact:true})).toHaveValue('4');
- await expect(page.getByLabel('Edit settings',{exact:true})).not.toBeVisible();
- await capture(page,'v3-customize.png');
- await page.getByText('Fine-tune',{exact:true}).click();
- await page.getByLabel('Edit settings',{exact:true}).selectOption('Performance');
+ await advanced(page,'Performance');
+ await page.getByRole('button',{name:'Tail-only slowdown',exact:true}).click();
+ await page.getByText('Audience and effect',{exact:true}).click();
+ await expect(page.getByLabel('Effect factor',{exact:true})).toHaveValue('4');
  await expect(page.getByRole('img',{name:'Distribution of baseline and affected durations'})).toBeVisible();
  await page.getByText('Distribution details',{exact:true}).click();
  await expect(page.getByLabel('Distribution family',{exact:true}).locator('option')).toHaveCount(8);
@@ -974,17 +1082,19 @@ test('preset-led performance editor preserves advanced values and previews emitt
  const download=page.waitForEvent('download');
  await page.getByRole('button',{name:'Save configuration',exact:true}).click();
  const saved=await (await download).path();
- await page.getByText('Fine-tune',{exact:true}).click();
+ await page.getByRole('button',{name:'Done',exact:true}).click();
+ await expect(page.getByText(/Also: Gateway processing override/)).toBeVisible();
+ await capture(page,'v3-customize.png');
  await page.getByRole('button',{name:'Back',exact:true}).click();
  await page.getByRole('button',{name:'Continue',exact:true}).click();
- await page.getByText('Fine-tune',{exact:true}).click();
- await page.getByLabel('Edit settings',{exact:true}).selectOption('Performance');
+ await advanced(page,'Performance');
  await page.getByText('Distribution details',{exact:true}).click();
  await expect(page.getByLabel('Second mean',{exact:true})).toHaveValue('720');
  await page.getByLabel('Second mean',{exact:true}).fill('840');
  await page.locator('input[type=file]').setInputFiles(saved!);
  await expect(page.getByText('Configuration opened.',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Second mean',{exact:true})).toHaveValue('720');
+ await page.getByRole('button',{name:'Done',exact:true}).click();
  await page.getByLabel('Number of sessions',{exact:true}).fill('24');
  const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Generate preview',exact:true}).click();
@@ -999,23 +1109,41 @@ test('preset-led performance editor preserves advanced values and previews emitt
 
 test('advanced modeling controls fit narrow and zoomed viewports',async({page})=>{
  await connect(page,['android','ios','web']);
- await page.getByText('Fine-tune',{exact:true}).click();
- await page.getByLabel('Edit settings',{exact:true}).selectOption('Performance');
+ const fits=()=>page.evaluate(()=>{
+  const sheet=document.querySelector('.sheet-body');
+  const wide=[...document.querySelectorAll('.sheet *, main *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&(r.right>innerWidth+1||r.left<-1)&&!el.closest('.sheet-tabs')});
+  return document.documentElement.scrollWidth<=innerWidth+1&&(!sheet||sheet.scrollWidth<=sheet.clientWidth+1)&&wide.length===0;
+ });
+ for(const width of [320,390,768,1280,1920]){
+  await page.setViewportSize({width,height:1000});
+  expect(await fits(),`customize ${width}px`).toBeTruthy();
+ }
+ await advanced(page,'Errors');
+ await page.getByRole('group',{name:'Network failures pattern'}).getByRole('button',{name:'Spike',exact:true}).click();
+ for(const width of [320,390,768,1280,1920]){
+  await page.setViewportSize({width,height:1000});
+  expect(await fits(),`errors ${width}px`).toBeTruthy();
+ }
+ await page.getByRole('tab',{name:'Performance',exact:true}).click();
  await page.getByRole('button',{name:'Add override',exact:true}).click();
  await page.getByText('Distribution details',{exact:true}).click();
  for(const width of [320,390,768,1280,1920]){
   await page.setViewportSize({width,height:1000});
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
+  expect(await fits(),`performance ${width}px`).toBeTruthy();
  }
  await page.setViewportSize({width:768,height:1000});
  await page.addStyleTag({content:'html{font-size:200%}'});
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
+ for(const tab of ['Performance','Errors']){
+  await page.getByRole('tab',{name:tab,exact:true}).click();
+  expect(await fits(),`${tab} at 200% text`).toBeTruthy();
+ }
+ await page.keyboard.press('Escape');
+ expect(await fits(),'customize at 200% text').toBeTruthy();
 });
 
 test('release adoption and experiment editors survive reload and reach payload evidence',async({page})=>{
  await connect(page,['android','ios','web']);
- await page.getByText('Fine-tune',{exact:true}).click();
- await page.getByLabel('Edit settings',{exact:true}).selectOption('Release');
+ await advanced(page,'Release');
  await page.getByRole('button',{name:'Set adoption curve',exact:true}).first().click();
  await page.getByLabel('android point 1 version 10.28.0 share',{exact:true}).fill('100');
  await page.getByLabel('android point 1 version 10.27.3 share',{exact:true}).fill('0');
@@ -1025,14 +1153,14 @@ test('release adoption and experiment editors survive reload and reach payload e
   await page.setViewportSize({width,height:1000});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
  }
- await page.getByLabel('Edit settings',{exact:true}).selectOption('Experiments');
+ await page.getByRole('tab',{name:'Experiments',exact:true}).click();
  await page.getByRole('button',{name:'Add experiment',exact:true}).click();
  await page.getByLabel('Exposure endpoints',{exact:true}).fill('home, accounts, locations');
  await page.reload();
  await page.getByRole('button',{name:'Continue',exact:true}).click();
- await page.getByText('Fine-tune',{exact:true}).click();
- await page.getByLabel('Edit settings',{exact:true}).selectOption('Release');
+ await advanced(page,'Release');
  await expect(page.getByLabel('android point 1 version 10.28.0 share',{exact:true})).toHaveValue('100');
+ await page.getByRole('button',{name:'Done',exact:true}).click();
  const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Generate preview',exact:true}).click();
  const data=await(await response).json();
