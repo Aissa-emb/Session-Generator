@@ -5,6 +5,7 @@ import { Badge, Button, Field, Panel, RangeField } from "./ui";
 import { Draft, Signal, SignalGroup, available, flowNames, groupNames, isVital, profileMix, profiles, signalInfo, signalNames, signalOrder, vitalScale } from "./workflow";
 import AdvancedSettings, { AdvancedTab, shareText } from "./AdvancedSettings";
 import { ProfileGlyph, RunTimeline } from "./SignalChart";
+import { quantityName } from "./AdvancedTabs";
 
 export type Story = { id: string; name: string; line: string; domain: "Banking" | "Travel"; where: string };
 /** What each connected story shows when it fails, and where the fault sits. */
@@ -61,9 +62,9 @@ export default function CustomizeScenario({ draft, update, caps }: { draft: Draf
     .map((group) => ({ group, keys: enabled.filter((k) => signalInfo[k].group === group) }))
     .filter((g) => g.keys.length);
   const extras = [
-    ...(model?.bindings || []).map((b: Json) => (b.id === NETWORK_BINDING ? "Constrained network" : caps.modeling?.quantities[b.quantity]?.name + " override")),
-    ...(model?.experiments?.length ? [`${model.experiments.length} experiment${model.experiments.length > 1 ? "s" : ""}`] : []),
-    ...(model?.releases?.length ? ["Release adoption curve"] : []),
+    ...(model?.bindings || []).map((b: Json) => (b.id === NETWORK_BINDING ? "Slow network" : quantityName(b.quantity) + " change")),
+    ...(model?.experiments?.length ? [`${model.experiments.length} A/B test${model.experiments.length > 1 ? "s" : ""}`] : []),
+    ...(model?.releases?.length ? ["App version rollout"] : []),
   ];
   return (
     <>

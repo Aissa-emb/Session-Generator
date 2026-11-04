@@ -45,7 +45,7 @@ async function setRange(page: Page, label: string, value: number) {
 }
 /** Radios are visually hidden behind their labels, so pick the visible card or chip. */
 async function pick(page: Page, name: string) {
-  await page.locator("label.profile-card, label.chip, label.story-card").filter({ hasText: name }).click();
+  await page.locator("label.profile-card, label.chip, label.story-card, label.quick-choice").filter({ hasText: name }).click();
   await expect(page.getByRole("radio", { name: new RegExp(name) })).toBeChecked();
 }
 async function advanced(page: Page, tab = "Errors") {
@@ -155,7 +155,7 @@ test("signal patterns send smooth incidents placed in the run window", async ({p
   await expect(page.locator("#signal-crashes")).toContainText("Starts at 30 min");
   await page.getByRole("tab", {name:"Errors",exact:true}).focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("tab", {name:"Population",exact:true})).toBeFocused();
+  await expect(page.getByRole("tab", {name:"Visitors",exact:true})).toBeFocused();
   await expect(page.getByRole("tabpanel")).toContainText("Returning visitors");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -315,7 +315,7 @@ test("bad release and flaky network batches stay inside the five-minute window",
 
 test("varied visitor model reaches preview with native lifecycle controls", async ({page}, testInfo) => {
   await connect(page, ["android", "ios", "web"]);
-  await advanced(page, "Population");
+  await advanced(page, "Visitors");
   await expect(page.getByLabel("Visit patterns", {exact:true})).toHaveValue("varied");
   await setRange(page, "Returning visitors", 40);
   await setRange(page, "Cold starts on return", 30);
@@ -1073,12 +1073,13 @@ test("causal scenarios keep platform evidence and run through the workflow", asy
 
 test('preset-led performance editor preserves advanced values and previews emitted evidence', async ({page}, testInfo)=>{
  await connect(page,['web']);
- await advanced(page,'Performance');
- await page.getByRole('button',{name:'Tail-only slowdown',exact:true}).click();
- await page.getByText('Audience and effect',{exact:true}).click();
- await expect(page.getByLabel('Effect factor',{exact:true})).toHaveValue('4');
+ await advanced(page,'Speed');
+ await pick(page,'Tail-only slowdown');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ await expect(page.getByLabel('How much slower',{exact:true})).toHaveValue('4');
+ await expect(page.getByText(/Most requests take about \d+ ms; 1 in 20 take over/)).toBeVisible();
  await expect(page.getByRole('img',{name:'Distribution of baseline and affected durations'})).toBeVisible();
- await page.getByText('Distribution details',{exact:true}).click();
+ await page.locator('.distribution-editor > details > summary').click();
  await expect(page.getByLabel('Distribution family',{exact:true}).locator('option')).toHaveCount(8);
  await page.getByLabel('Distribution family',{exact:true}).selectOption('bimodal');
  await page.getByLabel('Second mean',{exact:true}).fill('720');
@@ -1088,12 +1089,13 @@ test('preset-led performance editor preserves advanced values and previews emitt
  await page.getByRole('button',{name:'Save configuration',exact:true}).click();
  const saved=await (await download).path();
  await page.getByRole('button',{name:'Done',exact:true}).click();
- await expect(page.getByText(/Also: Gateway processing override/)).toBeVisible();
+ await expect(page.getByText(/Also: Backend processing time change/)).toBeVisible();
  await capture(page,'v3-customize.png');
  await page.getByRole('button',{name:'Back',exact:true}).click();
  await page.getByRole('button',{name:'Continue',exact:true}).click();
- await advanced(page,'Performance');
- await page.getByText('Distribution details',{exact:true}).click();
+ await advanced(page,'Speed');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ await page.locator('.distribution-editor > details > summary').click();
  await expect(page.getByLabel('Second mean',{exact:true})).toHaveValue('720');
  await page.getByLabel('Second mean',{exact:true}).fill('840');
  await page.locator('input[type=file]').setInputFiles(saved!);
@@ -1129,16 +1131,17 @@ test('advanced modeling controls fit narrow and zoomed viewports',async({page})=
   await page.setViewportSize({width,height:1000});
   expect(await fits(),`errors ${width}px`).toBeTruthy();
  }
- await page.getByRole('tab',{name:'Performance',exact:true}).click();
- await page.getByRole('button',{name:'Add override',exact:true}).click();
- await page.getByText('Distribution details',{exact:true}).click();
+ await page.getByRole('tab',{name:'Speed',exact:true}).click();
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ await page.getByLabel('Add a speed change for',{exact:true}).selectOption('network_rtt_ms');
+ await page.locator('.distribution-editor > details > summary').click();
  for(const width of [320,390,768,1280,1920]){
   await page.setViewportSize({width,height:1000});
   expect(await fits(),`performance ${width}px`).toBeTruthy();
  }
  await page.setViewportSize({width:768,height:1000});
  await page.addStyleTag({content:'html{font-size:200%}'});
- for(const tab of ['Performance','Errors']){
+ for(const tab of ['Speed','Errors','Visitors','User journeys','A/B tests','App versions']){
   await page.getByRole('tab',{name:tab,exact:true}).click();
   expect(await fits(),`${tab} at 200% text`).toBeTruthy();
  }
@@ -1146,25 +1149,57 @@ test('advanced modeling controls fit narrow and zoomed viewports',async({page})=
  expect(await fits(),'customize at 200% text').toBeTruthy();
 });
 
+test('advanced tabs offer named quick choices, 100% sliders and friendly actions',async({page})=>{
+ await connect(page,['web']);
+ await advanced(page,'User journeys');
+ await pick(page,'Mostly buying');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ // Moving one share rebalances the rest so the total stays 100%.
+ await setRange(page,'Buys',60);
+ const values=await page.locator('fieldset.share-sliders').first().locator('input[type=range]').evaluateAll(els=>els.map(e=>Number((e as HTMLInputElement).value)));
+ expect(values.reduce((a,b)=>a+b,0)).toBe(100);
+ expect(values[1]).toBe(60);
+ await expect(page.getByRole('radio',{name:/Mostly buying/})).not.toBeChecked();
+ await page.getByRole('tab',{name:'Speed',exact:true}).click();
+ await pick(page,'Slow network');
+ await page.getByRole('tab',{name:'A/B tests',exact:true}).click();
+ await page.getByRole('button',{name:'Add an A/B test',exact:true}).click();
+ await page.getByLabel('Test name',{exact:true}).fill('Checkout Redesign');
+ await page.getByLabel('Test name',{exact:true}).blur();
+ await expect(page.getByLabel('Test name',{exact:true})).toHaveValue('checkout-redesign');
+ await page.getByLabel('Starts when users reach',{exact:true}).selectOption({label:'Adds to cart'});
+ await setRange(page,'Split',30);
+ await page.getByRole('button',{name:'Done',exact:true}).click();
+ const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Generate preview',exact:true}).click();
+ const sent=(await response).request().postDataJSON();
+ expect(sent.population.intent_mix.retail.buyer).toBe(60);
+ expect(Object.values(sent.population.intent_mix.retail as Record<string,number>).reduce((a,b)=>a+b,0)).toBe(100);
+ expect(sent.modeling.bindings).toMatchObject([{id:'scenario-network',quantity:'network_rtt_ms'}]);
+ expect(sent.modeling.experiments).toMatchObject([{id:'checkout-redesign',exposure_endpoints:['add_to_cart'],variants:{control:30,treatment:70}}]);
+});
+
 test('release adoption and experiment editors survive reload and reach payload evidence',async({page})=>{
  await connect(page,['android','ios','web']);
- await advanced(page,'Release');
- await page.getByRole('button',{name:'Set adoption curve',exact:true}).first().click();
- await page.getByLabel('android point 1 version 10.28.0 share',{exact:true}).fill('100');
- await page.getByLabel('android point 1 version 10.27.3 share',{exact:true}).fill('0');
- await page.getByLabel('android point 2 version 10.28.0 share',{exact:true}).fill('100');
- await page.getByLabel('android point 2 version 10.27.3 share',{exact:true}).fill('0');
+ await advanced(page,'App versions');
+ await pick(page,'New version rolls out');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ const android=page.locator('.release-card').filter({hasText:'Android'});
+ for(const label of ['Share at the start','Share at the end'])
+  await android.getByLabel(label,{exact:true}).evaluate((el:HTMLInputElement)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'100');el.dispatchEvent(new Event('input',{bubbles:true}));});
+ await expect(android.getByRole('img',{name:/10\.28\.0 share from 100% to 100%/})).toBeVisible();
  for(const width of [320,768,1440]){
   await page.setViewportSize({width,height:1000});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
  }
- await page.getByRole('tab',{name:'Experiments',exact:true}).click();
- await page.getByRole('button',{name:'Add experiment',exact:true}).click();
- await page.getByLabel('Exposure endpoints',{exact:true}).fill('home, accounts, locations');
+ await page.getByRole('tab',{name:'A/B tests',exact:true}).click();
+ await page.getByRole('button',{name:'Add an A/B test',exact:true}).click();
+ await page.getByText('Expert',{exact:true}).click();
+ await page.getByLabel('Starts at any of',{exact:true}).fill('home, accounts, locations');
  await page.reload();
  await page.getByRole('button',{name:'Continue',exact:true}).click();
- await advanced(page,'Release');
- await expect(page.getByLabel('android point 1 version 10.28.0 share',{exact:true})).toHaveValue('100');
+ await advanced(page,'App versions');
+ await expect(page.locator('.release-card').filter({hasText:'Android'}).getByLabel('Share at the start',{exact:true})).toHaveValue('100');
  await page.getByRole('button',{name:'Done',exact:true}).click();
  const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Generate preview',exact:true}).click();

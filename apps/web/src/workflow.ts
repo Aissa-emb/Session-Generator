@@ -429,7 +429,12 @@ export function scenario(caps: Json, d: Draft, symbolication = false, now = Date
   Object.assign(s.population, structuredClone(d.populationOverrides || {}));
   if (d.modeling) {
     s.modeling = structuredClone(d.modeling);
-    if (s.modeling.releases) s.modeling.releases = s.modeling.releases.filter((c:Json)=>s.targets.some((t:Json)=>t.id===c.target));
+    if (s.modeling.releases) {
+      s.modeling.releases = s.modeling.releases.filter((c:Json)=>s.targets.some((t:Json)=>t.id===c.target));
+      // "run" anchors a rollout to the run's own window: a batch is dated over the five minutes before it is sent.
+      const runStart = new Date(d.mode === "live" ? now : now - 5 * 60000).toISOString();
+      for (const c of s.modeling.releases) if (c.start === "run") c.start = runStart;
+    }
   }
   s.population.model = d.population;
   s.population.returning_share = d.returning / 100;

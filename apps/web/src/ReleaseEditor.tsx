@@ -9,8 +9,8 @@ export default function ReleaseEditor({apps,catalog,curves,change}:{apps:AppTarg
    const versions=entry.versions.map((v:Json)=>v.version);
    const update=(v:Json)=>change(curves.map(c=>c===curve?{...c,...v}:c));
    return <div className="release-editor" key={app.platform}><h3>{app.platform==='ios'?'iOS':app.platform==='web'?'Web':'Android'}</h3>
-    {!curve?<Button onClick={()=>change([...curves,{target:entry.target,start:new Date().toISOString(),points:[{minute:0,shares:{[versions[0]]:10,[versions[1]]:90}},{minute:20,shares:{[versions[0]]:80,[versions[1]]:20}}]}])}>Set adoption curve</Button>:<>
-     <div className="field-grid"><Field label={app.platform+' rollout starts'}><input type="datetime-local" value={new Date(new Date(curve.start).getTime()-new Date(curve.start).getTimezoneOffset()*60000).toISOString().slice(0,16)} onChange={e=>{if(e.target.value)update({start:new Date(e.target.value).toISOString()});}}/></Field>
+    {!curve?<Button onClick={()=>change([...curves,{target:entry.target,start:'run',points:[{minute:0,shares:{[versions[0]]:10,[versions[1]]:90}},{minute:20,shares:{[versions[0]]:80,[versions[1]]:20}}]}])}>Set adoption curve</Button>:<>
+     <div className="field-grid"><Field label={app.platform+' rollout starts'} hint="Leave empty to start when the run starts."><input type="datetime-local" value={curve.start==='run'?'':new Date(new Date(curve.start).getTime()-new Date(curve.start).getTimezoneOffset()*60000).toISOString().slice(0,16)} onChange={e=>update({start:e.target.value?new Date(e.target.value).toISOString():'run'})}/></Field>
       {app.platform!=='web'&&<Field label="Native rollback"><select value={String(curve.allow_rollback||false)} onChange={e=>update({allow_rollback:e.target.value==='true'})}><option value="false">Keep upgraded builds</option><option value="true">Allow build rollback</option></select></Field>}
      </div>
      <div className="table-scroll"><table><caption>Requested shares · each row must total 100%</caption><thead><tr><th>Minute</th>{versions.map((v:string)=><th key={v}>{v}</th>)}<th/></tr></thead><tbody>{curve.points.map((p:Json,i:number)=><tr key={i}>

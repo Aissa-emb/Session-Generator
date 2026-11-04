@@ -2291,3 +2291,45 @@ fieldset.cohort-group legend { flex-basis: 100%; }
 @media (forced-colors: active) {
   .chip input:checked + span, .profile-card:has(input:checked) { outline: 2px solid Highlight; }
 }
+
+/* Advanced tabs: purpose line, quick choices first, Customize and Expert disclosures. */
+.sheet-tabs { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+.tab-intro { font-size: 0.875rem; color: var(--secondary); margin-bottom: 16px; }
+.tab-intro strong { color: var(--text); font-weight: 600; }
+.sheet-panel { container-type: inline-size; }
+fieldset.quick-choices { border: 0; margin: 0 0 8px; padding: 0; min-width: 0; display: grid; grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr)); gap: 8px; }
+@container (max-width: 30rem) { fieldset.quick-choices { grid-template-columns: minmax(0, 1fr); } }
+.quick-choice { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: #162536; cursor: pointer; transition: background 140ms, border-color 140ms; }
+.quick-choice:hover { background: var(--hover); }
+.quick-choice input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.quick-choice:has(input:checked) { background: linear-gradient(120deg, #35576a99, #2a4359cc); border-color: #5cd6aa66; }
+.quick-choice:has(input:checked)::after { content: ""; position: absolute; right: 12px; top: 12px; width: 6px; height: 6px; border-radius: 50%; background: var(--mint); }
+.quick-choice:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.quick-choice strong { font-size: 0.875rem; font-weight: 600; padding-right: 12px; }
+.quick-choice span { font-size: 0.8125rem; line-height: 1.35; color: var(--secondary); }
+.quick-custom { grid-column: 1 / -1; }
+details.tab-disclosure { margin: 16px 0 0; border-top: 1px solid var(--border); padding-top: 14px; }
+details.tab-disclosure > summary { font-weight: 600; font-size: 0.875rem; cursor: pointer; }
+details.tab-disclosure details.tab-disclosure > summary { font-weight: 500; color: var(--secondary); }
+fieldset.share-sliders { border: 0; margin: 16px 0; padding: 0; min-width: 0; display: grid; gap: 12px; max-width: 560px; }
+fieldset.share-sliders > legend { padding: 0; margin-bottom: 8px; font-weight: 600; font-size: 0.875rem; }
+.share-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--border); }
+.share-bar span { display: flex; align-items: center; justify-content: center; min-width: 4px; color: #0f1b29; font-size: 0.6875rem; font-weight: 600; font-variant-numeric: tabular-nums; overflow: hidden; white-space: nowrap; }
+.range-label small { display: block; color: var(--muted); font-size: 0.75rem; margin-top: 1px; }
+.range-label .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; vertical-align: 0.05em; }
+fieldset.chip-group.compact { margin: 12px 0 0; gap: 6px; }
+fieldset.chip-group.compact > legend { padding: 0; margin-bottom: 6px; font-size: 0.8125rem; color: var(--secondary); }
+fieldset.chip-group.compact .chip span { min-height: 30px; padding: 4px 12px; font-size: 0.8125rem; }
+.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.speed-change, .ab-test, .release-card { border: 1px solid var(--border); border-radius: 11px; background: #162536; padding: 16px; margin-top: 14px; }
+.speed-change h3, .release-card h3 { font-size: 0.9375rem; font-weight: 600; }
+.speed-change h4 { font-size: 0.875rem; font-weight: 600; margin-top: 18px; }
+.speed-summary { font-size: 0.875rem; color: var(--secondary); margin: 6px 0 0; }
+.speed-summary strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ab-test .field-grid { margin-top: 0; }
+.speed-change > .button, .ab-test > .button, .release-card > .button { margin-top: 12px; }
+.adoption { margin: 12px 0 0; }
+.adoption svg { display: block; width: 100%; height: 60px; }
+.adoption line { stroke: var(--border); }
+.adoption path { fill: none; stroke: var(--mint); stroke-width: 2; }
+.adoption figcaption { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
