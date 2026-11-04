@@ -1345,6 +1345,12 @@ table + .hint,
 .run-notice strong {
   font-weight: 500;
 }
+.run-notice-reason {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .receipt-section {
   border-top: 1px solid var(--border);
   margin-top: 28px;

@@ -386,6 +386,99 @@ test("continuous rate and two-hour duration start a real local worker with pause
   }
 });
 
+test("failed and partially skipped runs say why without exposing raw errors", async ({
+  page,
+}) => {
+  const base = {
+    id: "observed-run",
+    spec_id: "observed-spec",
+    spec_version: 1,
+    mode: "live",
+    destination: "sessions_only",
+    dry_run: true,
+    desired_status: "running",
+    started: Date.now() / 1000 - 145,
+    ended: null,
+    heartbeat: Date.now() / 1000,
+    counters: {
+      sessions: 60,
+      payloads: 927,
+      accepted: 8606,
+      rejected: 0,
+      errors: 0,
+    },
+    delivery: {},
+    receipts: [],
+    verifications: [],
+    report: {},
+  };
+  let run: Record<string, unknown> = {
+    ...base,
+    status: "running",
+    skipped_sessions: 1,
+    last_skipped: {
+      type: "KeyError",
+      detail: null,
+      where: ["xcorgen/browser_session.py:612 in _request"],
+    },
+  };
+  await page.route("**/api/runs/observed-run", (r) => r.fulfill({ json: run }));
+  await page.route("**/api/specs/observed-spec*", (r) =>
+    r.fulfill({
+      json: {
+        id: "observed-spec",
+        version: 1,
+        spec: {
+          name: "Regression · All journeys",
+          targets: [
+            {
+              id: "vantra-web",
+              platform: "web",
+              app_name: "Vantra Web",
+              embrace_app_id: "kfs9f",
+            },
+          ],
+          traffic: { mode: "live", rate_per_minute: 20, duration_minutes: 120 },
+          destinations: { mode: "sessions_only" },
+        },
+      },
+    }),
+  );
+  await page.addInitScript(() =>
+    localStorage.setItem("sg_run_id", JSON.stringify("observed-run")),
+  );
+  await page.goto("/");
+  const skipped = page
+    .getByRole("status")
+    .filter({ hasText: "1 session was skipped." });
+  await expect(skipped).toContainText(
+    "Nothing from it was sent; the run continues.",
+  );
+  await expect(skipped).toContainText(
+    "Last reason: unexpected KeyError at xcorgen/browser_session.py:612 in _request.",
+  );
+  run = {
+    ...base,
+    status: "failed",
+    ended: Date.now() / 1000,
+    skipped_sessions: 3,
+    failure: {
+      type: "JobFailure",
+      where: ["server/worker.py:225 in live"],
+      detail:
+        "3 sessions in a row could not be generated, so the stream stopped. Last: Generated session failed the realism linter (pii at $.embrace.logs.resourceLogs[0].message).",
+    },
+  };
+  const alert = page
+    .getByRole("alert")
+    .filter({ hasText: "The run needs attention." });
+  await expect(alert).toContainText(
+    "Reason: 3 sessions in a row could not be generated, so the stream stopped.",
+  );
+  await expect(page.getByText("1 session was skipped.")).toHaveCount(0);
+  await expect(page.locator(".run-status")).toHaveText("Needs attention");
+});
+
 test("offline detection explains recovery, retains draft, and reconnects", async ({
   page,
 }) => {

@@ -22,6 +22,14 @@ const clock = (seconds: number) => {
 };
 const platformName = (p: string) =>
   p === "ios" ? "iOS" : p === "web" ? "Web" : "Android";
+// The worker records its own messages as detail; other errors only carry a class and code location.
+const failureText = (f?: Json) =>
+  !f
+    ? ""
+    : f.detail ||
+      (f.type
+        ? `unexpected ${f.type}${f.where?.length ? " at " + f.where[f.where.length - 1] : ""}.`
+        : "");
 const receiptTime = (ms?: number) =>
   ms
     ? new Date(ms).toLocaleTimeString([], {
@@ -112,6 +120,7 @@ export default function RunView({
         ? "Multi-platform run"
         : "Your run");
   const delivery = run?.delivery;
+  const skipped: number = run?.skipped_sessions || 0;
   const backend = spec?.destinations?.mode === "end_to_end";
   const receipts: Json[] = run?.receipts || [];
   const recentReceipts = receipts.slice(0, 20);
@@ -295,7 +304,27 @@ export default function RunView({
       {run?.status === "failed" && (
         <div className="run-notice" role="alert">
           <strong>The run needs attention.</strong> Some data may have been
-          delivered. Review the receipts and server log before sending again.
+          delivered. Review the receipts before sending again.
+          {failureText(run.failure) && (
+            <span className="run-notice-reason">
+              Reason: {failureText(run.failure)}
+            </span>
+          )}
+        </div>
+      )}
+      {run && run.status !== "failed" && skipped > 0 && (
+        <div className="run-notice" role="status">
+          <strong>
+            {number(skipped)} {skipped === 1 ? "session was" : "sessions were"}{" "}
+            skipped.
+          </strong>{" "}
+          Nothing from {skipped === 1 ? "it" : "them"} was sent; the run
+          continues.
+          {failureText(run.last_skipped) && (
+            <span className="run-notice-reason">
+              Last reason: {failureText(run.last_skipped)}
+            </span>
+          )}
         </div>
       )}
       {fetchError instanceof ApiError && fetchError.status === 404 && (
