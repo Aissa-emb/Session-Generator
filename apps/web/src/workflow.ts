@@ -13,8 +13,20 @@ export type Signal =
   | "network"
   | "pages"
   | "payments";
+export type Shape = "steady" | "spike" | "rise" | "waves";
+/** How one signal's share of sessions changes across the run. Positions are percentages of the run. */
+export type Pattern = {
+  shape: Shape;
+  peakAt: number;
+  width: number;
+  baseline: number;
+  waves: number;
+};
 export type Draft = {
   networkDefaultsVersion: 1;
+  mixVersion: 2;
+  profile: string;
+  patterns: Record<Signal, Pattern>;
   modeling?: Json;
   populationOverrides?: Json;
   modelingPreset?: string;
@@ -53,8 +65,20 @@ export type Draft = {
   rate: number;
   duration: number;
 };
+export const steady: Pattern = { shape: "steady", peakAt: 50, width: 40, baseline: 0, waves: 3 };
+const allSteady = (): Record<Signal, Pattern> => ({
+  crashes: { ...steady },
+  exceptions: { ...steady },
+  freezes: { ...steady },
+  network: { ...steady },
+  pages: { ...steady },
+  payments: { ...steady },
+});
 export const defaults: Draft = {
   networkDefaultsVersion: 1,
+  mixVersion: 2,
+  profile: "baseline",
+  patterns: allSteady(),
   apps: [{ platform: "android", appId: "", name: "Vantra", region: "us" }],
   destination: "end_to_end",
   tenant: "",
@@ -82,21 +106,22 @@ export const defaults: Draft = {
   returning: 45,
   coldStarts: 35,
   interruptions: 12,
+  // Default to a realistic production mix with errors on every signal.
   signals: {
-    crashes: false,
-    exceptions: false,
-    freezes: false,
+    crashes: true,
+    exceptions: true,
+    freezes: true,
     network: true,
-    pages: false,
-    payments: false,
+    pages: true,
+    payments: true,
   },
   rates: {
-    crashes: 10,
-    exceptions: 15,
-    freezes: 20,
+    crashes: 8,
+    exceptions: 20,
+    freezes: 15,
     network: 15,
-    pages: 30,
-    payments: 30,
+    pages: 25,
+    payments: 12,
   },
   lcp: 3800,
   mode: "burst",
@@ -118,16 +143,126 @@ export const signalNames: Record<Signal, string> = {
   pages: "Slow page loads",
   payments: "Payment failures",
 };
-export function restoreDraft(value: Partial<Draft>): Draft {
-  const signals = { ...defaults.signals, ...value.signals };
-  const rates = { ...defaults.rates, ...value.rates };
-  // Older drafts silently inherited network=false. Adopt the new baseline once;
-  // a deliberate opt-out saved by this UI remains an opt-out on future loads.
-  if (!value.networkDefaultsVersion && !signals.network) {
-    signals.network = true;
-    rates.network = defaults.rates.network;
+export const signalInfo: Record<Signal, { short: string; max: number; color: string }> = {
+  network: { short: "Timeouts and connection resets", max: 60, color: "#3987e5" },
+  crashes: { short: "Fatal app terminations", max: 40, color: "#d95926" },
+  exceptions: { short: "Unhandled and logged errors", max: 80, color: "#199e70" },
+  freezes: { short: "Main thread blocked 6–10 s", max: 60, color: "#c98500" },
+  pages: { short: "Largest Contentful Paint regressions", max: 80, color: "#d55181" },
+  payments: { short: "Payment backend outages", max: 60, color: "#9085e9" },
+};
+export const signalOrder: Signal[] = ["network", "crashes", "exceptions", "freezes", "pages", "payments"];
+type Mix = Partial<Record<Signal, [number, Partial<Pattern>?]>>;
+export type Profile = { id: string; name: string; line: string; mix?: Mix };
+export const profiles: Profile[] = [
+  { id: "baseline", name: "Production baseline", line: "Steady errors on every signal",
+    mix: { network: [15], crashes: [8], exceptions: [20], freezes: [15], pages: [25], payments: [12] } },
+  { id: "spike", name: "Incident spike", line: "Errors surge mid-run, then recover",
+    mix: { network: [45, { shape: "spike", baseline: 8 }], crashes: [6], exceptions: [35, { shape: "spike", baseline: 10 }],
+      freezes: [12], pages: [25], payments: [40, { shape: "spike" }] } },
+  { id: "release", name: "Bad release", line: "Crashes climb after a rollout",
+    mix: { network: [12], crashes: [25, { shape: "rise", peakAt: 30, width: 25, baseline: 4 }],
+      exceptions: [45, { shape: "rise", peakAt: 30, width: 25, baseline: 10 }],
+      freezes: [30, { shape: "rise", peakAt: 30, width: 25, baseline: 8 }], pages: [20], payments: [8] } },
+  { id: "network", name: "Flaky network", line: "Recurring timeouts and slow pages",
+    mix: { network: [40, { shape: "waves", baseline: 10 }], crashes: [5], exceptions: [15], freezes: [10], pages: [45], payments: [10] } },
+  { id: "healthy", name: "Healthy", line: "Minimal errors for comparison",
+    mix: { network: [3], crashes: [1], exceptions: [4], freezes: [3], pages: [8], payments: [2] } },
+  { id: "story", name: "Diagnostic story", line: "One connected client-to-backend story" },
+];
+export const profileName = (id: string) => profiles.find((p) => p.id === id)?.name || "Custom mix";
+/** Signals, rates and patterns for an error profile. Unlisted signals are off. */
+export function profileMix(id: string): Pick<Draft, "signals" | "rates" | "patterns"> {
+  const mix = profiles.find((p) => p.id === id)?.mix || profiles[0].mix!;
+  const signals = { ...defaults.signals }, rates = { ...defaults.rates }, patterns = allSteady();
+  for (const key of signalOrder) {
+    const entry = mix[key];
+    signals[key] = !!entry;
+    if (entry) {
+      rates[key] = entry[0];
+      patterns[key] = { ...steady, ...entry[1] };
+    }
   }
-  return { ...structuredClone(defaults), ...value, networkDefaultsVersion: 1, signals, rates };
+  return { signals, rates, patterns };
+}
+
+/** Run length in minutes that patterns are positioned in: a batch is dated over the last five minutes. */
+export const runMinutes = (d: Pick<Draft, "mode" | "duration">) => (d.mode === "live" ? d.duration : 5);
+type Curve = { start: number; onset: number; peak: number; recovery: number; every?: number };
+const round = (n: number) => Math.round(n * 1000) / 1000;
+const span = (n: number) => round(Math.min(1440, Math.max(0, n)));
+/**
+ * The incident timing a pattern sends, in minutes from the start of the run, or null for a steady share.
+ * Payment failures keep a longer peak because the pool story fails only at its peak.
+ */
+/** Incident windows span at most a day, so timed patterns apply to runs of up to 24 hours. */
+export const MAX_PATTERN_MINUTES = 1440;
+export function curveFor(key: Signal, p: Pattern, minutes: number): Curve | null {
+  const T = Math.max(1, minutes), hold = key === "payments" ? 0.4 : 0.1;
+  if (T > MAX_PATTERN_MINUTES) return null;
+  if (p.shape === "spike") {
+    const width = (Math.min(100, Math.max(10, p.width)) / 100) * T;
+    const peak = Math.max(0.05, span(width * hold)), ramp = span((width - peak) / 2);
+    return { start: round((p.peakAt / 100) * T - peak / 2 - ramp), onset: ramp, peak, recovery: ramp };
+  }
+  if (p.shape === "rise") {
+    const start = (Math.min(95, Math.max(0, p.peakAt)) / 100) * T, onset = span((Math.max(5, p.width) / 100) * T);
+    return { start: round(start), onset, peak: Math.max(0.05, span(T - start - onset)), recovery: 0 };
+  }
+  if (p.shape === "waves") {
+    const every = round(Math.min(10080, Math.max(2, T / Math.max(1, p.waves))));
+    const peak = Math.max(0.05, span(every * hold)), ramp = span((every - peak) / 2 * 0.9);
+    return { start: 0, onset: ramp, peak, recovery: ramp, every };
+  }
+  return null;
+}
+const ease = (x: number) => (1 - Math.cos(Math.PI * Math.min(1, Math.max(0, x)))) / 2;
+/** Requested share (0–100) at a minute of the run; mirrors the engine's smooth incident ramp. */
+export function shareAt(key: Signal, d: Pick<Draft, "rates" | "patterns" | "mode" | "duration">, minute: number) {
+  const level = d.rates[key], p = d.patterns[key], c = curveFor(key, p, runMinutes(d));
+  if (!c) return level;
+  const base = Math.min(level, baselineOf(key, p));
+  let t = minute - c.start;
+  if (c.every) t = ((t % c.every) + c.every) % c.every;
+  let r = 0;
+  if (t >= 0 && t < c.onset) r = c.onset ? ease(t / c.onset) : 1;
+  else if (t >= c.onset && t < c.onset + c.peak) r = 1;
+  else if (t >= c.onset + c.peak && t < c.onset + c.peak + c.recovery) r = ease(1 - (t - c.onset - c.peak) / c.recovery);
+  return base + (level - base) * r;
+}
+/** The payments pool story fails only at its peak, so payment failures have no baseline. */
+export const baselineOf = (key: Signal, p: Pattern) => (key === "payments" || p.shape === "steady" ? 0 : p.baseline);
+export function averageShare(key: Signal, d: Pick<Draft, "rates" | "patterns" | "mode" | "duration">) {
+  const T = runMinutes(d), n = 200;
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += shareAt(key, d, ((i + 0.5) / n) * T);
+  return sum / n;
+}
+
+export function restoreDraft(value: Partial<Draft>, adoptDefaults = false): Draft {
+  let signals = { ...defaults.signals, ...value.signals };
+  let rates = { ...defaults.rates, ...value.rates };
+  const patterns = { ...allSteady(), ...value.patterns };
+  let profile = value.profile || "custom";
+  let story = value.story === "regression" ? "standard" : value.story || "standard";
+  if (!value.mixVersion) {
+    if (adoptDefaults) {
+      // Stored drafts from before error profiles adopt the default production mix once.
+      ({ signals, rates } = profileMix("baseline"));
+      profile = "baseline";
+      story = "standard";
+    } else {
+      // Imported configurations keep their exact signals as a custom mix.
+      if (!value.networkDefaultsVersion && !signals.network) {
+        signals.network = true;
+        rates.network = 15;
+      }
+      profile = value.story === "causal" ? "story" : "custom";
+    }
+  }
+  if (story === "causal") profile = "story";
+  return { ...structuredClone(defaults), ...value, networkDefaultsVersion: 1, mixVersion: 2, profile,
+    story: story as Draft["story"], signals, rates, patterns };
 }
 export function loadDraft(): Draft {
   try {
@@ -143,7 +278,7 @@ export function loadDraft(): Draft {
           typeof a.name === "string",
       )
     )
-      return restoreDraft(value);
+      return restoreDraft(value, true);
   } catch {
     /* A stale local draft should never prevent opening the generator. */
   }
@@ -216,12 +351,9 @@ export function scheduleError(d: Draft) {
     return "Choose a slow-page LCP between 2,500 and 30,000 milliseconds.";
   return "";
 }
-export function scenario(caps: Json, d: Draft, symbolication = false): Json {
+export function scenario(caps: Json, d: Draft, symbolication = false, now = Date.now()): Json {
   const s = structuredClone(caps.default_spec);
-  s.name =
-    (d.story === "regression" ? "Regression · " : "Standard traffic · ") +
-    flowNames[d.flow];
-  if (d.modelingPreset) s.name = ({tail:"Tail-only slowdown", "network-profile":"Constrained network", custom:"Custom performance"}[d.modelingPreset] || "Custom performance") + " · " + flowNames[d.flow];
+  s.name = profileName(d.profile) + " · " + flowNames[d.flow];
   s.targets = d.apps.map((a) => ({
     ...structuredClone(
       a.platform === "web"
@@ -291,6 +423,26 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
     return s;
   }
   const filters = d.flow === "all" ? {} : { lines_of_business: [d.flow] };
+  // Patterns become smooth incidents placed in the run's own window: a batch is
+  // dated over the five minutes before it is sent; a continuous run starts now.
+  const windowStart = d.mode === "live" ? now : now - 5 * 60000;
+  const schedule = (key: Signal, id: string) => {
+    const c = curveFor(key, d.patterns[key], runMinutes(d));
+    if (!c) return;
+    const baseline = baselineOf(key, d.patterns[key]);
+    s.incidents.push({
+      id: id + "-curve",
+      fault_ref: id,
+      start: new Date(windowStart + c.start * 60000).toISOString(),
+      onset_minutes: c.onset,
+      peak_minutes: c.peak,
+      recovery_minutes: c.recovery,
+      peak_rate: d.rates[key] / 100,
+      ...(baseline ? { baseline_rate: Math.min(d.rates[key], baseline) / 100 } : {}),
+      curve: "smooth",
+      ...(c.every ? { repeat_every_minutes: c.every } : {}),
+    });
+  };
   const add = (
     key: Signal,
     type: string,
@@ -311,6 +463,8 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
         filters,
         details,
       });
+    if (d.signals[key] && caps.faults.client_faults[type]?.supported_platforms.includes(platform))
+      schedule(key, key + "-" + platform);
   };
   for (const a of d.apps) {
     add(
@@ -350,6 +504,7 @@ export function scenario(caps: Json, d: Draft, symbolication = false): Json {
           quota: d.mode === "burst" ? "exact" : "probability",
           filters,
         });
+      if (d.flow === "all" || entry.lines_of_business.includes(d.flow)) schedule("payments", variant);
     }
   }
   return s;

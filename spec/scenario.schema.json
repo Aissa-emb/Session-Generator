@@ -852,6 +852,8 @@
         "peak_minutes": {"type": "number", "exclusiveMinimum": 0, "maximum": 1440},
         "recovery_minutes": {"type": "number", "minimum": 0, "maximum": 1440},
         "peak_rate": {"$ref": "#/$defs/rate"},
+        "baseline_rate": {"$ref": "#/$defs/rate", "description": "Share of eligible sessions affected outside the incident; onset rises from it to peak_rate and recovery returns to it. Defaults to 0."},
+        "curve": {"enum": ["linear", "smooth"], "description": "Onset and recovery easing. smooth uses a raised cosine, so a short peak gives a bell-shaped rise and fall. Defaults to linear."},
         "repeat_every_minutes": {"type": "number", "minimum": 2, "maximum": 10080}
       }
     },

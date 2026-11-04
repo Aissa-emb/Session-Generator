@@ -146,6 +146,8 @@ class Fault:
         self.window = incident_window(incident) if incident else None
         if incident and "peak_rate" in incident:
             self.rate = incident["peak_rate"]
+        # Outside the incident the fault keeps its baseline share; the ramp moves between baseline and peak.
+        self.baseline = min(self.rate, incident.get("baseline_rate", 0)) if incident else 0.0
         self.variant = catalog.resolve_variant(raw) if kind == "backend" else None
         self.meta = catalog.BACKEND_VARIANTS[self.variant] if self.variant else catalog.CLIENT_FAULTS.get(self.type, {})
         self.fatal = bool(self.meta.get("fatal"))
@@ -216,7 +218,7 @@ class Fault:
             # Exact quotas cover the failing peak; onset sessions are drawn separately (onset_rate_at).
             from .spec import phase_at
             return self.rate if phase_at(t_ms, self.window) == "incident" else 0.0
-        return self.rate * ramp(t_ms, self.window)
+        return self.baseline + (self.rate - self.baseline) * ramp(t_ms, self.window)
 
     def onset_rate_at(self, t_ms):
         """Onset sessions get the pool story (slow payment-token lock queries, no failure), as in V1."""
