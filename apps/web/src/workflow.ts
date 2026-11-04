@@ -6,13 +6,10 @@ export type AppTarget = {
   name: string;
   region: string;
 };
-export type Signal =
-  | "crashes"
-  | "exceptions"
-  | "freezes"
-  | "network"
-  | "pages"
-  | "payments";
+export type Vital = "lcp" | "inp" | "cls" | "fcp" | "ttfb";
+export type Signal = "crashes" | "exceptions" | "freezes" | "network" | "payments" | Vital;
+export const vitalKeys: Vital[] = ["lcp", "inp", "cls", "fcp", "ttfb"];
+export const isVital = (k: Signal): k is Vital => (vitalKeys as string[]).includes(k);
 export type Shape = "steady" | "spike" | "rise" | "waves";
 /** How one signal's share of sessions changes across the run. Positions are percentages of the run. */
 export type Pattern = {
@@ -24,7 +21,7 @@ export type Pattern = {
 };
 export type Draft = {
   networkDefaultsVersion: 1;
-  mixVersion: 2;
+  mixVersion: 3;
   profile: string;
   patterns: Record<Signal, Pattern>;
   modeling?: Json;
@@ -59,24 +56,19 @@ export type Draft = {
   interruptions: number;
   signals: Record<Signal, boolean>;
   rates: Record<Signal, number>;
-  lcp: number;
+  /** p75 each web vital regression is pushed to: milliseconds, or unitless for CLS. */
+  severity: Record<Vital, number>;
   mode: "burst" | "live";
   count: number;
   rate: number;
   duration: number;
 };
 export const steady: Pattern = { shape: "steady", peakAt: 50, width: 40, baseline: 0, waves: 3 };
-const allSteady = (): Record<Signal, Pattern> => ({
-  crashes: { ...steady },
-  exceptions: { ...steady },
-  freezes: { ...steady },
-  network: { ...steady },
-  pages: { ...steady },
-  payments: { ...steady },
-});
+const allSteady = (): Record<Signal, Pattern> =>
+  Object.fromEntries(["crashes", "exceptions", "freezes", "network", "payments", ...vitalKeys].map((k) => [k, { ...steady }])) as Record<Signal, Pattern>;
 export const defaults: Draft = {
   networkDefaultsVersion: 1,
-  mixVersion: 2,
+  mixVersion: 3,
   profile: "baseline",
   patterns: allSteady(),
   apps: [{ platform: "android", appId: "", name: "Vantra", region: "us" }],
@@ -112,18 +104,26 @@ export const defaults: Draft = {
     exceptions: true,
     freezes: true,
     network: true,
-    pages: true,
     payments: true,
+    lcp: true,
+    inp: true,
+    cls: true,
+    fcp: true,
+    ttfb: true,
   },
   rates: {
     crashes: 8,
     exceptions: 20,
     freezes: 15,
     network: 15,
-    pages: 25,
     payments: 12,
+    lcp: 25,
+    inp: 15,
+    cls: 15,
+    fcp: 10,
+    ttfb: 10,
   },
-  lcp: 3800,
+  severity: { lcp: 3800, inp: 450, cls: 0.3, fcp: 3200, ttfb: 2200 },
   mode: "burst",
   count: 100,
   rate: 10,
@@ -140,50 +140,79 @@ export const signalNames: Record<Signal, string> = {
   exceptions: "Exceptions",
   freezes: "App freezes",
   network: "Network failures",
-  pages: "Slow page loads",
   payments: "Payment failures",
+  lcp: "LCP",
+  inp: "INP",
+  cls: "CLS",
+  fcp: "FCP",
+  ttfb: "TTFB",
 };
-export const signalInfo: Record<Signal, { short: string; max: number; color: string }> = {
-  network: { short: "Timeouts and connection resets", max: 60, color: "#3987e5" },
-  crashes: { short: "Fatal app terminations", max: 40, color: "#d95926" },
-  exceptions: { short: "Unhandled and logged errors", max: 80, color: "#199e70" },
-  freezes: { short: "Main thread blocked 6–10 s", max: 60, color: "#c98500" },
-  pages: { short: "Largest Contentful Paint regressions", max: 80, color: "#d55181" },
-  payments: { short: "Payment backend outages", max: 60, color: "#9085e9" },
+export type SignalGroup = "errors" | "vitals";
+// Colours repeat between the two groups: each group has its own chart and legend.
+export const signalInfo: Record<Signal, { short: string; max: number; color: string; group: SignalGroup }> = {
+  network: { short: "Timeouts and connection resets", max: 60, color: "#3987e5", group: "errors" },
+  crashes: { short: "Fatal app terminations", max: 40, color: "#d95926", group: "errors" },
+  exceptions: { short: "Unhandled and logged errors", max: 80, color: "#199e70", group: "errors" },
+  freezes: { short: "Main thread blocked 6–10 s", max: 60, color: "#c98500", group: "errors" },
+  payments: { short: "Payment backend outages", max: 60, color: "#9085e9", group: "errors" },
+  lcp: { short: "Largest Contentful Paint", max: 80, color: "#3987e5", group: "vitals" },
+  inp: { short: "Interaction to Next Paint · Chromium only", max: 60, color: "#d95926", group: "vitals" },
+  cls: { short: "Cumulative Layout Shift · Chromium only", max: 60, color: "#199e70", group: "vitals" },
+  fcp: { short: "First Contentful Paint", max: 60, color: "#c98500", group: "vitals" },
+  ttfb: { short: "Time to First Byte", max: 60, color: "#d55181", group: "vitals" },
 };
-export const signalOrder: Signal[] = ["network", "crashes", "exceptions", "freezes", "pages", "payments"];
+export const groupNames: Record<SignalGroup, string> = { errors: "Errors", vitals: "Web Vitals" };
+export const signalOrder: Signal[] = ["network", "crashes", "exceptions", "freezes", "payments", ...vitalKeys];
+/** Severity slider per vital: the p75 a regressed page is pushed to, from just past the good threshold. */
+export const vitalScale: Record<Vital, { min: number; max: number; step: number; text: (v: number) => string; unit: string }> = {
+  lcp: { min: 2500, max: 15000, step: 100, text: (v) => `${(v / 1000).toFixed(1)} s`, unit: "milliseconds" },
+  inp: { min: 200, max: 2000, step: 10, text: (v) => `${Math.round(v)} ms`, unit: "milliseconds" },
+  cls: { min: 0.1, max: 1, step: 0.01, text: (v) => v.toFixed(2), unit: "" },
+  fcp: { min: 1800, max: 10000, step: 100, text: (v) => `${(v / 1000).toFixed(1)} s`, unit: "milliseconds" },
+  ttfb: { min: 800, max: 6000, step: 50, text: (v) => `${Math.round(v)} ms`, unit: "milliseconds" },
+};
 type Mix = Partial<Record<Signal, [number, Partial<Pattern>?]>>;
-export type Profile = { id: string; name: string; line: string; mix?: Mix };
+export type Profile = { id: string; name: string; line: string; mix?: Mix; severity?: Partial<Record<Vital, number>> };
 export const profiles: Profile[] = [
   { id: "baseline", name: "Production baseline", line: "Steady errors on every signal",
-    mix: { network: [15], crashes: [8], exceptions: [20], freezes: [15], pages: [25], payments: [12] } },
+    mix: { network: [15], crashes: [8], exceptions: [20], freezes: [15], payments: [12],
+      lcp: [25], inp: [15], cls: [15], fcp: [10], ttfb: [10] } },
   { id: "spike", name: "Incident spike", line: "Errors surge mid-run, then recover",
     mix: { network: [45, { shape: "spike", baseline: 8 }], crashes: [6], exceptions: [35, { shape: "spike", baseline: 10 }],
-      freezes: [12], pages: [25], payments: [40, { shape: "spike" }] } },
+      freezes: [12], payments: [40, { shape: "spike" }],
+      lcp: [40, { shape: "spike", baseline: 15 }], inp: [12], cls: [12], fcp: [10], ttfb: [35, { shape: "spike", baseline: 6 }] },
+    severity: { lcp: 4500, ttfb: 3000 } },
   { id: "release", name: "Bad release", line: "Crashes climb after a rollout",
     mix: { network: [12], crashes: [25, { shape: "rise", peakAt: 30, width: 25, baseline: 4 }],
       exceptions: [45, { shape: "rise", peakAt: 30, width: 25, baseline: 10 }],
-      freezes: [30, { shape: "rise", peakAt: 30, width: 25, baseline: 8 }], pages: [20], payments: [8] } },
+      freezes: [30, { shape: "rise", peakAt: 30, width: 25, baseline: 8 }], payments: [8],
+      lcp: [20], inp: [40, { shape: "rise", peakAt: 30, width: 25, baseline: 8 }],
+      cls: [35, { shape: "rise", peakAt: 30, width: 25, baseline: 8 }], fcp: [10], ttfb: [8] },
+    severity: { inp: 650, cls: 0.35 } },
   { id: "network", name: "Flaky network", line: "Recurring timeouts and slow pages",
-    mix: { network: [40, { shape: "waves", baseline: 10 }], crashes: [5], exceptions: [15], freezes: [10], pages: [45], payments: [10] } },
+    mix: { network: [40, { shape: "waves", baseline: 10 }], crashes: [5], exceptions: [15], freezes: [10], payments: [10],
+      lcp: [45], inp: [10], cls: [10], fcp: [35], ttfb: [30, { shape: "waves", baseline: 8 }] },
+    severity: { lcp: 5200, fcp: 3800, ttfb: 2600 } },
   { id: "healthy", name: "Healthy", line: "Minimal errors for comparison",
-    mix: { network: [3], crashes: [1], exceptions: [4], freezes: [3], pages: [8], payments: [2] } },
+    mix: { network: [3], crashes: [1], exceptions: [4], freezes: [3], payments: [2],
+      lcp: [5], inp: [3], cls: [3], fcp: [3], ttfb: [3] },
+    severity: { lcp: 2800, inp: 260, cls: 0.13, fcp: 2100, ttfb: 950 } },
   { id: "story", name: "Diagnostic story", line: "One connected client-to-backend story" },
 ];
 export const profileName = (id: string) => profiles.find((p) => p.id === id)?.name || "Custom mix";
-/** Signals, rates and patterns for an error profile. Unlisted signals are off. */
-export function profileMix(id: string): Pick<Draft, "signals" | "rates" | "patterns"> {
-  const mix = profiles.find((p) => p.id === id)?.mix || profiles[0].mix!;
+/** Signals, rates, patterns and vital severities for an error profile. Unlisted signals are off. */
+export function profileMix(id: string): Pick<Draft, "signals" | "rates" | "patterns" | "severity"> {
+  const profile = profiles.find((p) => p.id === id && p.mix) || profiles[0];
   const signals = { ...defaults.signals }, rates = { ...defaults.rates }, patterns = allSteady();
   for (const key of signalOrder) {
-    const entry = mix[key];
+    const entry = profile.mix![key];
     signals[key] = !!entry;
     if (entry) {
       rates[key] = entry[0];
       patterns[key] = { ...steady, ...entry[1] };
     }
   }
-  return { signals, rates, patterns };
+  return { signals, rates, patterns, severity: { ...defaults.severity, ...profile.severity } };
 }
 
 /** Run length in minutes that patterns are positioned in: a batch is dated over the last five minutes. */
@@ -239,16 +268,34 @@ export function averageShare(key: Signal, d: Pick<Draft, "rates" | "patterns" | 
   return sum / n;
 }
 
-export function restoreDraft(value: Partial<Draft>, adoptDefaults = false): Draft {
-  let signals = { ...defaults.signals, ...value.signals };
-  let rates = { ...defaults.rates, ...value.rates };
-  const patterns = { ...allSteady(), ...value.patterns };
+export function restoreDraft(raw: Partial<Draft> & Json, adoptDefaults = false): Draft {
+  const value: Json = structuredClone(raw);
+  // Before version 3 the only web vital was "pages" (LCP regressions) with a top-level LCP target.
+  for (const field of ["signals", "rates", "patterns"]) {
+    if (value[field] && "pages" in value[field]) {
+      value[field].lcp = value[field].pages;
+      delete value[field].pages;
+    }
+  }
   let profile = value.profile || "custom";
   let story = value.story === "regression" ? "standard" : value.story || "standard";
+  // Signals a draft never saw come from its own preset, or stay off for a custom mix.
+  const preset = profiles.some((p) => p.id === profile && p.mix) ? profileMix(profile) : null;
+  const severity = { ...defaults.severity, ...preset?.severity, ...value.severity };
+  if (typeof value.lcp === "number") severity.lcp = value.lcp;
+  delete value.lcp;
+  const fill = (field: "signals" | "rates" | "patterns", off: Json) =>
+    ({ ...(preset ? preset[field] : off), ...value[field] });
+  const allOff = Object.fromEntries(signalOrder.map((k) => [k, false]));
+  let signals = fill("signals", allOff) as Draft["signals"];
+  let rates = fill("rates", defaults.rates) as Draft["rates"];
+  const patterns = fill("patterns", allSteady()) as Draft["patterns"];
   if (!value.mixVersion) {
     if (adoptDefaults) {
       // Stored drafts from before error profiles adopt the default production mix once.
-      ({ signals, rates } = profileMix("baseline"));
+      const mix = profileMix("baseline");
+      ({ signals, rates } = mix);
+      Object.assign(patterns, mix.patterns);
       profile = "baseline";
       story = "standard";
     } else {
@@ -261,8 +308,8 @@ export function restoreDraft(value: Partial<Draft>, adoptDefaults = false): Draf
     }
   }
   if (story === "causal") profile = "story";
-  return { ...structuredClone(defaults), ...value, networkDefaultsVersion: 1, mixVersion: 2, profile,
-    story: story as Draft["story"], signals, rates, patterns };
+  return { ...structuredClone(defaults), ...value, networkDefaultsVersion: 1, mixVersion: 3, profile,
+    story: story as Draft["story"], signals, rates, patterns, severity };
 }
 export function loadDraft(): Draft {
   try {
@@ -309,7 +356,7 @@ export function available(signal: Signal, d: Draft) {
   if (signal === "crashes" || signal === "freezes")
     return d.apps.some((a) => a.platform !== "web");
   if (signal === "exceptions") return d.apps.some((a) => a.platform !== "ios");
-  if (signal === "pages") return d.apps.some((a) => a.platform === "web");
+  if (isVital(signal)) return d.apps.some((a) => a.platform === "web");
   return true;
 }
 export function scheduleError(d: Draft) {
@@ -343,12 +390,11 @@ export function scheduleError(d: Draft) {
       (!Number.isFinite(d.rates[key]) || d.rates[key] < 1 || d.rates[key] > 100)
     )
       return `Choose an affected percentage between 1 and 100 for ${signalNames[key].toLowerCase()}.`;
-  if (
-    d.signals.pages &&
-    available("pages", d) &&
-    (!Number.isFinite(d.lcp) || d.lcp < 2500 || d.lcp > 30000)
-  )
-    return "Choose a slow-page LCP between 2,500 and 30,000 milliseconds.";
+  for (const key of vitalKeys) {
+    const v = d.severity[key], r = vitalScale[key];
+    if (d.signals[key] && available(key, d) && (!Number.isFinite(v) || v < r.min || v > r.max))
+      return `Choose a ${signalNames[key]} p75 between ${r.text(r.min)} and ${r.text(r.max)}.`;
+  }
   return "";
 }
 export function scenario(caps: Json, d: Draft, symbolication = false, now = Date.now()): Json {
@@ -487,10 +533,12 @@ export function scenario(caps: Json, d: Draft, symbolication = false, now = Date
     add("network", "network_failure", a.platform, {
       kinds: ["timeout", "reset"],
     });
-    add("pages", "lcp_regression", a.platform, {
-      p75_ms: d.lcp,
-      cause: "hero_image",
-    });
+    // Each vital's regression pushes affected pages' p75 to its severity; natural variation still applies.
+    add("lcp", "lcp_regression", a.platform, { p75_ms: d.severity.lcp, cause: "hero_image" });
+    add("inp", "interaction_latency", a.platform, { p75_ms: d.severity.inp });
+    add("cls", "layout_instability", a.platform, { p75: d.severity.cls });
+    add("fcp", "poor_web_vitals", a.platform, { targets: { fcp: d.severity.fcp } });
+    add("ttfb", "slow_server_response", a.platform, { p75_ms: d.severity.ttfb });
   }
   if (d.signals.payments) {
     for (const variant of ["payments-db-pool", "rails-outage"]) {

@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Draft, Signal, runMinutes, shareAt, signalInfo, signalNames } from "./workflow";
 
 /** Plot padding scales with the root font size so axis labels keep their room at larger text sizes. */
-const layout = (rem: number) => ({ H: Math.max(168, Math.round(rem * 10.5)), PAD: { l: rem * 2.6, r: 12, t: 12, b: rem * 1.7 } });
+const layout = (rem: number) => ({ H: Math.max(150, Math.round(rem * 9.5)), PAD: { l: rem * 2.6, r: 12, t: 12, b: rem * 1.7 } });
 const STEPS = 120;
 type Rates = Pick<Draft, "rates" | "patterns" | "mode" | "duration">;
 
@@ -23,7 +23,7 @@ function series(key: Signal, d: Rates) {
 }
 
 /** Requested share of sessions across the run, one line per enabled signal, with a hover readout. */
-export function RunTimeline({ draft, keys }: { draft: Rates; keys: Signal[] }) {
+export function RunTimeline({ draft, keys, title }: { draft: Rates; keys: Signal[]; title: string }) {
   const [hover, setHover] = useState<number | null>(null);
   // Draw in CSS pixels so axis text stays legible at every width.
   const box = useRef<HTMLDivElement>(null), [W, setW] = useState(600), [rem, setRem] = useState(16);
@@ -54,7 +54,7 @@ export function RunTimeline({ draft, keys }: { draft: Rates; keys: Signal[] }) {
   return (
     <figure className="run-timeline" aria-labelledby={titleId}>
       <figcaption id={titleId} className="sr-only">
-        Requested share of sessions over the {minutesText(T)} run for {keys.map((k) => signalNames[k]).join(", ")}.
+        {title}: requested share of sessions over the {minutesText(T)} run for {keys.map((k) => signalNames[k]).join(", ")}.
       </figcaption>
       <div className="run-timeline-plot" ref={box}>
         <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-labelledby={titleId} onPointerMove={move} onPointerLeave={() => setHover(null)}>

@@ -331,16 +331,22 @@ class BrowserSession:
         return next((f for f in self.page["faults"] if f["type"] == kind), None)
 
     def _fault_targets(self, targets):
+        # A regression only ever worsens a page: it never lowers a p75 that natural conditions
+        # (device, network, page group) already put above the requested value.
+        def worsen(metric, value):
+            targets[metric] = max(targets.get(metric, 0), value)
         for f in self.page["faults"]:
             d, kind = f["details"], f["type"]
-            targets.update(d.get("targets", {}))
+            for metric, value in d.get("targets", {}).items():
+                worsen(metric, value)
             if kind == "poor_web_vitals" and not d.get("targets"):
-                targets.update(lcp=4800, inp=550, cls=.3)
+                for metric, value in (("lcp", 4800), ("inp", 550), ("cls", .3)):
+                    worsen(metric, value)
             metric = {"lcp_regression": "lcp", "layout_instability": "cls", "interaction_latency": "inp",
                       "slow_server_response": "ttfb", "soft_navigation_slowness": "lcp"}.get(kind)
             if metric:
-                targets[metric] = d.get("p75", d.get("p75_ms", d.get(metric, {"lcp": 4000, "cls": .3,
-                                                                                   "inp": 450, "ttfb": 2200}[metric])))
+                worsen(metric, d.get("p75", d.get("p75_ms", d.get(metric, {"lcp": 4000, "cls": .3,
+                                                                              "inp": 450, "ttfb": 2200}[metric]))))
             if kind == "lcp_regression" and d.get("cause") == "origin":
                 targets["ttfb"] = max(targets["ttfb"], targets["lcp"] * .6)
         targets["fcp"] = max(targets["fcp"], targets["ttfb"] + 150)

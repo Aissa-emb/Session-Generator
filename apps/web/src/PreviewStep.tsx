@@ -177,6 +177,7 @@ export default function PreviewStep({
                           {f.emitted_pct == null
                             ? "Not measurable"
                             : f.emitted_pct.toFixed(1) + "%"}
+                          {f.natural_overlap && <small className="natural-note">incl. natural</small>}
                         </span>
                         {f.emitted_pct != null && (
                           <span className="share-track" aria-hidden="true">
@@ -201,6 +202,12 @@ export default function PreviewStep({
             Rates apply to eligible sessions. Small previews can differ from the
             full run.
           </p>
+          {data.report.faults.some((f: Json) => f.natural_overlap) && (
+            <p className="hint">
+              Web Vitals rows count any session with a non-good rating, including
+              naturally slow pages. The requested share is added on top.
+            </p>
+          )}
         </Panel>
       )}
       <Panel

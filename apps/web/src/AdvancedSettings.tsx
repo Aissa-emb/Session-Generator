@@ -2,8 +2,8 @@ import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { api, Json } from "./api";
 import { Button, Field, RangeField, Sheet } from "./ui";
 import {
-  Draft, MAX_PATTERN_MINUTES, Pattern, Shape, Signal, available, averageShare, baselineOf, restoreDraft, runMinutes, scenario,
-  signalInfo, signalNames, signalOrder,
+  Draft, MAX_PATTERN_MINUTES, Pattern, Shape, Signal, SignalGroup, available, averageShare, baselineOf, groupNames, isVital,
+  restoreDraft, runMinutes, scenario, signalInfo, signalNames, signalOrder, vitalScale,
 } from "./workflow";
 import DistributionEditor from "./DistributionEditor";
 import ReleaseEditor from "./ReleaseEditor";
@@ -15,9 +15,13 @@ const unavailable: Record<Signal, string> = {
   crashes: "Needs an Android or iOS app",
   freezes: "Needs an Android or iOS app",
   exceptions: "Needs an Android or web app",
-  pages: "Needs a web app",
   network: "",
   payments: "",
+  lcp: "Needs a web app",
+  inp: "Needs a web app",
+  cls: "Needs a web app",
+  fcp: "Needs a web app",
+  ttfb: "Needs a web app",
 };
 
 function Weights({ values, change, label }: { values: Json; change: (v: Json) => void; label: string }) {
@@ -110,10 +114,14 @@ function SignalCard({ k, draft, set }: { k: Signal; draft: Draft; set: (d: Parti
               )}
             </div>
           )}
-          {k === "pages" && on && (
-            <RangeField label="Slow page LCP p75" min={2500} max={15000} step={100} value={Math.min(15000, draft.lcp)}
-              onChange={(v) => set({ lcp: v })} readout={`LCP p75 ${(draft.lcp / 1000).toFixed(1)} s`} valueText={`${draft.lcp} milliseconds`} />
-          )}
+          {isVital(k) && on && (() => {
+            const r = vitalScale[k], v = Math.min(r.max, Math.max(r.min, draft.severity[k]));
+            return (
+              <RangeField label={name + " p75 on regressed pages"} min={r.min} max={r.max} step={r.step} value={v}
+                onChange={(x) => set({ severity: { ...draft.severity, [k]: x } })} readout={`${name} p75 ${r.text(v)}`}
+                valueText={r.unit ? `${v} ${r.unit}` : String(v)} />
+            );
+          })()}
           {on && (
             <div className="signal-curve">
               <MiniCurve signal={k} draft={draft} />
@@ -162,7 +170,7 @@ export default function AdvancedSettings({
   draft: Draft;
   update: (d: Partial<Draft>) => void;
   caps: Json;
-  stories: string[][];
+  stories: { id: string; name: string }[];
 }) {
   const [index, setIndex] = useState(0), [quantity, setQuantity] = useState("reading_ms"), [message, setMessage] = useState("");
   const file = useRef<HTMLInputElement>(null), meta = caps.modeling;
@@ -227,9 +235,17 @@ export default function AdvancedSettings({
       <Tabs tabs={tabs} tab={current} setTab={setTab} />
       <div role="tabpanel" id={"panel-" + current} aria-labelledby={"tab-" + current} className="sheet-panel">
         {current === "Errors" && (
-          <div className="signal-cards">
-            {signalOrder.map((k) => <SignalCard key={k} k={k} draft={draft} set={custom} />)}
-          </div>
+          <>
+            {(["errors", "vitals"] as SignalGroup[]).map((group) => (
+              <section key={group} className="signal-group" aria-labelledby={"group-" + group}>
+                <h3 id={"group-" + group}>{groupNames[group]}</h3>
+                {group === "vitals" && <p className="hint">Each share adds regressed pages on top of natural page speed.</p>}
+                <div className="signal-cards">
+                  {signalOrder.filter((k) => signalInfo[k].group === group).map((k) => <SignalCard key={k} k={k} draft={draft} set={custom} />)}
+                </div>
+              </section>
+            ))}
+          </>
         )}
         {current === "Population" && (
           <>
@@ -404,22 +420,22 @@ export default function AdvancedSettings({
         )}
         {current === "Story" && causal && (
           <div className="field-grid">
-            <Field label="Traffic mix">
+            <Field label="Traffic mix" hint="Only the story, or mixed with healthy, slow and recovered sessions.">
               <select value={draft.causalMode} onChange={(e) => update({ causalMode: e.target.value as Draft["causalMode"] })}>
                 <option value="single">Selected story only</option><option value="mixed">Mixed traffic</option>
               </select>
             </Field>
-            <Field label="Cache">
+            <Field label="Cache" hint="Cold adds cache misses on the first account load.">
               <select value={draft.causalCache} onChange={(e) => update({ causalCache: e.target.value as Draft["causalCache"] })}>
                 <option value="cold">Cold account cache</option><option value="warm">Warm account cache</option>
               </select>
             </Field>
-            <Field label="Network">
+            <Field label="Network" hint="The connection the story's sessions use.">
               <select value={draft.causalNetwork} onChange={(e) => update({ causalNetwork: e.target.value as Draft["causalNetwork"] })}>
                 <option value="wifi">Wi-Fi</option><option value="cellular">Cellular</option><option value="constrained">Constrained</option>
               </select>
             </Field>
-            <Field label="Seed"><input type="number" value={draft.causalSeed} onChange={(e) => update({ causalSeed: Number(e.target.value) })} /></Field>
+            <Field label="Seed" hint="The same seed reproduces the same sessions."><input type="number" value={draft.causalSeed} onChange={(e) => update({ causalSeed: Number(e.target.value) })} /></Field>
             {draft.causalScenario === "contract-regression" && (
               <Field label="Client failure">
                 <select value={draft.causalFailure} onChange={(e) => update({ causalFailure: e.target.value as Draft["causalFailure"] })}>
@@ -440,7 +456,7 @@ export default function AdvancedSettings({
               </select>
             </Field>
             <Field label="Affected service release"><input value={draft.causalRelease} onChange={(e) => update({ causalRelease: e.target.value })} /></Field>
-            <Field label="Timing">
+            <Field label="Timing" hint="Exact timings reproduce the documented reference run.">
               <select value={String(draft.causalReference)} onChange={(e) => update({ causalReference: e.target.value === "true" })}>
                 <option value="false">Seeded variation</option><option value="true">Exact reference timings</option>
               </select>
@@ -459,19 +475,13 @@ export default function AdvancedSettings({
                 </select>
               </Field>
             )}
-            {draft.causalVariant === "scheduled" && (
-              <>
-                <Field label="Incident starts"><input type="datetime-local" value={draft.causalStart} onChange={(e) => update({ causalStart: e.target.value })} /></Field>
-                <Field label="Incident minutes"><input type="number" min="1" max="120" value={draft.causalMinutes} onChange={(e) => update({ causalMinutes: Number(e.target.value) })} /></Field>
-                <Field label="Affected cohort %"><input type="number" min="0" max="100" value={draft.causalShare} onChange={(e) => update({ causalShare: Number(e.target.value) })} /></Field>
-              </>
-            )}
+
             {draft.causalMode === "mixed" && ["Healthy", "Selected story", "Slow dependency", "Recovered"].map((name, i) => (
               <Field key={name} label={name + " weight"}>
                 <input type="number" min="0" max="100" value={draft.causalMix[i]} onChange={(e) => update({ causalMix: draft.causalMix.map((n, j) => (i === j ? Number(e.target.value) : n)) })} />
               </Field>
             ))}
-            <p className="hint full">{stories.find(([k]) => k === draft.causalScenario)?.[1]} · {draft.causalVariant}</p>
+            <p className="hint full">{stories.find((x) => x.id === draft.causalScenario)?.name} · {draft.causalVariant}</p>
           </div>
         )}
       </div>
