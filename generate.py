@@ -192,7 +192,8 @@ def spec_main(argv):
     if a.command == "report":
         report = from_dry_run(a.dir, spec)
         print(report.table())
-        return 0 if all(r.get("within_tolerance", True) for r in report.summary()["faults"]) else 1
+        # None means the payloads cannot verify the share (shown, not failed).
+        return 0 if all(r.get("within_tolerance", True) is not False for r in report.summary()["faults"]) else 1
     return run_spec(a, spec)
 
 

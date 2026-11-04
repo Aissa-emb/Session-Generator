@@ -202,6 +202,8 @@ export function RangeField({
   valueText,
   disabled = false,
   id,
+  hint,
+  swatch,
 }: {
   label: string;
   value: number;
@@ -213,11 +215,20 @@ export function RangeField({
   valueText?: string;
   disabled?: boolean;
   id?: string;
+  /** One short helper line under the label. */
+  hint?: string;
+  /** Colour that ties the slider to a chart segment. */
+  swatch?: string;
 }) {
   const fill = max > min ? ((Math.min(max, Math.max(min, value)) - min) / (max - min)) * 100 : 0;
+  const hintId = useId();
   return (
     <label className={"range-field" + (disabled ? " disabled" : "")}>
-      <span className="range-label">{label}</span>
+      <span className="range-label">
+        {swatch && <i className="swatch" style={{ background: swatch }} aria-hidden="true" />}
+        {label}
+        {hint && <small id={hintId}>{hint}</small>}
+      </span>
       <output aria-hidden="true">{readout}</output>
       <input
         id={id}
@@ -229,6 +240,7 @@ export function RangeField({
         disabled={disabled}
         aria-label={label}
         aria-valuetext={valueText}
+        aria-describedby={hint ? hintId : undefined}
         style={{ "--fill": `${fill}%` } as CSSProperties}
         onChange={(e) => onChange(Number(e.target.value))}
       />

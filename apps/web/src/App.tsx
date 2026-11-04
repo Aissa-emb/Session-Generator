@@ -31,7 +31,7 @@ import {
   tenantName,
 } from "./workflow";
 import PreviewStep from "./PreviewStep";
-import CustomizeScenario, { stories } from "./CustomizeScenario";
+import CustomizeScenario, { storyName } from "./CustomizeScenario";
 import { shareText } from "./AdvancedSettings";
 import RunView from "./RunView";
 import cortexLogo from "./assets/cortex-xcor-dark.svg";
@@ -817,7 +817,7 @@ export default function App() {
                   </div>
                   <div>
                     <span>{draft.story === "causal" ? "Story" : "User flow"}</span>
-                    <strong>{draft.story === "causal" ? stories.find(([k]) => k === draft.causalScenario)?.[1] : flowNames[draft.flow]}</strong>
+                    <strong>{draft.story === "causal" ? storyName(draft.causalScenario) : flowNames[draft.flow]}</strong>
                   </div>
                   <div className="full">
                     <span>{draft.story === "causal" ? "Story settings" : profileName(draft.profile)}</span>

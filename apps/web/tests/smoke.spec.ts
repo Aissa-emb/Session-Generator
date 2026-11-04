@@ -45,7 +45,7 @@ async function setRange(page: Page, label: string, value: number) {
 }
 /** Radios are visually hidden behind their labels, so pick the visible card or chip. */
 async function pick(page: Page, name: string) {
-  await page.locator("label.profile-card, label.chip").filter({ hasText: name }).click();
+  await page.locator("label.profile-card, label.chip, label.story-card, label.quick-choice").filter({ hasText: name }).click();
   await expect(page.getByRole("radio", { name: new RegExp(name) })).toBeChecked();
 }
 async function advanced(page: Page, tab = "Errors") {
@@ -70,11 +70,12 @@ test("error profiles default to production errors, migrate stored drafts once, a
   await connect(page, ["web"]);
   const oldDraft = await page.evaluate(() => {
     const draft = JSON.parse(localStorage.getItem("sg_workflow_v1")!);
-    for (const key of ["networkDefaultsVersion", "mixVersion", "profile", "patterns"]) delete draft[key];
+    for (const key of ["networkDefaultsVersion", "mixVersion", "profile", "patterns", "severity"]) delete draft[key];
     draft.story = "regression";
+    // The version 1 shape: one "pages" signal (LCP) and a top-level LCP target.
     draft.signals = { crashes: false, exceptions: false, freezes: false, network: false, pages: true, payments: false };
-    draft.rates.network = 80;
-    draft.rates.pages = 30;
+    draft.rates = { crashes: 10, exceptions: 15, freezes: 20, network: 80, pages: 30, payments: 30 };
+    draft.lcp = 4100;
     localStorage.setItem("sg_workflow_v1", JSON.stringify(draft));
     return draft;
   });
@@ -83,7 +84,8 @@ test("error profiles default to production errors, migrate stored drafts once, a
   // A stored draft from before error profiles adopts the default production mix once.
   await expect(page.getByRole("radio", {name:/Production baseline/})).toBeChecked();
   await expect(page.getByRole("button", {name:"Adjust Network failures: 15% of sessions, steady"})).toBeVisible();
-  await expect(page.getByRole("img", {name:/Requested share of sessions over the 5 min run/})).toBeVisible();
+  await expect(page.getByRole("img", {name:/^Errors: requested share of sessions over the 5 min run/})).toBeVisible();
+  await expect(page.getByRole("img", {name:/^Web Vitals: requested share of sessions over the 5 min run for LCP, INP, CLS, FCP, TTFB/})).toBeVisible();
   const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
   await page.getByRole("button", {name:"Generate preview",exact:true}).click();
   const result = await response;
@@ -93,11 +95,17 @@ test("error profiles default to production errors, migrate stored drafts once, a
   expect(sent.incidents).toEqual([]);
   const net = sent.client_faults.find((f:any)=>f.type==="network_failure");
   expect(net).toMatchObject({rate:.15,quota:"exact",steer_journey:false});
-  expect(Object.fromEntries(sent.client_faults.map((f:any)=>[f.type,f.rate]))).toEqual({js_exception:.2,network_failure:.15,lcp_regression:.25});
+  expect(Object.fromEntries(sent.client_faults.map((f:any)=>[f.type,f.rate]))).toEqual({js_exception:.2,network_failure:.15,
+    lcp_regression:.25,interaction_latency:.15,layout_instability:.15,poor_web_vitals:.1,slow_server_response:.1});
   expect(sent.backend_faults.map((f:any)=>[f.variant,f.rate])).toEqual([["payments-db-pool",.12],["rails-outage",.12]]);
   const payload = await result.json();
   expect(payload.linter).toEqual([]);
   expect(payload.report.faults.find((f:any)=>f.id===net.id)).toMatchObject({emitted_sessions:15,within_tolerance:true});
+  // Web vital ratings also reflect natural page speed, so their shares are reported, not verified.
+  for (const id of ["lcp-web","inp-web","cls-web","fcp-web","ttfb-web"])
+    expect(payload.report.faults.find((f:any)=>f.id===id)).toMatchObject({natural_overlap:true,within_tolerance:null,evidence:"web vitals"});
+  await expect(page.getByText("incl. natural").first()).toBeVisible({timeout:45000});
+  await expect(page.getByText(/Web Vitals rows count any session with a non-good rating/)).toBeVisible();
   await page.getByRole("button", {name:"Back",exact:true}).click();
   await page.getByRole("button", {name:"Adjust signals",exact:true}).click();
   await page.getByLabel("Network failures share of sessions", {exact:true}).focus();
@@ -114,20 +122,27 @@ test("error profiles default to production errors, migrate stored drafts once, a
   await expect(page.getByText("Configuration opened.", {exact:true})).toBeVisible();
   // Imports keep their exact signals as a custom mix (older files adopt network failures once).
   await expect(page.getByLabel("Network failures share of sessions", {exact:true})).toHaveValue("15");
-  await expect(page.getByLabel("Slow page loads share of sessions", {exact:true})).toHaveValue("30");
+  await expect(page.getByLabel("LCP share of sessions", {exact:true})).toHaveValue("30");
+  await expect(page.getByLabel("LCP p75 on regressed pages", {exact:true})).toHaveValue("4100");
   await expect(page.locator("#signal-exceptions")).toContainText("Off");
+  // Vitals the old file never had stay off.
+  for (const k of ["inp","cls","fcp","ttfb"]) await expect(page.locator(`#signal-${k} .signal-value`)).toHaveText("Off");
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", {name:"Adjust Slow page loads: 30% of sessions, steady"})).toBeVisible();
+  await expect(page.getByRole("button", {name:"Adjust LCP: 30% of sessions, steady"})).toBeVisible();
   await pick(page, "Diagnostic story");
   await expect(page.getByRole("heading", {name:"Signal mix"})).toHaveCount(0);
-  await expect(page.getByLabel("Story", {exact:true})).toBeVisible();
+  await expect(page.getByRole("group", {name:"Story"})).toBeVisible();
+  await expect(page.getByRole("radio", {name:/Sign-in pool timeout.*503/})).toBeVisible();
+  await pick(page, "Scheduled incident");
+  await expect(page.getByText("Healthy before the window, failing during it, recovered after.")).toBeVisible();
+  await expect(page.getByLabel("Incident starts", {exact:true})).toBeVisible();
 });
 
 test("signal patterns send smooth incidents placed in the run window", async ({page}) => {
   await connect(page, ["android", "web"]);
   await pick(page, "Incident spike");
   await page.getByRole("button", {name:"Continuous sending",exact:true}).click();
-  await expect(page.getByRole("img", {name:/over the 60 min run/})).toBeVisible();
+  await expect(page.getByRole("img", {name:/^Errors: requested share of sessions over the 60 min run/})).toBeVisible();
   await expect(page.getByRole("button", {name:"Adjust Network failures: 8–45% of sessions, spike"})).toBeVisible();
   // Keyboard: the legend opens the sheet on that signal's slider; tabs use arrow keys; Escape returns focus.
   const legend = page.getByRole("button", {name:/^Adjust Crashes/});
@@ -140,7 +155,7 @@ test("signal patterns send smooth incidents placed in the run window", async ({p
   await expect(page.locator("#signal-crashes")).toContainText("Starts at 30 min");
   await page.getByRole("tab", {name:"Errors",exact:true}).focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("tab", {name:"Population",exact:true})).toBeFocused();
+  await expect(page.getByRole("tab", {name:"Visitors",exact:true})).toBeFocused();
   await expect(page.getByRole("tabpanel")).toContainText("Returning visitors");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -153,7 +168,7 @@ test("signal patterns send smooth incidents placed in the run window", async ({p
   expect(result.ok()).toBeTruthy();
   const sent = result.request().postDataJSON();
   const byFault = Object.fromEntries(sent.incidents.map((i:any)=>[i.fault_ref,i]));
-  expect(Object.keys(byFault).sort()).toEqual(["crashes-android","exceptions-android","exceptions-web","network-android","network-web","payments-db-pool","rails-outage"]);
+  expect(Object.keys(byFault).sort()).toEqual(["crashes-android","exceptions-android","exceptions-web","lcp-web","network-android","network-web","payments-db-pool","rails-outage","ttfb-web"]);
   expect(byFault["network-web"]).toMatchObject({curve:"smooth",peak_rate:.45,baseline_rate:.08});
   // A 24-minute spike centred 30 minutes into the run.
   const centre = Date.parse(byFault["network-web"].start) + (byFault["network-web"].onset_minutes + byFault["network-web"].peak_minutes / 2) * 60000;
@@ -166,6 +181,88 @@ test("signal patterns send smooth incidents placed in the run window", async ({p
   await expect(page.getByText("Passed", {exact:true})).toBeVisible({timeout:45000});
   await page.getByRole("button", {name:"Continue to send",exact:true}).click();
   await expect(page.getByText("Crashes (1–7%, rise)", {exact:false})).toBeVisible();
+});
+
+test("each web vital has its own share, pattern and severity in the sent spec", async ({page}) => {
+  await connect(page, ["web"]);
+  await page.getByRole("button", {name:"Adjust signals",exact:true}).click();
+  await expect(page.getByRole("heading", {name:"Errors",exact:true})).toBeVisible();
+  await expect(page.getByRole("heading", {name:"Web Vitals",exact:true})).toBeVisible();
+  for (const [k, readout] of [["lcp","LCP p75 3.8 s"],["inp","INP p75 450 ms"],["cls","CLS p75 0.30"],["fcp","FCP p75 3.2 s"],["ttfb","TTFB p75 2200 ms"]]) {
+    await expect(page.locator(`#signal-${k}`)).toContainText(readout);
+    await expect(page.getByRole("group", {name:`${k.toUpperCase()} pattern`})).toBeVisible();
+  }
+  await expect(page.locator("#signal-inp")).toContainText("Chromium only");
+  await setRange(page, "INP p75 on regressed pages", 800);
+  await setRange(page, "CLS p75 on regressed pages", 0.5);
+  await setRange(page, "TTFB p75 on regressed pages", 3000);
+  await setRange(page, "FCP share of sessions", 0);
+  await expect(page.locator("#signal-inp")).toContainText("INP p75 800 ms");
+  await page.getByRole("group", {name:"LCP pattern"}).getByRole("button", {name:"Spike",exact:true}).click();
+  await page.getByRole("button", {name:"Done",exact:true}).click();
+  await expect(page.getByRole("button", {name:"Adjust LCP: 5–25% of sessions, spike"})).toBeVisible();
+  await expect(page.getByRole("button", {name:/^Adjust INP: 15% of sessions/})).toContainText("p75 800 ms");
+  await expect(page.getByText("Off: FCP", {exact:true})).toBeVisible();
+  const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
+  await page.getByRole("button", {name:"Generate preview",exact:true}).click();
+  const result = await response;
+  expect(result.ok()).toBeTruthy();
+  const sent = result.request().postDataJSON();
+  const byId = Object.fromEntries(sent.client_faults.map((f:any)=>[f.id,f]));
+  expect(byId["lcp-web"]).toMatchObject({type:"lcp_regression",rate:.25,details:{p75_ms:3800,cause:"hero_image"}});
+  expect(byId["inp-web"]).toMatchObject({type:"interaction_latency",rate:.15,details:{p75_ms:800}});
+  expect(byId["cls-web"]).toMatchObject({type:"layout_instability",rate:.15,details:{p75:.5}});
+  expect(byId["ttfb-web"]).toMatchObject({type:"slow_server_response",rate:.1,details:{p75_ms:3000}});
+  expect(byId["fcp-web"]).toBeUndefined();
+  expect(sent.incidents.map((i:any)=>i.fault_ref)).toEqual(["lcp-web"]);
+  expect((await result.json()).linter).toEqual([]);
+  await expect(page.getByText("Passed", {exact:true})).toBeVisible({timeout:45000});
+  await page.getByRole("button", {name:"Back",exact:true}).click();
+  // FCP comes from the generic vitals target.
+  await page.getByRole("button", {name:"Adjust signals",exact:true}).click();
+  await setRange(page, "FCP share of sessions", 20);
+  await setRange(page, "FCP p75 on regressed pages", 4000);
+  await page.getByRole("button", {name:"Done",exact:true}).click();
+  const again = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
+  await page.getByRole("button", {name:"Generate preview",exact:true}).click();
+  const fcp = (await again).request().postDataJSON().client_faults.find((f:any)=>f.id==="fcp-web");
+  expect(fcp).toMatchObject({type:"poor_web_vitals",rate:.2,details:{targets:{fcp:4000}}});
+});
+
+test("version 2 drafts map slow page loads to LCP and take new vitals from their profile", async ({page}) => {
+  await connect(page, ["android", "web"]);
+  await page.evaluate(() => {
+    const draft = JSON.parse(localStorage.getItem("sg_workflow_v1")!);
+    draft.mixVersion = 2;
+    draft.profile = "healthy";
+    delete draft.severity;
+    for (const field of ["signals", "rates", "patterns"]) for (const k of ["lcp","inp","cls","fcp","ttfb"]) delete draft[field][k];
+    draft.signals.pages = true;
+    draft.rates.pages = 12;
+    draft.patterns.pages = { shape: "spike", peakAt: 50, width: 40, baseline: 4, waves: 3 };
+    draft.lcp = 5000;
+    localStorage.setItem("sg_workflow_v1", JSON.stringify(draft));
+  });
+  await page.reload();
+  await page.getByRole("button", {name:"Continue",exact:true}).click();
+  await expect(page.getByRole("button", {name:"Adjust LCP: 4–12% of sessions, spike"})).toContainText("p75 5.0 s");
+  // Healthy's own levels and near-threshold severities fill the vitals version 2 never had.
+  await expect(page.getByRole("button", {name:"Adjust INP: 3% of sessions, steady"})).toContainText("p75 260 ms");
+  await expect(page.getByRole("button", {name:"Adjust TTFB: 3% of sessions, steady"})).toContainText("p75 950 ms");
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("sg_workflow_v1")!));
+  expect(stored.mixVersion).toBe(3);
+  expect(stored.signals.pages).toBeUndefined();
+  expect(stored.lcp).toBeUndefined();
+});
+
+test("web vitals are unavailable without a web app", async ({page}) => {
+  await connect(page, ["android"]);
+  await expect(page.getByRole("heading", {name:"Web Vitals",exact:true})).toHaveCount(0);
+  await page.getByRole("button", {name:"Adjust signals",exact:true}).click();
+  for (const k of ["lcp","inp","cls","fcp","ttfb"]) {
+    await expect(page.locator(`#signal-${k}`)).toContainText("Needs a web app");
+    await expect(page.locator(`#signal-${k} .signal-value`)).toHaveText("N/A");
+  }
 });
 
 test("runs longer than a day send steady shares instead of timed patterns", async ({page}) => {
@@ -218,7 +315,7 @@ test("bad release and flaky network batches stay inside the five-minute window",
 
 test("varied visitor model reaches preview with native lifecycle controls", async ({page}, testInfo) => {
   await connect(page, ["android", "ios", "web"]);
-  await advanced(page, "Population");
+  await advanced(page, "Visitors");
   await expect(page.getByLabel("Visit patterns", {exact:true})).toHaveValue("varied");
   await setRange(page, "Returning visitors", 40);
   await setRange(page, "Cold starts on return", 30);
@@ -251,9 +348,9 @@ test("one workflow, input validation, scoped platform controls, no AI or MCP", a
   await advanced(page);
   await expect(page.locator("#signal-crashes")).toContainText("Needs an Android or iOS app");
   await expect(page.getByLabel("Crashes share of sessions", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Slow page loads share of sessions", { exact: true })).toHaveValue("25");
-  await setRange(page, "Slow page loads share of sessions", 30);
-  await expect(page.locator("#signal-pages .signal-value")).toHaveText("30%");
+  await expect(page.getByLabel("LCP share of sessions", { exact: true })).toHaveValue("25");
+  await setRange(page, "LCP share of sessions", 30);
+  await expect(page.locator("#signal-lcp .signal-value")).toHaveText("30%");
   await capture(page, "redesign-advanced.png");
   await expect(page.getByText(/copilot|MCP connection/i)).toHaveCount(0);
   expect((await request.post("/mcp", { data: {} })).status()).toBe(404);
@@ -281,7 +378,7 @@ test("custom mixed-platform faults produce real session and distributed trace pr
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await pick(page, "Shopping & checkout");
   // Every signal is on by default.
-  for (const name of ["Crashes", "Exceptions", "App freezes", "Network failures", "Slow page loads", "Payment failures"])
+  for (const name of ["Crashes", "Exceptions", "App freezes", "Network failures", "Payment failures", "LCP", "INP", "CLS", "FCP", "TTFB"])
     await expect(page.getByRole("button", { name: new RegExp("^Adjust " + name + ":") })).toBeVisible();
   await page.getByLabel("Number of sessions").fill("24");
   await page
@@ -1042,8 +1139,9 @@ test("causal scenarios keep platform evidence and run through the workflow", asy
   await page.getByLabel("Chronosphere tenant", { exact: true }).fill("preview-tenant");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await pick(page, "Diagnostic story");
-  await page.getByLabel("Story", { exact: true }).selectOption("slow-history");
-  await page.getByLabel("Cohort", { exact: true }).selectOption("affected");
+  await pick(page, "Slow transaction history");
+  await pick(page, "Affected");
+  await expect(page.getByText("Every session shows the failure.")).toBeVisible();
   await advanced(page, "Story");
   await expect(page.getByLabel("Traffic mix", { exact: true })).toHaveValue("single");
   await page.getByRole("button", { name: "Done", exact: true }).click();
@@ -1068,12 +1166,13 @@ test("causal scenarios keep platform evidence and run through the workflow", asy
 
 test('preset-led performance editor preserves advanced values and previews emitted evidence', async ({page}, testInfo)=>{
  await connect(page,['web']);
- await advanced(page,'Performance');
- await page.getByRole('button',{name:'Tail-only slowdown',exact:true}).click();
- await page.getByText('Audience and effect',{exact:true}).click();
- await expect(page.getByLabel('Effect factor',{exact:true})).toHaveValue('4');
+ await advanced(page,'Speed');
+ await pick(page,'Tail-only slowdown');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ await expect(page.getByLabel('How much slower',{exact:true})).toHaveValue('4');
+ await expect(page.getByText(/Most requests take about \d+ ms; 1 in 20 take over/)).toBeVisible();
  await expect(page.getByRole('img',{name:'Distribution of baseline and affected durations'})).toBeVisible();
- await page.getByText('Distribution details',{exact:true}).click();
+ await page.locator('.distribution-editor > details > summary').click();
  await expect(page.getByLabel('Distribution family',{exact:true}).locator('option')).toHaveCount(8);
  await page.getByLabel('Distribution family',{exact:true}).selectOption('bimodal');
  await page.getByLabel('Second mean',{exact:true}).fill('720');
@@ -1083,12 +1182,13 @@ test('preset-led performance editor preserves advanced values and previews emitt
  await page.getByRole('button',{name:'Save configuration',exact:true}).click();
  const saved=await (await download).path();
  await page.getByRole('button',{name:'Done',exact:true}).click();
- await expect(page.getByText(/Also: Gateway processing override/)).toBeVisible();
+ await expect(page.getByText(/Also: Backend processing time change/)).toBeVisible();
  await capture(page,'v3-customize.png');
  await page.getByRole('button',{name:'Back',exact:true}).click();
  await page.getByRole('button',{name:'Continue',exact:true}).click();
- await advanced(page,'Performance');
- await page.getByText('Distribution details',{exact:true}).click();
+ await advanced(page,'Speed');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ await page.locator('.distribution-editor > details > summary').click();
  await expect(page.getByLabel('Second mean',{exact:true})).toHaveValue('720');
  await page.getByLabel('Second mean',{exact:true}).fill('840');
  await page.locator('input[type=file]').setInputFiles(saved!);
@@ -1124,16 +1224,17 @@ test('advanced modeling controls fit narrow and zoomed viewports',async({page})=
   await page.setViewportSize({width,height:1000});
   expect(await fits(),`errors ${width}px`).toBeTruthy();
  }
- await page.getByRole('tab',{name:'Performance',exact:true}).click();
- await page.getByRole('button',{name:'Add override',exact:true}).click();
- await page.getByText('Distribution details',{exact:true}).click();
+ await page.getByRole('tab',{name:'Speed',exact:true}).click();
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ await page.getByLabel('Add a speed change for',{exact:true}).selectOption('network_rtt_ms');
+ await page.locator('.distribution-editor > details > summary').click();
  for(const width of [320,390,768,1280,1920]){
   await page.setViewportSize({width,height:1000});
   expect(await fits(),`performance ${width}px`).toBeTruthy();
  }
  await page.setViewportSize({width:768,height:1000});
  await page.addStyleTag({content:'html{font-size:200%}'});
- for(const tab of ['Performance','Errors']){
+ for(const tab of ['Speed','Errors','Visitors','User journeys','A/B tests','App versions']){
   await page.getByRole('tab',{name:tab,exact:true}).click();
   expect(await fits(),`${tab} at 200% text`).toBeTruthy();
  }
@@ -1141,25 +1242,57 @@ test('advanced modeling controls fit narrow and zoomed viewports',async({page})=
  expect(await fits(),'customize at 200% text').toBeTruthy();
 });
 
+test('advanced tabs offer named quick choices, 100% sliders and friendly actions',async({page})=>{
+ await connect(page,['web']);
+ await advanced(page,'User journeys');
+ await pick(page,'Mostly buying');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ // Moving one share rebalances the rest so the total stays 100%.
+ await setRange(page,'Buys',60);
+ const values=await page.locator('fieldset.share-sliders').first().locator('input[type=range]').evaluateAll(els=>els.map(e=>Number((e as HTMLInputElement).value)));
+ expect(values.reduce((a,b)=>a+b,0)).toBe(100);
+ expect(values[1]).toBe(60);
+ await expect(page.getByRole('radio',{name:/Mostly buying/})).not.toBeChecked();
+ await page.getByRole('tab',{name:'Speed',exact:true}).click();
+ await pick(page,'Slow network');
+ await page.getByRole('tab',{name:'A/B tests',exact:true}).click();
+ await page.getByRole('button',{name:'Add an A/B test',exact:true}).click();
+ await page.getByLabel('Test name',{exact:true}).fill('Checkout Redesign');
+ await page.getByLabel('Test name',{exact:true}).blur();
+ await expect(page.getByLabel('Test name',{exact:true})).toHaveValue('checkout-redesign');
+ await page.getByLabel('Starts when users reach',{exact:true}).selectOption({label:'Adds to cart'});
+ await setRange(page,'Split',30);
+ await page.getByRole('button',{name:'Done',exact:true}).click();
+ const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Generate preview',exact:true}).click();
+ const sent=(await response).request().postDataJSON();
+ expect(sent.population.intent_mix.retail.buyer).toBe(60);
+ expect(Object.values(sent.population.intent_mix.retail as Record<string,number>).reduce((a,b)=>a+b,0)).toBe(100);
+ expect(sent.modeling.bindings).toMatchObject([{id:'scenario-network',quantity:'network_rtt_ms'}]);
+ expect(sent.modeling.experiments).toMatchObject([{id:'checkout-redesign',exposure_endpoints:['add_to_cart'],variants:{control:30,treatment:70}}]);
+});
+
 test('release adoption and experiment editors survive reload and reach payload evidence',async({page})=>{
  await connect(page,['android','ios','web']);
- await advanced(page,'Release');
- await page.getByRole('button',{name:'Set adoption curve',exact:true}).first().click();
- await page.getByLabel('android point 1 version 10.28.0 share',{exact:true}).fill('100');
- await page.getByLabel('android point 1 version 10.27.3 share',{exact:true}).fill('0');
- await page.getByLabel('android point 2 version 10.28.0 share',{exact:true}).fill('100');
- await page.getByLabel('android point 2 version 10.27.3 share',{exact:true}).fill('0');
+ await advanced(page,'App versions');
+ await pick(page,'New version rolls out');
+ await page.locator('.sheet-panel > details.tab-disclosure > summary').click();
+ const android=page.locator('.release-card').filter({hasText:'Android'});
+ for(const label of ['Share at the start','Share at the end'])
+  await android.getByLabel(label,{exact:true}).evaluate((el:HTMLInputElement)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'100');el.dispatchEvent(new Event('input',{bubbles:true}));});
+ await expect(android.getByRole('img',{name:/10\.28\.0 share from 100% to 100%/})).toBeVisible();
  for(const width of [320,768,1440]){
   await page.setViewportSize({width,height:1000});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
  }
- await page.getByRole('tab',{name:'Experiments',exact:true}).click();
- await page.getByRole('button',{name:'Add experiment',exact:true}).click();
- await page.getByLabel('Exposure endpoints',{exact:true}).fill('home, accounts, locations');
+ await page.getByRole('tab',{name:'A/B tests',exact:true}).click();
+ await page.getByRole('button',{name:'Add an A/B test',exact:true}).click();
+ await page.getByText('Expert',{exact:true}).click();
+ await page.getByLabel('Starts at any of',{exact:true}).fill('home, accounts, locations');
  await page.reload();
  await page.getByRole('button',{name:'Continue',exact:true}).click();
- await advanced(page,'Release');
- await expect(page.getByLabel('android point 1 version 10.28.0 share',{exact:true})).toHaveValue('100');
+ await advanced(page,'App versions');
+ await expect(page.locator('.release-card').filter({hasText:'Android'}).getByLabel('Share at the start',{exact:true})).toHaveValue('100');
  await page.getByRole('button',{name:'Done',exact:true}).click();
  const response=page.waitForResponse(r=>r.url().endsWith('/api/preview')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Generate preview',exact:true}).click();
