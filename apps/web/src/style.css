@@ -1180,12 +1180,11 @@ table + .hint,
   height: 14px;
 }
 .run-actions {
-  display: flex;
-  gap: 8px;
+  display: grid;
   flex-shrink: 0;
 }
 .run-actions.has-controls {
-  display: flex;
+  display: grid;
   align-items: center;
   gap: 5px;
   padding: 4px;
@@ -1202,6 +1201,25 @@ table + .hint,
 .run-actions .button {
   min-width: 120px;
 }
+.run-actions-layer {
+  grid-area: 1 / 1;
+  display: flex;
+  gap: 5px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 180ms ease, visibility 0s linear 180ms;
+}
+.run-actions-layer[data-visible="true"] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 180ms ease, transform 180ms ease, visibility 0s;
+}
+.run-actions-finished .button { width: 100%; }
+.run-actions[data-state="loading"] { visibility: hidden; }
 .run-route {
   display: flex;
   flex-wrap: wrap;
@@ -2362,3 +2380,21 @@ fieldset.chip-group.compact .chip span { min-height: 30px; padding: 4px 12px; fo
 .remembered-record p, .remembered-record small { margin: 4px 0; color: var(--secondary); font-size: .8125rem; }
 .remembered-confirm { flex-basis: 100%; }
 .remembered-confirm .button { margin: 8px 8px 0 0; }
+
+/* One short entrance per stage/state, never on polling, counters or elapsed time. */
+.workflow-stage { min-width: 0; animation: stage-enter 220ms cubic-bezier(.2,.75,.25,1); }
+.preview-result, .app-fields, .destination-fields, .sheet-panel { animation: content-enter 180ms ease-out; }
+.button-content { display: inline-flex; align-items: center; justify-content: center; gap: inherit; min-width: 0; animation: label-enter 150ms ease-out; }
+.state-label { display: inline-block; animation: label-enter 170ms ease-out; }
+.overlay[data-state="open"] { animation: overlay-enter 180ms ease-out; }
+.overlay[data-state="closed"] { animation: overlay-exit 140ms ease-in; pointer-events: none; }
+.modal[data-state="closed"] { animation: inspector-exit 140ms ease-in; pointer-events: none; }
+.sheet[data-state="closed"] { animation: sheet-exit 160ms ease-in; pointer-events: none; }
+.remembered-options { animation: content-enter 140ms ease-out; }
+@keyframes stage-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes content-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes label-enter { from { opacity: .45; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+@keyframes overlay-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes overlay-exit { from { opacity: 1; } to { opacity: 0; } }
+@keyframes inspector-exit { from { opacity: 1; transform: translate(-50%, -50%); } to { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
+@keyframes sheet-exit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(16px); } }

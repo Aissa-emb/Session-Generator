@@ -94,6 +94,56 @@ async function capture(page: Page, name: string) {
   });
 }
 
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  test(`run controls crossfade safely and keep their footprint (${reducedMotion})`, async ({page}) => {
+    await page.emulateMedia({reducedMotion});
+    await page.addInitScript(() => {
+      (window as any).stageEntrances = 0;
+      document.addEventListener('animationstart', e => {
+        if ((e as AnimationEvent).animationName === 'stage-enter') (window as any).stageEntrances++;
+      });
+    });
+    const f = await fixture(page);
+    await page.setViewportSize({width:390,height:844});
+    const actions = page.locator('.run-actions');
+    const before = await actions.boundingBox();
+    const entrances = await page.evaluate(()=>(window as any).stageEntrances);
+    // Polling updates data without animating the entire stage again.
+    f.state.delivery.sessions_acknowledged = 129;
+    await expect(page.locator('.run-metrics dd').first()).toHaveText('129');
+    expect(await page.evaluate(()=>(window as any).stageEntrances)).toBe(entrances);
+    let stops = 0;
+    await page.route('**/api/runs/' + id + '/stop', async route => {
+      stops++;
+      f.state.status = 'stopped';
+      f.state.desired_status = 'stopped';
+      f.state.ended = Date.now()/1000;
+      await route.fulfill({json:f.state});
+    });
+    await page.getByRole('button',{name:'Stop',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Create another run',exact:true})).toBeEnabled();
+    await expect(page.getByRole('button',{name:'Create another run',exact:true})).toBeFocused();
+    expect(stops).toBe(1);
+    await expect(page.getByRole('button',{name:'Stop',exact:true})).toHaveCount(0);
+    // Outgoing visuals remain briefly, but cannot be focused or invoked.
+    const outgoing = actions.locator('.run-actions-layer').first();
+    await expect(outgoing).toHaveAttribute('inert', '');
+    await expect(outgoing.locator('button').last()).toBeDisabled();
+    await outgoing.locator('button').last().evaluate((el: HTMLButtonElement)=>el.focus());
+    await expect(page.getByRole('button',{name:'Create another run',exact:true})).toBeFocused();
+    const after = await actions.boundingBox();
+    expect(Math.abs(after!.width - before!.width)).toBeLessThan(1);
+    expect(Math.abs(after!.height - before!.height)).toBeLessThan(1);
+    const duration = await outgoing.evaluate(el => getComputedStyle(el).transitionDuration);
+    expect(duration.split(',').every(v => parseFloat(v) === 0)).toBe(reducedMotion === 'reduce');
+    await page.getByRole('button',{name:'Create another run',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Choose a destination'})).toBeVisible();
+    const animation = await page.locator('.workflow-stage').evaluate(el=>getComputedStyle(el).animationName);
+    expect(animation).toBe(reducedMotion === 'reduce' ? 'none' : 'stage-enter');
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
 test("run lifecycle, freshness, missing values and counter units stay truthful", async ({
   page,
 }) => {

@@ -520,6 +520,7 @@ export default function App() {
               </Button>
             </div>
           )}
+          <div className="workflow-stage" key={`${step}:${step === 3 && runId ? "run" : "setup"}`}>
           {!(step === 3 && runId) && (
             <div className="page-heading">
               <h1>
@@ -1045,6 +1046,7 @@ export default function App() {
               )}
             </footer>
           )}
+          </div>
         </main>
       </div>
     </div>

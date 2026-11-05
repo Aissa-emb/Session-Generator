@@ -203,7 +203,7 @@ export default function AdvancedSettings({
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="Advanced settings" description="Optional. Defaults are ready to send." footer={footer}>
       <Tabs tabs={tabs} tab={current} setTab={setTab} />
-      <div role="tabpanel" id={"panel-" + current} aria-labelledby={"tab-" + current} className="sheet-panel">
+      <div key={current} role="tabpanel" id={"panel-" + current} aria-labelledby={"tab-" + current} className="sheet-panel">
         {current === "Errors" && (
           <>
             <TabIntro purpose="Which problems sessions contain, and when." effect="Changes crash, exception, network failure and Web Vitals counts in XCOR RUM." />

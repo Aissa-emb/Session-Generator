@@ -1,4 +1,4 @@
-import { CSSProperties, ReactNode, isValidElement, cloneElement, useId, useRef } from "react";
+import { Children, CSSProperties, ReactNode, isValidElement, cloneElement, useId, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronDownIcon, Cross2Icon } from "@radix-ui/react-icons";
 export function Button({
@@ -24,7 +24,9 @@ export function Button({
       disabled={disabled}
       {...props}
     >
-      {children}
+      <span className="button-content" key={Children.toArray(children).filter(child => typeof child === "string" || typeof child === "number").join("")}>
+        {children}
+      </span>
     </button>
   );
 }

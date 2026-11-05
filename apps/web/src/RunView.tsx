@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -65,6 +65,8 @@ export default function RunView({
   const [receipt, setReceipt] = useState<Json | null>(null);
   const [copyState, setCopyState] = useState("");
   const [receiptFilter, setReceiptFilter] = useState("all");
+  const actions = useRef<HTMLDivElement>(null);
+  const focusAfterStop = useRef(false);
   const counters = run?.counters;
   const duration = spec?.traffic?.duration_minutes || 0;
   const elapsed = run?.started
@@ -73,6 +75,16 @@ export default function RunView({
   const remaining =
     elapsed === null ? null : Math.max(0, duration * 60 - elapsed);
   const active = !!run && ["queued", "running", "paused"].includes(run.status);
+  useEffect(() => {
+    if (active) {
+      if (busy !== "stop" && run?.desired_status !== "stopped") focusAfterStop.current = false;
+      return;
+    }
+    if (!run || !focusAfterStop.current) return;
+    focusAfterStop.current = false;
+    if (document.activeElement === document.body || actions.current?.contains(document.activeElement))
+      actions.current?.querySelector<HTMLButtonElement>(".run-actions-finished button")?.focus({preventScroll: true});
+  }, [active, run, busy]);
   const draining =
     run?.status === "running" && run.desired_status !== "running";
   const stale =
@@ -152,7 +164,7 @@ export default function RunView({
               aria-live="polite"
             >
               <i aria-hidden="true" />
-              {uncertain ? `Last known: ${status}` : status}
+              <span className="state-label" key={`${uncertain}:${status}`}>{uncertain ? `Last known: ${status}` : status}</span>
             </span>
           </div>
           <div className="run-identity">
@@ -189,13 +201,12 @@ export default function RunView({
             )}
           </div>
         </div>
-        <div className={"run-actions " + (active ? "has-controls" : "")}>
-          {active && (
-            <>
+        <div ref={actions} className="run-actions has-controls" data-state={!run ? "loading" : active ? "active" : "finished"}>
+            <div className="run-actions-layer" data-visible={active} aria-hidden={!active} {...(!active ? {inert: ""} : {})}>
               {run?.status === "paused" ? (
                 <Button
                   onClick={() => control("resume")}
-                  disabled={!!busy || !online || !!fetchError}
+                  disabled={!active || !!busy || !online || !!fetchError}
                 >
                   <PlayIcon />
                   {busy === "resume" ? "Resuming…" : "Resume"}
@@ -204,7 +215,7 @@ export default function RunView({
                 <Button
                   onClick={() => control("pause")}
                   disabled={
-                    !!busy ||
+                    !active || !!busy ||
                     !online ||
                     !!fetchError ||
                     draining ||
@@ -217,9 +228,9 @@ export default function RunView({
               )}
               <Button
                 kind="danger-button"
-                onClick={() => control("stop")}
+                onClick={() => { focusAfterStop.current = true; control("stop"); }}
                 disabled={
-                  !!busy ||
+                  !active || !!busy ||
                   !online ||
                   !!fetchError ||
                   run?.desired_status === "stopped"
@@ -228,14 +239,14 @@ export default function RunView({
                 <StopIcon />
                 {busy === "stop" ? "Stopping…" : "Stop"}
               </Button>
-            </>
-          )}
-          {run && !active && (
-            <Button onClick={again}>
+            </div>
+          <div className="run-actions-layer run-actions-finished" data-visible={!!run && !active}
+            aria-hidden={!run || active} {...(!run || active ? {inert: ""} : {})}>
+            <Button onClick={again} disabled={!run || active}>
               Create another run
               <ArrowRightIcon />
             </Button>
-          )}
+          </div>
         </div>
       </div>
 
