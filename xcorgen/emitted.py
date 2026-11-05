@@ -66,7 +66,9 @@ def observe(platform, envelopes, traces):
                            session_id=a.get("emb.user_session_id",a.get("session.id")), start_ms=int(a.get("emb.user_session_start_ts",span["start_time_unix_nano"]/1e6)))
             elif a.get("emb.type") == "perf.thread_blockage":
                 obs["blockage"] = True
-            elif span["name"] in ("emb-app-startup-cold","emb-app-startup"):
+            elif span["name"] in ("emb-app-startup-cold", "emb-app-startup") or (
+                    # Apple names any new-process launch after a previous one warm (DefaultStartupDataProvider).
+                    span["name"] == "emb-app-startup-warm" and platform == "ios"):
                 obs["cold_start_ms"] = dur
             elif a.get("emb.type") == "perf.network_request":
                 method, _, path = span["name"][4:].partition(" ")

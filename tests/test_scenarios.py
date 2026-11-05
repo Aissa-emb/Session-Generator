@@ -269,8 +269,9 @@ class ScenarioTests(unittest.TestCase):
             for request in s.plan.evidence:
                 if request["key"] not in ROOT_OPERATIONS:
                     continue
+                # Local work (cache reads, validation) precedes the request inside the business span.
                 task = next(x for x in tasks if attributes(x)["app.operation"] == request["key"]
-                            and abs(x["start_time_unix_nano"] / 1e6 - request["start"]) < 1)
+                            and 0 <= request["start"] - x["start_time_unix_nano"] / 1e6 < 600)
                 self.assertIn(task.get("parent_span_id"), (None, "", "0" * 16))
                 self.assertEqual(task["status"] == "Error", request["status"] is None or request["status"] >= 400)
                 self.assertGreaterEqual(task["end_time_unix_nano"] / 1e6, request["end"])

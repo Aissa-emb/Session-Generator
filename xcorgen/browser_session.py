@@ -788,14 +788,23 @@ class BrowserSession:
 
     @contextmanager
     def flow(self, name, **attrs):
-        holder, start, page = {"failed": False}, self.t, self.page
+        holder, start, page = {"failed": False, "trace_id": hex_id(16, self.rng), "span_id": hex_id(8, self.rng)}, self.t, self.page
         try:
             yield holder
         finally:
             a = dict(attrs, **holder.get("attributes", {}), **{"emb.type": "perf"})
             if holder["failed"]:
                 a["emb.error_code"] = "FAILURE"
-            self._span("traces", name, start, self.t, a, status=2 if holder["failed"] else 0, page=page)
+            self._span("traces", name, start, self.t, a, status=2 if holder["failed"] else 0, page=page,
+                       trace_id=holder["trace_id"], span_id=holder["span_id"])
+
+    def child_span(self, parent, name, start, end, failed=False, attrs=None):
+        """A span the app starts with the business span as parent (same tracer scope and trace)."""
+        a = dict(attrs or {}, **{"emb.type": "perf"})
+        if failed:
+            a["emb.error_code"] = "FAILURE"
+        self._span("traces", name, self.p(start), self.p(end), a, status=2 if failed else 0,
+                   trace_id=parent["trace_id"], parent=parent["span_id"])
 
     def long_task(self, duration, script=None):
         self._frame(duration)
@@ -826,9 +835,12 @@ class BrowserSession:
         if failed:
             a["error.type"] = c.transport or str(c.status)
         scope = "xhr" if self.lob == "banking" and key == "statement" else "fetch"
-        self._span(scope, f"HTTP {c.ep.method}" if scope == "xhr" else c.ep.method, start, c.end, a,
+        # Both instrumentations name the span by the method; XHR ends with "loaded" below 299, else "error".
+        final = "loaded" if c.status is not None and c.status < 299 else "error"
+        self._span(scope, c.ep.method, start, c.end, a,
                    kind=3, trace_id=c.trace_id, span_id=c.span_id, status=2 if failed else 0,
-                   events=self._events([("open", start), ("send", start + .1), ("fetchStart", start + .2), ("responseEnd", c.end)])
+                   events=self._events([("open", start), ("send", start + .1), ("fetchStart", start + .2), ("responseEnd", c.end),
+                                        (final, c.end + .1)])
                           if scope == "xhr" else self._events([("fetchStart", start), ("responseEnd", c.end)]))
         if propagated:
             deliver_backend(self, c, self.rng)
