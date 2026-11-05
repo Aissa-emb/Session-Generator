@@ -17,7 +17,7 @@ def public(store, row):
         except KeyError:
             credential = {}
         credentials[kind] = {'id': id, 'configured': bool(credential), 'last_four': credential.get('last_four')}
-    return {k: row[k] for k in ('id', 'name', 'apps', 'tenant', 'destination', 'version')} | {'credentials': credentials}
+    return {k: row[k] for k in ('id', 'name', 'apps', 'tenant', 'destination', 'version')} | {'credentials': credentials, 'updated': row.get('updated', 0)}
 
 
 def listing(store):
@@ -90,7 +90,7 @@ def save(svc, value, id=None):
         raise ValueError('This destination changed in another window. Reload before saving.')
     rows = listing(svc.store)['destinations']
     if not prior and len(rows) >= 50:
-        raise ValueError('Remove an unused destination before saving another (limit 50).')
+        raise ValueError('Use Manage saved values to remove an unused set before saving another (limit 50).')
     if any(r['name'].casefold() == data['name'].casefold() and r['id'] != id for r in rows):
         raise ValueError('Choose a different saved destination name.')
     id = id or 'destination:' + identifier()
@@ -103,10 +103,19 @@ def save(svc, value, id=None):
                 refs[kind] = None
                 continue
             token = values.get(kind)
-            if token is None and not prior and value.get('source_credentials', {}).get(kind):
-                token = secrets.for_spec(svc.store, {'saved_credentials': value['source_credentials']}, kind)
-            if token is None and not prior and value.get('use_legacy'):
+            sources = value.get('source_credentials', {})
+            if token is None and kind in sources:
+                if sources[kind] is None:
+                    refs[kind] = None
+                    continue
+                if sources[kind] == refs[kind]:
+                    continue
+                token = secrets.for_spec(svc.store, {'saved_credentials': sources}, kind)
+            if token is None and kind not in sources and value.get('use_legacy'):
                 token = secrets.get(svc.store, kind)
+                if token is None:
+                    refs[kind] = None
+                    continue
             if token is None:
                 continue
             key = identifier()

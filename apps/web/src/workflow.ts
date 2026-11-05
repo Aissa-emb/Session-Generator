@@ -33,6 +33,7 @@ export type Draft = {
   destinationId?: string;
   destinationName?: string;
   savedCredentials?: { chronosphere: string | null; symbol_upload: string | null };
+  legacyCredentials?: ("chronosphere" | "symbol_upload")[];
   story: "standard" | "regression" | "causal";
   causalScenario: string;
   causalVariant: "affected" | "control" | "recovered" | "scheduled";

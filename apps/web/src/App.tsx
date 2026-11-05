@@ -13,7 +13,7 @@ import {
   ExternalLinkIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError, Json, number } from "./api";
-import { Badge, Button, Field, Panel } from "./ui";
+import { Badge, Button, Field, Modal, Panel } from "./ui";
 import {
   AppTarget,
   Draft,
@@ -34,7 +34,7 @@ import PreviewStep from "./PreviewStep";
 import CustomizeScenario, { storyName } from "./CustomizeScenario";
 import { shareText } from "./AdvancedSettings";
 import RunView from "./RunView";
-import SavedDestinations from "./SavedDestinations";
+import RememberedInput from "./RememberedInput";
 import cortexLogo from "./assets/cortex-xcor-dark.svg";
 import toolWordmark from "./assets/session-generator-wordmark.svg";
 
@@ -81,6 +81,8 @@ export default function App() {
   const [token, setToken] = useState("");
   const [symbolToken, setSymbolToken] = useState("");
   const [destinationNotice, setDestinationNotice] = useState("");
+  const [manageSaved, setManageSaved] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
   const restoreDestination = useRef(!read("sg_workflow_v1") && !read("sg_run_id") && !read("sg_launch_attempt"));
   const [access, setAccess] = useState("");
   const [dry, setDry] = useState(() => !!read("sg_launch_attempt")?.dry);
@@ -105,7 +107,10 @@ export default function App() {
     queryKey: ["destinations"], queryFn: () => api("/destinations"), retry: false,
   });
   const destinationRows: Json[] = destinations.data?.destinations || [];
-  const selectedDestination = destinationRows.find(row => row.id === draft.destinationId);
+  const recentRows = [...destinationRows].sort((a, b) =>
+    Number(b.id === destinations.data?.selected_id) - Number(a.id === destinations.data?.selected_id) || (b.updated || 0) - (a.updated || 0));
+  const appChoices = (platform: Platform) => recentRows.flatMap(row => row.apps.filter((a: AppTarget) => a.platform === platform))
+    .filter((app: AppTarget, i: number, all: AppTarget[]) => all.findIndex(a => a.appId === app.appId) === i) as AppTarget[];
   useEffect(() => {
     if (!destinations.data || !restoreDestination.current) return;
     restoreDestination.current = false;
@@ -161,6 +166,7 @@ export default function App() {
       destination: spec.destinations.mode,
       tenant: spec.chronosphere?.tenant || "",
       savedCredentials: spec.saved_credentials,
+      legacyCredentials: undefined,
       destinationId: matched?.id,
       destinationName: matched?.name,
     }));
@@ -192,7 +198,7 @@ export default function App() {
       update({
         apps: [
           ...draft.apps,
-          selectedDestination?.apps.find((a: AppTarget) => a.platform === platform) || {
+          appChoices(platform)[0] || {
             platform,
             appId: "",
             name: platform === "web" ? "Vantra Web" : "Vantra",
@@ -212,37 +218,35 @@ export default function App() {
   const applyDestination = (row: Json) => {
     update({ apps: row.apps, tenant: row.tenant, destination: row.destination,
       destinationId: row.id, destinationName: row.name,
+      legacyCredentials: undefined,
       savedCredentials: { chronosphere: row.credentials.chronosphere.id, symbol_upload: row.credentials.symbol_upload.id } });
     setToken(""); setSymbolToken("");
-  };
-  const newDestination = () => {
-    update({ apps: [{platform: "android", appId: "", name: "Vantra", region: "us"}], tenant: "",
-      destinationId: undefined, destinationName: "", savedCredentials: {chronosphere: null, symbol_upload: null} });
-    setToken(""); setSymbolToken("");
-  };
-  const selectDestination = async (id: string) => {
-    if (!id) { newDestination(); return; }
-    setBusy("Loading destination"); setError("");
-    try { applyDestination(await api(`/destinations/${id}/select`, {})); }
-    catch (e) { fail(e); }
-    finally { setBusy(""); }
   };
   const saveDestination = async () => {
     const issue = connectionError(draft);
     if (issue) { setError(issue); return false; }
-    if (draft.destinationId && !selectedDestination) {
-      setError("This saved destination is unavailable. Reconnect or create a new destination."); return false;
+    if (!destinations.data || destinations.isError) {
+      setError("Saved values could not be loaded. Reconnect before saving."); return false;
     }
-    setBusy("Saving destination"); setError(""); setDestinationNotice("");
+    // Updating an app/tenant combination keeps its previous key versions for historical runs.
+    // A new combination gets its own vault records, so removing one cannot break another.
+    const appsKey = (apps: AppTarget[]) => apps.map(a => a.platform + ":" + a.appId.trim()).sort().join(",");
+    const prior = recentRows.find(row => appsKey(row.apps) === appsKey(draft.apps) && row.tenant === tenantName(draft.tenant));
+    const baseName = (draft.apps.map(a => platformName(a.platform) + " " + a.appId.trim()).join(" + ") +
+      (draft.tenant ? " · " + tenantName(draft.tenant) : "")).slice(0, 70);
+    let name = prior?.name || baseName;
+    for (let i = 2; !prior && destinationRows.some(row => row.name.toLowerCase() === name.toLowerCase()); i++) name = baseName + " (" + i + ")";
+    setBusy("Saving values"); setError(""); setDestinationNotice("");
     try {
-      const row = await api(draft.destinationId ? `/destinations/${draft.destinationId}` : "/destinations", {
-        name: draft.destinationName?.trim() || (draft.apps.map(a => a.name).join(" + ") + (draft.tenant ? " · " + tenantName(draft.tenant) : "")).slice(0,80),
+      const row = await api(prior ? `/destinations/${prior.id}` : "/destinations", {
+        name,
         apps: draft.apps, tenant: tenantName(draft.tenant), destination: draft.destination,
-        expected_version: selectedDestination?.version,
-        use_legacy: !draft.savedCredentials,
-        source_credentials: draft.savedCredentials,
+        expected_version: prior?.version,
+        use_legacy: !draft.savedCredentials || !!draft.legacyCredentials?.length,
+        source_credentials: draft.savedCredentials && Object.fromEntries(Object.entries(draft.savedCredentials)
+          .filter(([kind]) => !draft.legacyCredentials?.includes(kind as "chronosphere" | "symbol_upload"))),
         credentials: { ...(token.trim() ? {chronosphere: token.trim()} : {}), ...(symbolToken.trim() ? {symbol_upload: symbolToken.trim()} : {}) },
-      }, draft.destinationId ? "PUT" : "POST");
+      }, prior ? "PUT" : "POST");
       applyDestination(row);
       await destinations.refetch();
       setDestinationNotice("Saved on this computer. Available after refresh and restart.");
@@ -250,23 +254,48 @@ export default function App() {
     } catch (e) { fail(e); return false; }
     finally { setBusy(""); }
   };
-  const removeDestination = async () => {
-    setBusy("Removing destination"); setError("");
+  const removeDestination = async (id: string) => {
+    setBusy("Removing saved values"); setError("");
     try {
-      await api(`/destinations/${draft.destinationId}`, undefined, "DELETE");
-      newDestination(); await destinations.refetch();
-      setDestinationNotice("Destination and saved keys removed.");
+      await api(`/destinations/${id}`, undefined, "DELETE");
+      const removed = destinationRows.find(row => row.id === id);
+      if (draft.savedCredentials) update({ savedCredentials: Object.fromEntries(
+        Object.entries(draft.savedCredentials).map(([kind, key]) => [kind, key === removed?.credentials[kind].id ? null : key])
+      ) as Draft["savedCredentials"], destinationId: undefined, destinationName: undefined });
+      setRemoving(null); await destinations.refetch();
+      setDestinationNotice("Saved values and keys removed.");
     } catch (e) { fail(e); }
     finally { setBusy(""); }
   };
   const credential = (kind: "chronosphere" | "symbol_upload") => {
-    if (draft.savedCredentials) {
-      const saved = selectedDestination?.credentials[kind];
-      return {configured: !!draft.savedCredentials[kind], last_four: saved?.id === draft.savedCredentials[kind] ? saved?.last_four : null};
+    if (draft.savedCredentials && !draft.legacyCredentials?.includes(kind)) {
+      const saved = destinationRows.map(row => row.credentials[kind]).find(c => c.id && c.id === draft.savedCredentials?.[kind]);
+      return {configured: !!draft.savedCredentials[kind], last_four: saved?.last_four};
     }
     return {configured: !!settings.data?.secrets[kind], last_four: settings.data?.secret_suffixes?.[kind]};
   };
   const masked = (kind: "chronosphere" | "symbol_upload") => credential(kind).configured ? "Saved ••••" + (credential(kind).last_four || "") : "";
+  const selectCredential = (kind: "chronosphere" | "symbol_upload", id: string | null, tenant?: string) => {
+    // Materialize any legacy defaults only on save; an explicit field choice binds both kinds.
+    const legacy = draft.legacyCredentials || (!draft.savedCredentials ? ["chronosphere", "symbol_upload"] as const : []);
+    update({ savedCredentials: { chronosphere: null, symbol_upload: null, ...draft.savedCredentials, [kind]: id },
+      legacyCredentials: legacy.filter(k => k !== kind),
+      ...(tenant !== undefined ? {tenant} : {}) });
+    if (kind === "chronosphere") setToken(""); else setSymbolToken("");
+  };
+  const keyOptions = (kind: "chronosphere" | "symbol_upload") => recentRows
+    .filter(row => row.credentials[kind].configured)
+    .map(row => ({id: row.credentials[kind].id, label: "••••" + (row.credentials[kind].last_four || ""),
+      detail: kind === "chronosphere" ? row.tenant || row.name : row.apps.map((a: AppTarget) => a.name + " · " + a.appId).join(", "),
+      selected: draft.savedCredentials?.[kind] === row.credentials[kind].id}));
+  const selectApp = (platform: Platform, id: string) => {
+    const app = appChoices(platform).find(a => a.appId === id);
+    if (app) changeApp(platform, app);
+  };
+  const selectTenant = (id: string) => {
+    const row = recentRows.find(r => r.id === id);
+    if (row) selectCredential("chronosphere", row.credentials.chronosphere.id, row.tenant);
+  };
   const next = async () => {
     setError("");
     if (step === 0) {
@@ -275,33 +304,7 @@ export default function App() {
         setError(issue);
         return;
       }
-      if (draft.destinationId && !token.trim() && !symbolToken.trim()) {
-        setStep(1);
-        return;
-      }
-      if (draft.destinationId || draft.destinationName?.trim() || draft.savedCredentials) {
-        if (await saveDestination()) setStep(1);
-        return;
-      }
-      const pending: [string, string, (v: string) => void][] = [
-        ["chronosphere", token.trim(), setToken],
-        ["symbol_upload", symbolToken.trim(), setSymbolToken],
-      ];
-      for (const [name, value, reset] of pending) {
-        if (!value) continue;
-        setBusy("Saving token");
-        try {
-          await api(`/settings/secrets/${name}`, { value }, "PUT");
-          reset("");
-          await settings.refetch();
-        } catch (e) {
-          fail(e);
-          return;
-        } finally {
-          setBusy("");
-        }
-      }
-      setStep(1);
+      if (await saveDestination()) setStep(1);
     } else if (step === 1) {
       await buildPreview();
     } else if (step === 2) {
@@ -551,11 +554,7 @@ export default function App() {
           )}
           {step === 0 && (
             <fieldset className="destination-editor" disabled={!!busy}>
-              <SavedDestinations rows={destinationRows} id={draft.destinationId} name={draft.destinationName || ""}
-                busy={!!busy || !online || destinations.isPending || destinations.isError} notice={destinationNotice}
-                onName={name => update({destinationName: name})} onSelect={selectDestination}
-                onNew={newDestination} onSave={saveDestination} onRemove={removeDestination} />
-              {destinations.isError && <p className="error-notice" role="alert">Saved destinations could not be loaded. Reconnect to try again.</p>}
+              {destinations.isError && <p className="error-notice" role="alert">Saved values could not be loaded. Reconnect to try again.</p>}
               <Panel title="Applications" action={<Badge>Production</Badge>}>
                 <div className="platform-picker">
                   {(["android", "ios", "web"] as Platform[]).map((p) => (
@@ -579,22 +578,14 @@ export default function App() {
                     <span className="app-platform">
                       {platformName(a.platform)}
                     </span>
-                    <Field
+                    <RememberedInput
                       label={platformName(a.platform) + " app ID"}
                       hint="From your RUM app."
-                    >
-                      <input
-                        value={a.appId}
-                        maxLength={5}
-                        placeholder={
-                          a.platform === "web" ? "e.g. kfs9f" : "e.g. 5nrc2"
-                        }
-                        autoComplete="off"
-                        onChange={(e) =>
-                          changeApp(a.platform, { appId: e.target.value })
-                        }
-                      />
-                    </Field>
+                      value={a.appId} maxLength={5} placeholder={a.platform === "web" ? "e.g. kfs9f" : "e.g. 5nrc2"}
+                      options={appChoices(a.platform).map(app => ({id: app.appId, label: app.appId,
+                        detail: app.name + " · " + app.region.toUpperCase(), selected: app.appId === a.appId}))}
+                      onChange={appId => changeApp(a.platform, {appId})}
+                      onSelect={id => selectApp(a.platform, id)} />
                     <Field label={platformName(a.platform) + " app name"}>
                       <input
                         value={a.name}
@@ -616,8 +607,12 @@ export default function App() {
                     </Field>
                     {a.platform === "web" && (
                       <div className="app-symbols">
-                        <Field
+                        <RememberedInput
                           label="Symbol Upload token"
+                          secret value={symbolToken} onChange={setSymbolToken}
+                          placeholder={symbolsConfigured ? "••••" + (credential("symbol_upload").last_four || "") : "Enter Symbol Upload token"}
+                          options={keyOptions("symbol_upload")}
+                          onSelect={id => selectCredential("symbol_upload", id)}
                           hint={
                             <>
                               {symbolsConfigured ? (
@@ -650,19 +645,7 @@ export default function App() {
                               </a>
                             </>
                           }
-                        >
-                          <input
-                            type="password"
-                            autoComplete="new-password"
-                            placeholder={
-                              symbolsConfigured
-                                ? "Saved on server"
-                                : "Enter Symbol Upload token"
-                            }
-                            value={symbolToken}
-                            onChange={(e) => setSymbolToken(e.target.value)}
-                          />
-                        </Field>
+                        />
                       </div>
                     )}
                   </div>
@@ -697,37 +680,33 @@ export default function App() {
                 </div>
                 {draft.destination === "end_to_end" && (
                   <div className="destination-fields">
-                    <Field
+                    <RememberedInput
                       label="Chronosphere tenant"
                       hint="Tenant name or URL"
-                    >
-                      <input
-                        value={draft.tenant}
-                        placeholder="your-tenant.chronosphere.io"
-                        onChange={(e) => update({ tenant: e.target.value })}
-                        onBlur={() =>
-                          update({ tenant: tenantName(draft.tenant) })
-                        }
-                      />
-                    </Field>
-                    <Field
+                      value={draft.tenant} placeholder="your-tenant.chronosphere.io"
+                      options={recentRows.filter((row, i, all) => row.tenant && all.findIndex(r => r.tenant === row.tenant) === i)
+                        .map(row => ({id: row.id, label: row.tenant, selected: row.tenant === tenantName(draft.tenant)}))}
+                      onChange={tenant => {
+                        if (tenantName(tenant) !== tenantName(draft.tenant)) selectCredential("chronosphere", null, tenant);
+                        else update({tenant});
+                      }}
+                      onSelect={selectTenant}
+                      onBlur={() => update({ tenant: tenantName(draft.tenant) })} />
+                    <RememberedInput
                       label="Chronosphere API token"
+                      secret value={token} onChange={setToken}
+                      placeholder={configured ? "••••" + (credential("chronosphere").last_four || "") : "Enter API token"}
+                      options={keyOptions("chronosphere")}
+                      onSelect={id => {
+                        const row = recentRows.find(r => r.credentials.chronosphere.id === id);
+                        if (row) selectCredential("chronosphere", id, row.tenant);
+                      }}
                       hint={
                         configured
                           ? masked("chronosphere") + ". Enter a token to replace it."
                           : "Required for live traces"
                       }
-                    >
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        placeholder={
-                          configured ? "Saved on server" : "Enter API token"
-                        }
-                        value={token}
-                        onChange={(e) => setToken(e.target.value)}
-                      />
-                    </Field>
+                    />
                     <details className="connection-details full">
                       <summary>Connection requirements</summary>
                       <p className="hint">
@@ -738,8 +717,31 @@ export default function App() {
                   </div>
                 )}
               </Panel>
+              <div className="remembered-footer">
+                <small role="status">{destinationNotice || "App IDs and keys are saved when you continue."}</small>
+                <button type="button" className="text-button" disabled={!online || destinations.isPending || destinations.isError} onClick={saveDestination}>Save now</button>
+                {!!destinationRows.length && <button type="button" className="text-button" onClick={() => { setRemoving(null); setManageSaved(true); }}>Manage saved values</button>}
+              </div>
             </fieldset>
           )}
+          <Modal open={manageSaved} onOpenChange={setManageSaved} title="Saved values"
+            description="Saved app IDs and keys are available from their fields. Remove an unused set here.">
+            <div className="remembered-manager">
+              {destinationRows.map(row => <div className="remembered-record" key={row.id}>
+                <div><strong>{row.name}</strong><p>{row.apps.map((a: AppTarget) => platformName(a.platform) + " " + a.appId).join(" · ")}{row.tenant && " · " + row.tenant}</p>
+                  <small>{["chronosphere", "symbol_upload"].filter(k => row.credentials[k].configured).map(k =>
+                    (k === "chronosphere" ? "Chronosphere " : "Symbol Upload ") + "••••" + (row.credentials[k].last_four || "")).join(" · ")}</small></div>
+                <Button kind="ghost" disabled={!!busy} onClick={() => setRemoving(row.id)}>Remove</Button>
+                {removing === row.id && <div className="remembered-confirm">
+                  <p>Remove these saved values and all their key versions? Past runs keep their history but cannot reuse these keys.</p>
+                  <Button disabled={!!busy} onClick={() => removeDestination(row.id)}>Remove values and keys</Button>
+                  <Button kind="ghost" disabled={!!busy} onClick={() => setRemoving(null)}>Cancel</Button>
+                </div>}
+              </div>)}
+              {!destinationRows.length && <p>No saved values.</p>}
+              {error && <p className="error-notice" role="alert">{error}</p>}
+            </div>
+          </Modal>
           {step === 1 && (
             <div className="customize-layout">
               <CustomizeScenario draft={draft} update={update} caps={caps.data} />
