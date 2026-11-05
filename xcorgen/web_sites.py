@@ -26,7 +26,11 @@ def slug(text):
 
 
 def hex_id(*parts, n=16):
-    return hashlib.sha256(":".join(map(str, parts)).encode()).hexdigest()[:n]
+    value = hashlib.sha256(":".join(map(str, parts)).encode()).hexdigest()[:n]
+    # Long route IDs must remain opaque hex, never accidental card-like numbers.
+    # Keep stable IDs and the backend's hex rollup, without exempting URL text
+    # from privacy checks. Short chunk hashes keep their existing mapping.
+    return 'a' + value[1:] if n >= 13 and value.isdecimal() else value
 
 
 def content_hash(*parts):

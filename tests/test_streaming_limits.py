@@ -4,7 +4,7 @@ import random
 import tempfile
 import time
 import unittest
-from xcorgen import linter, spec
+from xcorgen import linter, spec, web_sites, url_rollup
 from xcorgen.otlp import attrs
 from xcorgen.emitted import Emitted
 from xcorgen.personas import PersonaPool
@@ -13,6 +13,25 @@ from xcorgen.spec_runner import SpecRun
 
 
 class StreamingLimitsTests(unittest.TestCase):
+    def test_generated_route_ids_do_not_resemble_cards_and_urls_stay_checked(self):
+        # SHA-256('offer:visitor:1168') starts with an all-numeric, Luhn-valid ID.
+        before = 'https://www.vantra.com/travel/book/5139220382404884'
+        self.assertTrue(linter.lint_payloads(self.correlated_logs({'browser.url.full': before})))
+        params = {'_user': 'visitor', '_session': '1168'}
+        for page in ('offer', 'checkout'):
+            path = web_sites.TRAVEL[page].path(params)
+            route_id = path.split('/')[3]
+            self.assertEqual(len(route_id), 16)
+            self.assertEqual(url_rollup.segment(route_id), '«hex»')
+            self.assertEqual(path, web_sites.TRAVEL[page].path(params))
+            self.assertEqual(linter.lint_payloads(self.correlated_logs({
+                'browser.url.full': 'https://www.vantra.com' + path})), [])
+        self.assertEqual(web_sites.hex_id('offer', 'visitor', '1168', n=4), '5139')
+        for url in (before, 'https://www.vantra.com/?email=ops@vantra.com',
+                    'https://www.vantra.com/?phone=555-867-5309'):
+            self.assertTrue(any(i['code'] == 'pii' for i in
+                                linter.lint_payloads(self.correlated_logs({'browser.url.full': url}))))
+
     @staticmethod
     def correlated_logs(attributes):
         return [{'target': 'otlp', 'kind': 'logs', 'payload': {'resourceLogs': [
