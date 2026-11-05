@@ -1111,7 +1111,7 @@ table + .hint,
   padding-top: 20px;
   margin-top: 20px;
 }
-.send-action span {
+.send-action > span {
   font-size: 0.8125rem;
   color: var(--muted);
 }
