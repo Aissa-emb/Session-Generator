@@ -866,6 +866,10 @@ test("platform selector keeps icons, labels and checkmarks contained through res
 }) => {
   await page.goto("/");
   await page.evaluate(() => document.fonts.ready);
+  // Compare settled geometry, not two different frames of the stage entrance.
+  await page.locator('.workflow-stage').evaluate(async el => {
+    await Promise.all(el.getAnimations().map(animation => animation.finished.catch(() => {})));
+  });
   const buttons = page.locator(".platform-picker button");
   for (const fontSize of [16, 32]) {
     await page.evaluate((size) => {
