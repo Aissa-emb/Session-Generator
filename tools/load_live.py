@@ -110,6 +110,7 @@ def main():
             rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
             rss_mb = rss / (1024 * 1024 if sys.platform == 'darwin' else 1024)
             return dict(elapsed_s=round(time.monotonic() - started, 1), sessions=row.get('counters', {}).get('sessions', 0),
+                        skipped_sessions=row.get('skipped_sessions', 0),
                         received=received[0], rate=row.get('achieved_rate_per_minute'), capacity_limited=row.get('capacity_limited'),
                         reason=row.get('capacity_reason'), max_rss_mb=round(rss_mb, 1),
                         database_mb=round(sum(p.stat().st_size for p in (root / 'state').glob('control.sqlite3*')) / 2**20, 2),
@@ -139,7 +140,9 @@ def main():
                                   achieved_per_minute=result.get('counters', {}).get('sessions', 0) / args.minutes,
                                   missed_arrivals=result.get('missed_arrivals'), counters=result.get('counters'),
                                   timings_by_minute={m: {k: round(sum(v)/len(v), 3) for k,v in row.items()} for m,row in measurements.items()})), flush=True)
-            if result['status'] != 'completed':
+            counters = result.get('counters', {})
+            if (result['status'] != 'completed' or result.get('skipped_sessions', 0)
+                    or counters.get('errors', 0) or counters.get('rejected', 0)):
                 raise SystemExit(1)
         finally:
             done.set()
