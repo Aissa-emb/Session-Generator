@@ -160,57 +160,82 @@ class IOSSession(AndroidSession):
         super()._flush_logs(part)
 
     def _startup(self, cold):
+        """StartupInstrumentation (6.21.0). A new process records ``emb-app-startup-<cold|warm>`` (sys.startup):
+        the SDK calls a launch cold only for a first launch, or when both the build UUID and the boot time
+        changed since the last launch. Children: emb-app-pre-main-init (not prewarmed), emb-app-first-frame-rendered
+        and emb-app-startup-app-init from the constructor closest to main, emb-sdk-setup and emb-sdk-start. Every
+        span carries isPrewarmed. A resumed (suspended) app records no startup trace."""
+        rng = self.rng
         t = self.t
-        tid, root = hex_id(16, self.rng), hex_id(8, self.rng)
-        self.startup_ms = lat(350, 1100, self.rng) if cold else lat(80, 280, self.rng)
+        self.startup_ms = lat(350, 1100, rng) if cold else lat(80, 280, rng)
         if self.persona.get("population_model"):
             self.startup_ms *= self.persona["cpu_factor"]
         regression = getattr(getattr(self, "plan", None), "slow_startup", None)
         if regression:
-            self.startup_ms = self.rng.uniform(
-                regression.get("min_ms", 4200),
-                min(9500, regression.get("max_ms", 7500)),
-            )
-        self.sdk_startup = lat(10, 45, self.rng)
+            self.startup_ms = rng.uniform(regression.get("min_ms", 4200), min(9500, regression.get("max_ms", 7500)))
+        self.sdk_startup = lat(10, 45, rng)
         if cold:
-            for name, lo, hi in [
-                ("emb-app-pre-main-init", 0, 0.2),
-                ("emb-app-startup-app-init", 0.2, 0.65),
-                ("emb-app-first-frame-rendered", 0.65, 1),
-            ]:
-                self._span(
-                    name,
-                    t + self.startup_ms * lo,
-                    t + self.startup_ms * hi,
-                    {"emb.type": "sys.startup"},
-                    trace_id=tid,
-                    parent=root,
-                )
-            self._span(
-                "emb-app-startup",
-                t,
-                t + self.startup_ms,
-                {"emb.type": "sys.startup", "isPrewarmed": False},
-                trace_id=tid,
-                span_id=root,
-            )
-            self._span(
-                "emb-sdk-setup", t, t + self.sdk_startup, {"emb.type": "sys.startup"}
-            )
+            launched_before = bool(self.persona.get("ios_launched_before") or self.user_session_number > 1
+                                   or self.persona.get("returning_visit"))
+            updated = self.persona.get("version_starts", 1) <= 1
+            # Cold: no stored build UUID/boot time yet, or a new build after a reboot (assumed for 30% of updates).
+            kind = "cold" if not launched_before or (updated and rng.random() < .3) else "warm"
+            self.persona["ios_launched_before"] = True
+            prewarmed = rng.random() < .3
+            self.resource["process_pre_warm"] = prewarmed
+            flag = {"isPrewarmed": prewarmed}
+            tid, root = hex_id(16, rng), hex_id(8, rng)
+            total = self.startup_ms
+            pre_main = 0.0 if prewarmed else total * rng.uniform(.16, .3)
+            constructor = t + pre_main
+            launched = constructor + (total - pre_main) * rng.uniform(.5, .72)
+            first_frame = t + total
+            setup_start = constructor + rng.uniform(4, 30)
+            setup_end = setup_start + self.sdk_startup
+            start_begin = setup_end + rng.uniform(1, 4)
+            start_end = start_begin + lat(6, 24, rng)
+            # Embrace.setup and start run inside didFinishLaunching, which ends before the first frame.
+            launched = max(launched, start_end + rng.uniform(5, 40))
+            first_frame = max(first_frame, launched + rng.uniform(30, 120))
+            self.startup_ms = first_frame - t
+            span = lambda *a, **k: self._span(*a, trace_id=tid, **k)
+            # The root and first-frame span end together; the other children are recorded at launch end.
+            span("emb-app-startup-" + kind, constructor if prewarmed else t, first_frame,
+                 dict(flag, **{"emb.type": "sys.startup"}), span_id=root)
+            if not prewarmed:
+                span("emb-app-pre-main-init", t, constructor, dict(flag, **{"emb.type": "sys.startup"}), parent=root)
+            span("emb-app-first-frame-rendered", constructor, first_frame, dict(flag, **{"emb.type": "sys.startup"}),
+                 parent=root)
+            span("emb-app-startup-app-init", constructor, launched, dict(flag, **{"emb.type": "sys.startup"}), parent=root)
+            span("emb-sdk-setup", setup_start, setup_end, dict(flag, **{"emb.type": "sys.startup"}), parent=root)
+            span("emb-sdk-start", start_begin, start_end, dict(flag, **{"emb.type": "sys.startup"}), parent=root)
         self.t += self.startup_ms
 
+    def _foreground_return(self, background_ms):
+        """Returning from the background resumes existing view controllers; no load trace is recorded."""
+
     def _screen(self, key, label):
+        """UIViewControllerHandler (6.21.0, instrumentFirstRender on): emb-<Class>-time-to-first-render
+        (perf.ui_load) from viewDidLoad to the end of viewDidAppear, with the four lifecycle children; the
+        emb-screen-view visibility span starts when viewDidAppear ends."""
         self._end_screen()
         self.screen_def_key = key
         self.screen_label = label
         name = self.app["screens"][key].replace("Fragment", "ViewController")
+        rng, scale = self.rng, self.persona.get("cpu_factor", 1.0)
+        tid, root = hex_id(16, rng), hex_id(8, rng)
+        attrs = {"emb.type": "perf.ui_load", "view.title": label, "view.name": name}
+        t, stages = self.t, []
+        for stage, p50, p95, gap in (("emb-view-did-load", 14, 60, (1, 6)), ("emb-view-will-appear", 2, 12, (2, 9)),
+                                     ("emb-view-is-appearing", 2, 10, (180, 420)), ("emb-view-did-appear", 1, 6, (0, 0))):
+            end = t + lat(p50, p95, rng) * scale
+            stages.append((stage, t, end))
+            t = end + rng.uniform(*gap)
+        for stage, start, end in stages:
+            self._span(stage, start, end, attrs, trace_id=tid, parent=root)
+        self._span(f"emb-{name}-time-to-first-render", stages[0][1], stages[-1][2], attrs, trace_id=tid, span_id=root)
+        self.t = stages[-1][2]
         self.screen = {"name": name, "route": key, "start": self.t}
-        self._span(
-            "emb-view-did-load",
-            self.t,
-            self.t + lat(12, 40, self.rng),
-            {"emb.type": "perf.ui_load", "view.name": name, "view.title": label},
-        )
 
     def _end_screen(self):
         if self.screen and not self.screen.get("closed"):
@@ -402,34 +427,24 @@ class IOSSession(AndroidSession):
                 d["due"] = max(d["due"], self.t + 10000)
         raise SessionEnded()
 
-    def native_blockage(self, duration):
-        start = self.t
-        events = [
-            {
-                "name": "thread_blockage_sample",
-                "time_unix_nano": nanos(start + i),
-                "attributes": kv(
-                    {
-                        "emb.type": "perf.thread_blockage_sample",
-                        "sample_overhead": 300000,
-                        "frame_count": 2,
-                    }
-                ),
-            }
-            for i in range(500, int(duration), 500)
-        ]
+    def native_blockage(self, duration, family=None):
+        """HangCaptureService (6.21.0): one span per hang with the first in-hang stack as its only sample."""
+        from . import hang_stacks
+        rng, start = self.rng, self.t
+        story = hang_stacks.choose(family or "", rng)
+        images = hang_stacks.Images(self.persona["os_version"], self.app["app_name"], self.resource["build_id"],
+                                    self.process_id, self.persona["device_id"])
+        screen = (self.screen or {}).get("name") or "HomeViewController"
+        attrs = hang_stacks.sample(story, self.profile.key, screen, images, rng)
         self._span(
             "emb-thread-blockage",
             start,
             start + duration,
-            {
-                "emb.type": "perf.thread_blockage",
-                "interval_code": 0,
-                "thread_priority": 47,
-                "last_known_time_unix_nano": nanos(start + duration),
-            },
-            events=events,
+            {"emb.type": "perf.thread_blockage", "last_known_time_unix_nano": nanos(start), "interval_code": 0,
+             "thread_priority": 0},
+            events=[{"name": "thread_blockage_sample", "time_unix_nano": nanos(start), "attributes": kv(attrs)}],
         )
+        return story
 
     def client_resource_spans(self, c):
         row = super().client_resource_spans(c)

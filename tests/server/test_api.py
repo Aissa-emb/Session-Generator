@@ -273,6 +273,60 @@ class APITests(unittest.TestCase):
         self.assertEqual(stopped['status'], 'stopped')
         self.assertIsNotNone(stopped['ended'])
 
+    def _live_with_failing_sessions(self, fails, ticks):
+        """Run a dry live stream whose session generation raises on the given call numbers."""
+        from xcorgen.spec_runner import SpecRun
+        self.spec['traffic'] = {'mode': 'live', 'rate_per_minute': 600, 'duration_minutes': 0}
+        saved = self.save()
+        run = self.svc.start_run(saved['id'], confirm=True, dry_run=True)
+        original, calls = SpecRun.session, []
+        def session(runner, *args, **kwargs):
+            calls.append(1)
+            if len(calls) in fails:
+                raise KeyError('api-token=do-not-record')
+            return original(runner, *args, **kwargs)
+        clock = type('Clock', (), {'now': time.time(), 'ticks': 0})()
+        def sleep(seconds):
+            clock.now += 30
+            clock.ticks += 1
+            if clock.ticks == ticks:
+                self.svc.control(run['id'], 'stop')
+        clock.time, clock.sleep = lambda: clock.now, sleep
+        with patch('server.worker.time', clock), patch.object(SpecRun, 'session', session):
+            worker.execute(self.store, run['id'])
+        return self.store.get('runs', run['id']), self.store.events(run['id'])
+
+    def test_one_failed_session_is_skipped_and_the_live_stream_continues(self):
+        result, events = self._live_with_failing_sessions({2}, ticks=5)
+        self.assertEqual(result['status'], 'stopped', events)
+        self.assertEqual(result['skipped_sessions'], 1)
+        self.assertEqual(result['counters']['sessions'], 4)
+        self.assertEqual(result['last_skipped']['type'], 'KeyError')
+        self.assertIsNone(result['last_skipped']['detail'])
+        self.assertTrue(any(w.startswith('tests/server/test_api.py:') for w in result['last_skipped']['where']))
+        self.assertEqual([e['type'] for e in events].count('session_skipped'), 1)
+        self.assertNotIn('do-not-record', json.dumps([result, events]))
+
+    def test_repeated_session_failures_stop_the_stream_with_a_recorded_reason(self):
+        result, events = self._live_with_failing_sessions({2, 3, 4}, ticks=10)
+        self.assertEqual(result['status'], 'failed', events)
+        self.assertEqual(result['skipped_sessions'], 3)
+        self.assertEqual(result['failure']['type'], 'JobFailure')
+        self.assertIn('3 sessions in a row could not be generated', result['failure']['detail'])
+        self.assertIn('KeyError at tests/server/test_api.py:', result['failure']['detail'])
+        failed = next(e for e in events if e['type'] == 'failed' and 'message' in e)
+        self.assertEqual(failed['detail'], result['failure']['detail'])
+        self.assertNotIn('do-not-record', json.dumps([result, events]))
+
+    def test_realism_linter_failures_name_codes_and_paths_but_not_values(self):
+        issue = {'severity': 'error', 'path': '$.embrace.logs.resourceLogs[0].message', 'code': 'pii',
+                 'message': 'Emitted value "555-867-5309" looks like a phone number.'}
+        with patch('server.worker.lint_payloads', return_value=[issue]):
+            result, events = self._live_with_failing_sessions(set(), ticks=10)
+        self.assertEqual(result['status'], 'failed', events)
+        self.assertIn('realism linter (pii at $.embrace.logs.resourceLogs[0].message)', result['failure']['detail'])
+        self.assertNotIn('555-867-5309', json.dumps([result, events]))
+
     def test_live_duration_stops_generation_and_preserves_counts(self):
         self.spec['traffic'] = {'mode': 'live', 'rate_per_minute': 10, 'duration_minutes': 1}
         saved = self.save()

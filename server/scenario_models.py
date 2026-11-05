@@ -868,6 +868,11 @@ class BackendFault(BaseModel):
     details: dict[str, Any] | None = None
 
 
+class Curve(Enum):
+    linear = 'linear'
+    smooth = 'smooth'
+
+
 class Incident(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -879,6 +884,14 @@ class Incident(BaseModel):
     peak_minutes: confloat(le=1440.0, gt=0.0) | None = None
     recovery_minutes: confloat(ge=0.0, le=1440.0) | None = None
     peak_rate: Rate | None = None
+    baseline_rate: Rate | None = Field(
+        None,
+        description='Share of eligible sessions affected outside the incident; onset rises from it to peak_rate and recovery returns to it. Defaults to 0.',
+    )
+    curve: Curve | None = Field(
+        None,
+        description='Onset and recovery easing. smooth uses a raised cosine, so a short peak gives a bell-shaped rise and fall. Defaults to linear.',
+    )
     repeat_every_minutes: confloat(ge=2.0, le=10080.0) | None = None
 
 

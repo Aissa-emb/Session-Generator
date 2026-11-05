@@ -10,6 +10,7 @@ import {
   MobileIcon,
   ActivityLogIcon,
   LayersIcon,
+  ExternalLinkIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError, Json, number } from "./api";
 import { Badge, Button, Field, Panel } from "./ui";
@@ -23,13 +24,15 @@ import {
   defaults,
   flowNames,
   loadDraft,
+  profileName,
   scenario,
   scheduleError,
   signalNames,
   tenantName,
 } from "./workflow";
 import PreviewStep from "./PreviewStep";
-import CustomizeScenario from "./CustomizeScenario";
+import CustomizeScenario, { storyName } from "./CustomizeScenario";
+import { shareText } from "./AdvancedSettings";
 import RunView from "./RunView";
 import cortexLogo from "./assets/cortex-xcor-dark.svg";
 import toolWordmark from "./assets/session-generator-wordmark.svg";
@@ -75,6 +78,7 @@ export default function App() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [token, setToken] = useState("");
+  const [symbolToken, setSymbolToken] = useState("");
   const [access, setAccess] = useState("");
   const [dry, setDry] = useState(() => !!read("sg_launch_attempt")?.dry);
   const [now, setNow] = useState(Date.now() / 1000);
@@ -188,15 +192,16 @@ export default function App() {
         setError(issue);
         return;
       }
-      if (token.trim()) {
+      const pending: [string, string, (v: string) => void][] = [
+        ["chronosphere", token.trim(), setToken],
+        ["symbol_upload", symbolToken.trim(), setSymbolToken],
+      ];
+      for (const [name, value, reset] of pending) {
+        if (!value) continue;
         setBusy("Saving token");
         try {
-          await api(
-            "/settings/secrets/chronosphere",
-            { value: token.trim() },
-            "PUT",
-          );
-          setToken("");
+          await api(`/settings/secrets/${name}`, { value }, "PUT");
+          reset("");
           await settings.refetch();
         } catch (e) {
           fail(e);
@@ -323,6 +328,7 @@ export default function App() {
     (k) => draft.signals[k] && available(k, draft),
   );
   const configured = settings.data?.secrets.chronosphere;
+  const symbolsConfigured = settings.data?.secrets.symbol_upload;
   const pending = read("sg_launch_attempt");
   const liveBlocked =
     !dry && draft.destination === "end_to_end" && !configured && !pending;
@@ -436,7 +442,7 @@ export default function App() {
                 {
                   [
                     "Choose your apps and trace destination.",
-                    "Choose a scenario and schedule.",
+                    "Choose a data profile and schedule.",
                     "Review a local sample before sending.",
                     runId
                       ? "Follow your run here. You can leave this page and return to its progress."
@@ -512,6 +518,57 @@ export default function App() {
                         <option value="eu">EU</option>
                       </select>
                     </Field>
+                    {a.platform === "web" && (
+                      <div className="app-symbols">
+                        <Field
+                          label="Symbol Upload token"
+                          hint={
+                            <>
+                              {symbolsConfigured ? (
+                                "Saved. Source maps upload before each live run. "
+                              ) : (
+                                <>
+                                  In XCOR RUM, open{" "}
+                                  <a
+                                    href="https://dash.embrace.io/settings/organization/api"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Settings → API
+                                    <span className="sr-only"> (opens in a new tab)</span>
+                                  </a>{" "}
+                                  and copy the Symbol Upload token. Exceptions
+                                  sent after the upload show original files,
+                                  lines and code.{" "}
+                                </>
+                              )}
+                              <a
+                                className="hint-link"
+                                href="https://embrace.io/docs/web/getting-started/sourcemap-uploads/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Source map upload guide
+                                <ExternalLinkIcon aria-hidden="true" />
+                                <span className="sr-only"> (opens in a new tab)</span>
+                              </a>
+                            </>
+                          }
+                        >
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            placeholder={
+                              symbolsConfigured
+                                ? "Saved on server"
+                                : "Enter Symbol Upload token"
+                            }
+                            value={symbolToken}
+                            onChange={(e) => setSymbolToken(e.target.value)}
+                          />
+                        </Field>
+                      </div>
+                    )}
                   </div>
                 ))}
               </Panel>
@@ -759,16 +816,16 @@ export default function App() {
                     </strong>
                   </div>
                   <div>
-                    <span>User flow</span>
-                    <strong>{draft.story === "causal" ? draft.causalScenario.replaceAll("-"," ") : flowNames[draft.flow]}</strong>
+                    <span>{draft.story === "causal" ? "Story" : "User flow"}</span>
+                    <strong>{draft.story === "causal" ? storyName(draft.causalScenario) : flowNames[draft.flow]}</strong>
                   </div>
                   <div className="full">
-                    <span>Included signals</span>
+                    <span>{draft.story === "causal" ? "Story settings" : profileName(draft.profile)}</span>
                     <strong>
                       {draft.story === "causal" ? `${draft.causalVariant} · ${draft.causalMode} · seed ${draft.causalSeed}` : selected.length
                         ? selected
                             .map(
-                              (k) => `${signalNames[k]} (${draft.rates[k]}%)`,
+                              (k) => `${signalNames[k]} (${shareText(k, draft)}${draft.patterns[k].shape === "steady" ? "" : ", " + draft.patterns[k].shape})`,
                             )
                             .join(" · ")
                         : "Standard session activity"}

@@ -10,6 +10,7 @@ import signal
 import sys
 import threading
 import time
+import traceback
 from xcorgen import limits, spec as specs
 from xcorgen.journal import RunJournal
 from xcorgen.linter import lint_payloads
@@ -25,6 +26,33 @@ class JobPaused(Exception):
 
 class JobStopped(Exception):
     pass
+
+
+class JobFailure(ValueError):
+    """A failure whose message is written in this module and is safe to show and log."""
+
+
+ROOT = Path(__file__).resolve().parents[1]
+# A live stream skips a session that cannot be generated cleanly; it stops when this many fail in a row.
+MAX_CONSECUTIVE_SKIPS = 3
+
+
+def failure_reason(error):
+    """Exception class and repository frames only: other messages can echo credentials or remote bodies."""
+    where = []
+    for frame in traceback.extract_tb(error.__traceback__):
+        path = Path(frame.filename).resolve()
+        if path.is_relative_to(ROOT) and '.venv' not in path.parts:
+            where.append(f'{path.relative_to(ROOT)}:{frame.lineno} in {frame.name}')
+    return {'type': type(error).__name__, 'detail': str(error) if isinstance(error, JobFailure) else None,
+            'where': where[-4:]}
+
+
+def lint_failure(issues):
+    """Issue codes and payload paths, never the flagged values."""
+    paths = sorted({i['path'] for i in issues})
+    return JobFailure('Generated session failed the realism linter (' + ', '.join(sorted({i['code'] for i in issues}))
+                      + ' at ' + ', '.join(paths[:3]) + (f' and {len(paths) - 3} more' if len(paths) > 3 else '') + ').')
 
 
 def config(store, spec, dry):
@@ -103,7 +131,7 @@ def bounded(store, job, version):
         n, _ = run.run_batch(sender, quiet=True)
         store.update('runs', job['id'], sessions=n, counters=dict(sender.stats), report=run.emitted.summary())
         if sender.stats['errors']:
-            raise ValueError('One or more deliveries failed; inspect receipts before resume.')
+            raise JobFailure('One or more deliveries failed; inspect receipts before resume.')
     finally:
         sender.close()
         run.journal.close()
@@ -118,6 +146,7 @@ def live(store, job, version):
     next_start = time.time()
     started_at = job.get('started') or next_start
     stop = False
+    skipped, consecutive = job.get('skipped_sessions', 0), 0
     def receipt(d, r):
         with lock:
             counters['payloads'] += 1
@@ -163,7 +192,7 @@ def live(store, job, version):
                     version = latest
                     cfg = config(store, latest['spec'], job['dry_run'])
                     if not job['dry_run'] and latest['spec'].get('causal', {}).get('replay_namespace'):
-                        raise ValueError('Exact-ID replay is restricted to local dry runs.')
+                        raise JobFailure('Exact-ID replay is restricted to local dry runs.')
                     runner = SpecRun(latest['spec'], cfg, persist=True, state_dir=str(store.directory / 'personas' / job['id']), now_ms=now * 1000)
                     if latest['spec'].get('causal'):
                         runner._causal_index = counters['sessions']
@@ -177,32 +206,47 @@ def live(store, job, version):
                     store.update('runs', job['id'], spec_version=current, destination=latest['spec']['destinations']['mode'], trace_eligible_from=state.get('trace_eligible_from') or (now if latest['spec']['destinations']['mode']=='end_to_end' else None))
                     store.event(job['id'], 'spec_applied', spec_version=current)
                 runner.now_ms = now * 1000
-                target, session, _, deliveries, faults = runner.session(now * 1000)
-                issues = specs.errors(lint_payloads(deliveries))
-                if issues:
-                    raise ValueError('Generated session failed the realism linter.')
-                runner.record(target, session, faults, deliveries)
-                key = identifier()
-                record = {'index': counters['sessions'], 'run_id': job['id'], 'dry_run': job['dry_run'], 'target': target['id'], 'platform': target['platform'],
-                          'app_id': session.app_id, 'session_id': session.user_session_id, 'device_id': getattr(session, 'device_id', session.persona['device_id']),
-                          'start_ms': session.start_ms, 'end_ms': session.end_ms, 'line_of_business': session.properties['business_unit'],
-                          'faults': faults, 'traces': session.traces, 'trace_ids': expected_trace_ids(session, deliveries),
-                          'sdk_sessions': runner.emitted.observations[-1].get('sdk_sessions', []),
-                          'spec_version': current, 'part_ids': getattr(session,'sdk_session_ids',[]) + [p.id for p in getattr(session, 'parts', [])]}
-                if hasattr(session, 'causal_evidence'):
-                    record['causal'] = session.causal_evidence
-                if hasattr(session, 'performance_model'):
-                    record['modeling'] = session.performance_model.evidence()
-                pending[key] = {'remaining': len(deliveries), 'ok': True, 'record': record}
-                delivery_summary.annotate(deliveries, record)
-                for ordinal, d in enumerate(deliveries):
-                    d.update(_session_key=key, _platform=target['platform'], _spec_version=current, _delivery_id=key + ':' + str(ordinal))
-                    heapq.heappush(heap, (d['due'], next(sequence), sender, d))
-                with lock:
-                    counters['sessions'] += 1
-                    store.update('runs', job['id'], counters=copy.deepcopy(counters), heartbeat=now)
-                runner.save()
-                store.update('runs', job['id'], report=runner.emitted.summary(), report_scope='current process segment of scenario version '+str(current), heartbeat=now)
+                try:
+                    target, session, _, deliveries, faults = runner.session(now * 1000)
+                    issues = specs.errors(lint_payloads(deliveries))
+                    if issues:
+                        raise lint_failure(issues)
+                    consecutive = 0
+                except Exception as error:
+                    # Nothing from this session is sent. One bad draw must not end a long stream,
+                    # but repeated failures mean the scenario itself is broken.
+                    session, reason = None, failure_reason(error)
+                    skipped, consecutive = skipped + 1, consecutive + 1
+                    store.update('runs', job['id'], skipped_sessions=skipped, last_skipped=dict(reason, time=now), heartbeat=now)
+                    store.event(job['id'], 'session_skipped', skipped=skipped, detail=reason['detail'],
+                                error_type=reason['type'], error_where=reason['where'])
+                    if consecutive >= MAX_CONSECUTIVE_SKIPS:
+                        last = reason['detail'] or reason['type'] + ' at ' + (reason['where'] or ['an unknown location'])[-1]
+                        raise JobFailure(f'{consecutive} sessions in a row could not be generated, so the stream stopped. '
+                                         f'Last: {last}') from error
+                if session is not None:
+                    runner.record(target, session, faults, deliveries)
+                    key = identifier()
+                    record = {'index': counters['sessions'], 'run_id': job['id'], 'dry_run': job['dry_run'], 'target': target['id'], 'platform': target['platform'],
+                              'app_id': session.app_id, 'session_id': session.user_session_id, 'device_id': getattr(session, 'device_id', session.persona['device_id']),
+                              'start_ms': session.start_ms, 'end_ms': session.end_ms, 'line_of_business': session.properties['business_unit'],
+                              'faults': faults, 'traces': session.traces, 'trace_ids': expected_trace_ids(session, deliveries),
+                              'sdk_sessions': runner.emitted.observations[-1].get('sdk_sessions', []),
+                              'spec_version': current, 'part_ids': getattr(session,'sdk_session_ids',[]) + [p.id for p in getattr(session, 'parts', [])]}
+                    if hasattr(session, 'causal_evidence'):
+                        record['causal'] = session.causal_evidence
+                    if hasattr(session, 'performance_model'):
+                        record['modeling'] = session.performance_model.evidence()
+                    pending[key] = {'remaining': len(deliveries), 'ok': True, 'record': record}
+                    delivery_summary.annotate(deliveries, record)
+                    for ordinal, d in enumerate(deliveries):
+                        d.update(_session_key=key, _platform=target['platform'], _spec_version=current, _delivery_id=key + ':' + str(ordinal))
+                        heapq.heappush(heap, (d['due'], next(sequence), sender, d))
+                    with lock:
+                        counters['sessions'] += 1
+                        store.update('runs', job['id'], counters=copy.deepcopy(counters), heartbeat=now)
+                    runner.save()
+                    store.update('runs', job['id'], report=runner.emitted.summary(), report_scope='current process segment of scenario version '+str(current), heartbeat=now)
                 rate = latest['spec']['traffic']['rate_per_minute'] * curve_factor(latest['spec'], now)
                 next_start = now + random.expovariate(max(.001, rate) / 60)
             while heap and (stop or heap[0][0] <= time.time() * 1000):
@@ -211,7 +255,7 @@ def live(store, job, version):
             if (stop or expired) and not heap:
                 break
             if counters['errors'] >= 20:
-                raise ValueError('Repeated delivery failures stopped this stream.')
+                raise JobFailure('Repeated delivery failures stopped this stream.')
             store.update('runs', job['id'], heartbeat=time.time())
             time.sleep(.2)
     finally:
@@ -226,7 +270,7 @@ def _execute(store, id):
     version = store.spec_version(job['spec_id'], job['spec_version'])
     random.seed(version['spec'].get('seed'))
     start = job.get('started') or time.time()
-    store.update('runs', id, status='running', started=start, ended=None, heartbeat=time.time(),
+    store.update('runs', id, status='running', started=start, ended=None, heartbeat=time.time(), failure=None,
                  trace_eligible_from=start if job['destination'] == 'end_to_end' else None)
     store.event(id, 'running', spec_version=version['version'])
     try:
@@ -236,10 +280,13 @@ def _execute(store, id):
         status = 'paused'
     except JobStopped:
         status = 'stopped'
-    except Exception:
-        # Transport and provider exceptions can contain credentials or response bodies.
-        status = 'failed'
-        store.event(id, 'failed', message='The job failed. Inspect validation results and delivery receipts; credentials and remote error bodies are suppressed.')
+    except Exception as error:
+        # Transport and provider exceptions can contain credentials or response bodies, so only
+        # this module's own messages, the exception class and repository frames are recorded.
+        status, failure = 'failed', failure_reason(error)
+        store.update('runs', id, failure=failure)
+        store.event(id, 'failed', message='The job failed. Inspect validation results and delivery receipts; credentials and remote error bodies are suppressed.',
+                    detail=failure['detail'], error_type=failure['type'], error_where=failure['where'])
     store.update('runs', id, status=status, ended=time.time() if status in ('completed', 'stopped', 'failed') else None, heartbeat=time.time())
     store.event(id, status)
 

@@ -1,6 +1,7 @@
 """Review, explicitly upload and record the complete release asset set."""
 
 from xcorgen import web_symbols
+from xcorgen.security import TransportError
 from . import secrets
 
 
@@ -66,12 +67,20 @@ def upload(svc, spec_id, confirm=False, author="user", transport=None):
         if prior.get("http_status") == 200:
             receipts.append(prior)
             continue
-        receipt = web_symbols.upload(
-            a,
-            t["embrace_app_id"],
-            token,
-            **({"transport": transport} if transport else {}),
-        )
+        try:
+            receipt = web_symbols.upload(
+                a,
+                t["embrace_app_id"],
+                token,
+                **({"transport": transport} if transport else {}),
+            )
+        except TransportError as error:
+            if error.status in (401, 403):
+                raise ValueError(
+                    f"XCOR RUM rejected the Symbol Upload token for app {t['embrace_app_id']} (HTTP {error.status}). "
+                    "Use a Symbol Upload token from Settings → API in the organization that owns this app."
+                ) from None
+            raise
         receipt["http_status"] = (
             200 if 200 <= receipt["http_status"] < 300 else receipt["http_status"]
         )

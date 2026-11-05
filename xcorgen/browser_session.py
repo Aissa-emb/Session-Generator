@@ -331,16 +331,22 @@ class BrowserSession:
         return next((f for f in self.page["faults"] if f["type"] == kind), None)
 
     def _fault_targets(self, targets):
+        # A regression only ever worsens a page: it never lowers a p75 that natural conditions
+        # (device, network, page group) already put above the requested value.
+        def worsen(metric, value):
+            targets[metric] = max(targets.get(metric, 0), value)
         for f in self.page["faults"]:
             d, kind = f["details"], f["type"]
-            targets.update(d.get("targets", {}))
+            for metric, value in d.get("targets", {}).items():
+                worsen(metric, value)
             if kind == "poor_web_vitals" and not d.get("targets"):
-                targets.update(lcp=4800, inp=550, cls=.3)
+                for metric, value in (("lcp", 4800), ("inp", 550), ("cls", .3)):
+                    worsen(metric, value)
             metric = {"lcp_regression": "lcp", "layout_instability": "cls", "interaction_latency": "inp",
                       "slow_server_response": "ttfb", "soft_navigation_slowness": "lcp"}.get(kind)
             if metric:
-                targets[metric] = d.get("p75", d.get("p75_ms", d.get(metric, {"lcp": 4000, "cls": .3,
-                                                                                   "inp": 450, "ttfb": 2200}[metric])))
+                worsen(metric, d.get("p75", d.get("p75_ms", d.get(metric, {"lcp": 4000, "cls": .3,
+                                                                              "inp": 450, "ttfb": 2200}[metric]))))
             if kind == "lcp_regression" and d.get("cause") == "origin":
                 targets["ttfb"] = max(targets["ttfb"], targets["lcp"] * .6)
         targets["fcp"] = max(targets["fcp"], targets["ttfb"] + 150)
@@ -788,14 +794,23 @@ class BrowserSession:
 
     @contextmanager
     def flow(self, name, **attrs):
-        holder, start, page = {"failed": False}, self.t, self.page
+        holder, start, page = {"failed": False, "trace_id": hex_id(16, self.rng), "span_id": hex_id(8, self.rng)}, self.t, self.page
         try:
             yield holder
         finally:
             a = dict(attrs, **holder.get("attributes", {}), **{"emb.type": "perf"})
             if holder["failed"]:
                 a["emb.error_code"] = "FAILURE"
-            self._span("traces", name, start, self.t, a, status=2 if holder["failed"] else 0, page=page)
+            self._span("traces", name, start, self.t, a, status=2 if holder["failed"] else 0, page=page,
+                       trace_id=holder["trace_id"], span_id=holder["span_id"])
+
+    def child_span(self, parent, name, start, end, failed=False, attrs=None):
+        """A span the app starts with the business span as parent (same tracer scope and trace)."""
+        a = dict(attrs or {}, **{"emb.type": "perf"})
+        if failed:
+            a["emb.error_code"] = "FAILURE"
+        self._span("traces", name, self.p(start), self.p(end), a, status=2 if failed else 0,
+                   trace_id=parent["trace_id"], parent=parent["span_id"])
 
     def long_task(self, duration, script=None):
         self._frame(duration)
@@ -826,9 +841,12 @@ class BrowserSession:
         if failed:
             a["error.type"] = c.transport or str(c.status)
         scope = "xhr" if self.lob == "banking" and key == "statement" else "fetch"
-        self._span(scope, f"HTTP {c.ep.method}" if scope == "xhr" else c.ep.method, start, c.end, a,
+        # Both instrumentations name the span by the method; XHR ends with "loaded" below 299, else "error".
+        final = "loaded" if c.status is not None and c.status < 299 else "error"
+        self._span(scope, c.ep.method, start, c.end, a,
                    kind=3, trace_id=c.trace_id, span_id=c.span_id, status=2 if failed else 0,
-                   events=self._events([("open", start), ("send", start + .1), ("fetchStart", start + .2), ("responseEnd", c.end)])
+                   events=self._events([("open", start), ("send", start + .1), ("fetchStart", start + .2), ("responseEnd", c.end),
+                                        (final, c.end + .1)])
                           if scope == "xhr" else self._events([("fetchStart", start), ("responseEnd", c.end)]))
         if propagated:
             deliver_backend(self, c, self.rng)
@@ -839,6 +857,8 @@ class BrowserSession:
             self.t = self.p(c.end)
             self._rage_clicks()
         if c.status is None and not hasattr(self, 'execution'):
+            # fetch() rejects when the request fails, so the unhandled rejection follows the span's end.
+            self.t = self.p(max(self.t, c.end) + 1)
             self.exception(family="abort" if c.transport == "cancelled" else "failed_to_fetch")
         if c.status is not None and c.status < 400:
             for name in self.page["def"].measures:

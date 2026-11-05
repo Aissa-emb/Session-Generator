@@ -183,7 +183,7 @@ def incident_window(incident):
     recovery = incident.get("recovery_minutes", 0) * limits.MINUTE_MS
     repeat = incident.get("repeat_every_minutes")
     return {"start_ms": start, "onset_ms": onset, "peak_ms": peak, "recovery_ms": recovery,
-            "repeat_ms": repeat * limits.MINUTE_MS if repeat else None}
+            "repeat_ms": repeat * limits.MINUTE_MS if repeat else None, "curve": incident.get("curve", "linear")}
 
 
 def phase_at(t_ms, window):
@@ -204,18 +204,25 @@ def phase_at(t_ms, window):
     return None
 
 
+def _ease(x, curve):
+    """Progress through onset (0 to 1); smooth is a raised cosine, so onset plus recovery forms a bell."""
+    x = min(1.0, max(0.0, x))
+    return (1 - math.cos(math.pi * x)) / 2 if curve == "smooth" else x
+
+
 def ramp(t_ms, window):
-    """Share of the peak rate active at time t: linear onset and recovery."""
+    """Share of the peak rate active at time t: linear (default) or smooth onset and recovery."""
     phase = phase_at(t_ms, window)
     if phase is None:
         return 0.0
     if phase == "incident" or window is None:
         return 1.0
+    curve = window.get("curve", "linear")
     offset = (t_ms - window["start_ms"]) % window["repeat_ms"] if window["repeat_ms"] else t_ms - window["start_ms"]
     if phase == "onset":
-        return offset / window["onset_ms"] if window["onset_ms"] else 1.0
+        return _ease(offset / window["onset_ms"], curve) if window["onset_ms"] else 1.0
     into = offset - window["onset_ms"] - window["peak_ms"]
-    return max(0.0, 1 - into / window["recovery_ms"]) if window["recovery_ms"] else 0.0
+    return _ease(1 - into / window["recovery_ms"], curve) if window["recovery_ms"] else 0.0
 
 
 def traffic_window(spec, now_ms):
@@ -505,6 +512,13 @@ def validate(spec, now_ms=None, lint=True):
         p = f"$.incidents[{i}]"
         if inc["fault_ref"] not in fault_ids:
             issues.append(_issue("error", f"{p}.fault_ref", f"No fault with ID {inc['fault_ref']}.", "reference"))
+        if "baseline_rate" in inc:
+            ref = next((f for f in every if f["id"] == inc["fault_ref"]), None)
+            peak_rate = inc.get("peak_rate", ref.get("rate", 0) if ref else 0)
+            if inc["baseline_rate"] > peak_rate + 1e-9:
+                issues.append(_issue("error", f"{p}.baseline_rate", f"The baseline ({_pct(inc['baseline_rate'])}) cannot exceed the peak ({_pct(peak_rate)}).", "schedule"))
+            if ref and ref.get("variant") == "payments-db-pool" and inc["baseline_rate"]:
+                issues.append(_issue("warning", f"{p}.baseline_rate", "The payments pool story fails only at its peak; its baseline is not applied.", "schedule"))
         w = incident_window(inc)
         end = w["start_ms"] + w["onset_ms"] + w["peak_ms"] + w["recovery_ms"]
         if w["repeat_ms"] and w["onset_ms"] + w["peak_ms"] + w["recovery_ms"] > w["repeat_ms"]:
@@ -708,21 +722,28 @@ def explain(spec):
     lines.append("Lines of business: " + ", ".join(f"{lob} {_pct(mix[lob] / total)}" for lob in lines_of_business(s)) + ".")
     for target in s["targets"]:
         lines.append(f"Target {target['id']}: {target['platform']} app {target['embrace_app_id']} ({target.get('app_name', '')}).")
+    def schedule_text(f):
+        inc = incident_for(f, s)
+        if not inc:
+            return ""
+        w = incident_window(inc)
+        return (f", scheduled from {inc['start']} (onset {inc.get('onset_minutes', 0):g} min, peak {inc.get('peak_minutes', 30):g} min, "
+                f"recovery {inc.get('recovery_minutes', 0):g} min" + (", smooth" if w["curve"] == "smooth" else "")
+                + (f", {_pct(inc['baseline_rate'])} outside the incident" if inc.get("baseline_rate") else "")
+                + (f", repeating every {inc['repeat_every_minutes']:g} min" if w["repeat_ms"] else "") + ")")
+
+    def rate_of(f):
+        inc = incident_for(f, s)
+        return inc.get("peak_rate", f["rate"]) if inc else f["rate"]
     for f in s["client_faults"]:
         where = _filters_text(f["filters"])
-        lines.append(f"Client fault {f['id']}: {f['type']} in {_pct(f['rate'])} of sessions" + (f" where {where}" if where else "") +
-                     (f", within sessions affected by {f['details']['with_fault']}" if f["details"].get("with_fault") else "") + ".")
+        lines.append(f"Client fault {f['id']}: {f['type']} in {_pct(rate_of(f))} of sessions" + (f" where {where}" if where else "") +
+                     (f", within sessions affected by {f['details']['with_fault']}" if f["details"].get("with_fault") else "") + schedule_text(f) + ".")
     for f in s["backend_faults"]:
         variant = catalog.resolve_variant(f)
         summary = catalog.BACKEND_VARIANTS[variant]["summary"] if variant else f["type"]
-        inc = incident_for(f, s)
-        when = ""
-        if inc:
-            w = incident_window(inc)
-            when = (f", scheduled from {inc['start']} (onset {inc.get('onset_minutes', 0):g} min, peak {inc.get('peak_minutes', 30):g} min, "
-                    f"recovery {inc.get('recovery_minutes', 0):g} min" + (f", repeating every {inc['repeat_every_minutes']:g} min" if w["repeat_ms"] else "") + ")")
-        lines.append(f"Backend fault {f['id']}: {summary} Affects {_pct(inc.get('peak_rate', f['rate']) if inc else f['rate'])} of "
-                     f"{', '.join(sorted(fault_lines(f, s)))} sessions{when}.")
+        lines.append(f"Backend fault {f['id']}: {summary} Affects {_pct(rate_of(f))} of "
+                     f"{', '.join(sorted(fault_lines(f, s)))} sessions{schedule_text(f)}.")
     for r in s["rollouts"]:
         lines.append(f"Rollout {r['id']}: {r['kind']} {r['subject']} to {_pct(r.get('canary_share', 0))} of users"
                      + (f", rolled back at {r['rollback_at']}" if r.get("rollback_at") else "") + ".")

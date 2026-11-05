@@ -66,7 +66,9 @@ def observe(platform, envelopes, traces):
                            session_id=a.get("emb.user_session_id",a.get("session.id")), start_ms=int(a.get("emb.user_session_start_ts",span["start_time_unix_nano"]/1e6)))
             elif a.get("emb.type") == "perf.thread_blockage":
                 obs["blockage"] = True
-            elif span["name"] in ("emb-app-startup-cold","emb-app-startup"):
+            elif span["name"] in ("emb-app-startup-cold", "emb-app-startup") or (
+                    # Apple names any new-process launch after a previous one warm (DefaultStartupDataProvider).
+                    span["name"] == "emb-app-startup-warm" and platform == "ios"):
                 obs["cold_start_ms"] = dur
             elif a.get("emb.type") == "perf.network_request":
                 method, _, path = span["name"][4:].partition(" ")
@@ -129,6 +131,12 @@ def _client_hit(rule, n):
         # A slow successful response; transport timeouts and error responses are other faults.
         return n["status"] is not None and n["status"] < 400 and n["ms"] >= rule["slow_ms"]
     return False
+
+
+WEB_VITAL_FAULTS = ("lcp_regression", "layout_instability", "interaction_latency", "poor_web_vitals",
+                    "slow_server_response", "soft_navigation_slowness")
+WEB_VITALS_NOTE = ("Sessions with any non-good rating for this metric, including natural variation and knock-on effects "
+                   "(a slow TTFB also delays FCP and LCP). Payloads cannot separate the added regression.")
 
 
 def affected(fault, obs):
@@ -289,8 +297,13 @@ class Emitted:
                 latency_only = "slow_ms" in ev.get("client", {}) and (
                     "backend" not in ev or any(not n["spans"] and n["status"] is not None and n["status"] < 400 for o in elig for n in o["net"]
                         if n["endpoint"] == f.meta.get("endpoints", {}).get(o.get("lob"))))
-                if latency_only or f.type in ("lcp_regression", "layout_instability", "interaction_latency", "poor_web_vitals",
-                                              "slow_server_response", "soft_navigation_slowness", "long_task", "third_party_blocking"):
+                if f.type in WEB_VITAL_FAULTS:
+                    # Ratings also reflect natural page speed and knock-on effects between vitals, and
+                    # pages without a measurement (no interaction, no INP) report nothing. Payloads
+                    # cannot separate the added regression, so the share is reported, not verified.
+                    row.update(evidence="web vitals", natural_overlap=True, within_tolerance=None,
+                               verification_note=WEB_VITALS_NOTE)
+                elif latency_only or f.type in ("long_task", "third_party_blocking"):
                     # Without backend traces a slow request is the only evidence, and natural latency overlaps it.
                     row["evidence"] = "client latency"
                     row["within_tolerance"] = abs(row["delta_pp"]) <= 2
@@ -353,7 +366,7 @@ class Emitted:
                 lines.append(f"  {r['id']:<28} {r['verification_limit']}")
                 continue
             if r["eligible"]:
-                verdict = "ok" if r.get("within_tolerance") else "OUT OF TOLERANCE"
+                verdict = "includes natural variation" if r.get("natural_overlap") else "ok" if r.get("within_tolerance") else "OUT OF TOLERANCE"
                 lines.append(f"  {r['id']:<28} {(r['variant'] or r['type']):<22} {r['eligible']:>8} {r['requested_pct']:>9.2f}% "
                              f"{r['emitted_pct']:>8.2f}% {r['delta_pp']:>+6.2f}  {verdict}")
                 if "emitted_p50_ms" in r:
