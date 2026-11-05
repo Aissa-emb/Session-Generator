@@ -26,7 +26,7 @@ def audit(count=600, seed=8219):
         scenario['targets'] = [copy.deepcopy(target)]
         scenario['seed'] = seed
         scenario['destinations']['mode'] = 'end_to_end'
-        scenario['chronosphere'] = {'tenant': 'demo-sandbox', 'token_ref': 'env:CHRONOSPHERE_API_TOKEN'}
+        scenario['chronosphere'] = {'tenant': 'demo-sandbox', 'token_ref': 'env:CHRONOSPHERE_API_TOKEN'}  # nosec B105: environment reference, not a credential
         scenario['population'].update(model='varied', platform_mix={target['id']: 1})
         scenario['modeling'] = {'version': '1.0', 'bindings': [{
             'id': 'gateway-tail', 'quantity': 'backend_work_ms', 'share': .5,

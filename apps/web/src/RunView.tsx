@@ -376,14 +376,26 @@ export default function RunView({
 
       {run?.mode === "live" && (
         <section className="run-schedule" aria-label="Sending schedule">
+          {run.capacity_limited && (
+            <p role="status" className="notice warning">
+              Generating about {Math.round(run.achieved_rate_per_minute || 0)} of the requested {spec?.traffic?.rate_per_minute ?? "—"} sessions per minute. {run.capacity_reason === "sender_saturation"
+                ? "Delivery capacity is limiting this run. Reduce the rate or check the destination connection."
+                : run.capacity_reason === "delivery_errors"
+                  ? "Recent delivery failures are limiting this run. Inspect delivery receipts."
+                  : "Generation has reached this computer’s capacity. Reduce the rate."}
+            </p>
+          )}
           <div className="schedule-line">
             <div>
               <h2>Schedule</h2>
               <span>
                 {spec?.traffic?.rate_per_minute !== undefined
-                  ? `${spec.traffic.rate_per_minute} sessions/min`
+                  ? `${spec.traffic.rate_per_minute} sessions/min requested`
                   : "Rate unavailable"}
               </span>
+              {typeof run.achieved_rate_per_minute === "number" && (
+                <span>{Math.round(run.achieved_rate_per_minute)} sessions/min achieved</span>
+              )}
               <span>
                 {duration
                   ? `${duration}-minute limit`

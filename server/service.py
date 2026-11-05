@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess  # nosec B404 -- fixed worker modules, no shell
 import sys
 import time
+import threading
 import jsonpatch
 from pydantic import ValidationError
 from xcorgen import catalog, limits, linter, presets, spec as specs, web_capabilities
@@ -24,6 +25,7 @@ class Service:
         self.store = store or Store()
         self.launch_jobs = launch_jobs
         self.processes = {}
+        self.preview_slots = threading.BoundedSemaphore(2)
 
     def capabilities(self):
         from xcorgen.distributions import metadata
@@ -108,11 +110,24 @@ class Service:
 
     def preview(self, value):
         s = self.require_valid(value)
-        proc = subprocess.run([sys.executable, '-m', 'server.preview'], input=json.dumps(s), text=True,
-                              capture_output=True, cwd=ROOT, timeout=120)  # nosec B603: fixed module, JSON on stdin
-        if proc.returncode:
-            raise ValueError('Preview could not produce valid payloads. Review the scenario and server diagnostics.')
-        return json.loads(proc.stdout)
+        if not self.preview_slots.acquire(blocking=False):
+            raise ValueError('Two previews are already running. Wait for one to finish, then try again.')
+        try:
+            try:
+                proc = subprocess.run([sys.executable, '-m', 'server.preview'], input=json.dumps(s), text=True,
+                                      capture_output=True, cwd=ROOT, timeout=120)  # nosec B603: fixed module, JSON on stdin
+            except subprocess.TimeoutExpired:
+                raise ValueError('Preview exceeded two minutes. Reduce the scenario complexity and try again.') from None
+            if proc.returncode:
+                raise ValueError('Preview could not produce valid payloads. Review the scenario and server diagnostics.')
+            return json.loads(proc.stdout)
+        finally:
+            self.preview_slots.release()
+
+    def worker_capacity(self, excluding=None):
+        active = [r for r in self.store.list('runs') if r['id'] != excluding and r['status'] in ('queued', 'running')]
+        if len(active) >= 4:
+            raise ValueError('This computer already has four active runs. Pause or stop a run before starting another.')
 
     @serialized("run-launch")
     def start_run(self, spec_id, mode=None, destination=None, confirm=False, dry_run=False, author='user', idempotency_key=None):
@@ -145,6 +160,7 @@ class Service:
         for target in spec['targets']:
             if live and sum(target['id'] in r['targets'] for r in active) >= limits.MAX_STREAMS_PER_TARGET:
                 raise ValueError('The maximum concurrent streams for this target has been reached.')
+        self.worker_capacity()
         preview = self.preview(spec)
         if specs.errors(preview['linter']):
             raise ValueError('Realism lint blocks this run.')
@@ -180,11 +196,21 @@ class Service:
     def launch(self, id):
         if id in self.processes and self.processes[id].poll() is None:
             return
+        self.processes = {key: process for key, process in self.processes.items() if process.poll() is None}
         env = dict(os.environ, SG_DATA_DIR=str(self.store.directory))
         self.processes[id] = subprocess.Popen([sys.executable, '-m', 'server.worker', id], cwd=ROOT,
             env=env)  # nosec B603: trusted worker and validated identifier
 
     def control(self, id, action, author='user'):
+        if action == 'resume':
+            return self._resume_control(id, author)
+        return self._control(id, action, author)
+
+    @serialized("run-launch")
+    def _resume_control(self, id, author):
+        return self._control(id, 'resume', author)
+
+    def _control(self, id, action, author='user'):
         if action not in ('stop', 'pause', 'resume'):
             raise ValueError('Unknown run action.')
         run = self.store.get('runs', id)
@@ -192,8 +218,12 @@ class Service:
             return run
         if action != 'resume' and run['status'] in ('completed', 'failed', 'stopped'):
             return run
+        if action == 'resume':
+            self.worker_capacity(excluding=id)
         desired = {'stop': 'stopped', 'pause': 'paused', 'resume': 'running'}[action]
         changes = {'desired_status': desired}
+        if action == 'resume' and run['status'] != 'running':
+            changes['status'] = 'queued'
         # A paused worker has drained and exited; no process remains to observe stop.
         if action == 'stop' and run['status'] == 'paused':
             changes.update(status='stopped', ended=time.time())

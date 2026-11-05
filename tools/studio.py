@@ -62,7 +62,7 @@ def start(port, directory, open_browser=False):
     os.fchmod(fd, 0o600)
     with os.fdopen(fd, 'a') as output:
         child = subprocess.Popen([str(python), '-m', 'uvicorn', 'server.app:app', '--host', '127.0.0.1', '--port', str(port)],
-            cwd=ROOT, env=dict(os.environ, SG_STUDIO_INSTANCE=instance), stdin=subprocess.DEVNULL,
+            cwd=ROOT, env=dict(os.environ, SG_STUDIO_INSTANCE=instance, SG_STUDIO_LOG=str(log)), stdin=subprocess.DEVNULL,
             stdout=output, stderr=subprocess.STDOUT, start_new_session=True)  # nosec B603: fixed interpreter/module, validated numeric port
     deadline = time.monotonic() + 25
     while child.poll() is None and time.monotonic() < deadline:

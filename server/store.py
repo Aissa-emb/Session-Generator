@@ -5,7 +5,7 @@ from pathlib import Path
 import secrets
 import time
 import uuid
-from sqlalchemy import JSON, Column, Float, Index, Integer, MetaData, String, Table, create_engine, event, select
+from sqlalchemy import JSON, Column, Float, Index, Integer, MetaData, String, Table, create_engine, event, select, literal_column, func
 
 metadata = MetaData()
 TABLES = {}
@@ -14,9 +14,11 @@ for name in ('targets', 'scenario_specs', 'runs', 'receipts', 'verifications', '
     TABLES[name] = Table(name, metadata, Column('id', String, primary_key=True),
                         Column('created', Float, nullable=False), Column('data', JSON, nullable=False))
 for table in ('receipts', 'verifications'):
-    Index(table + '_run_id', TABLES[table].c.data['run_id'].as_string())
+    Index(table + '_run_created', func.json_extract(TABLES[table].c.data, literal_column("'$.run_id'")), TABLES[table].c.created)
+Index('api_tokens_hash', func.json_extract(TABLES['api_tokens'].c.data, literal_column("'$.hash'")))
 events = Table('run_events', metadata, Column('id', Integer, primary_key=True, autoincrement=True),
                Column('run_id', String, index=True), Column('created', Float), Column('data', JSON))
+Index('run_events_run_cursor', events.c.run_id, events.c.id)
 versions = Table('spec_versions', metadata, Column('spec_id', String, primary_key=True),
                  Column('version', Integer, primary_key=True), Column('created', Float), Column('data', JSON))
 
@@ -41,6 +43,56 @@ class Store:
             dbapi.execute('PRAGMA journal_mode=WAL')
             dbapi.execute('PRAGMA synchronous=FULL')
         metadata.create_all(self.engine)
+        with self.engine.begin() as conn:
+            # create_all skips indexes on tables that already exist. Install these
+            # additive indexes explicitly when opening an owner's existing database.
+            for table in ('receipts', 'verifications'):
+                conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {table}_run_created ON {table}(json_extract(data, '$.run_id'), created)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS api_tokens_hash ON api_tokens(json_extract(data, '$.hash'))")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS run_events_run_cursor ON run_events(run_id, id)")
+            conn.exec_driver_sql("CREATE TABLE IF NOT EXISTS ack_deliveries (run_id TEXT, delivery_id TEXT, good INTEGER, spans INTEGER, PRIMARY KEY(run_id, delivery_id))")
+            conn.exec_driver_sql("CREATE TABLE IF NOT EXISTS ack_sessions (run_id TEXT, group_id TEXT, expected INTEGER, received INTEGER, sdk_sessions INTEGER, PRIMARY KEY(run_id, group_id))")
+
+        # Importing the ASGI app must not leave an unused connection open. Runtime
+        # connections remain pooled until the lifespan/worker closes this Store.
+        self.engine.dispose()
+
+    def close(self):
+        self.engine.dispose()
+
+    def write_live_receipts(self, run_id, rows):
+        # Receipt history and its cumulative acknowledgement totals commit atomically.
+        # Live delivery IDs are unique and are never replayed after a worker restart.
+        prepared = []
+        sessions = spans = 0
+        for original in rows:
+            row = dict(original)
+            sessions += row.pop('_sessions_acknowledged', 0)
+            if row['target'] == 'otlp' and row['kind'] == 'traces' and row['status'] in ('accepted', 'partial'):
+                spans += row.get('accepted', 0)
+            row.setdefault('id', identifier())
+            row.setdefault('created', time.time())
+            prepared.append(dict(id=row['id'], created=row['created'], data=row))
+        with self.engine.connect() as conn:
+            conn.exec_driver_sql('BEGIN IMMEDIATE')
+            conn.execute(TABLES['receipts'].insert(), prepared)
+            data = dict(conn.execute(select(TABLES['runs'].c.data).where(TABLES['runs'].c.id == run_id)).scalar_one())
+            totals = dict(data.get('delivery_totals') or {'sessions_acknowledged': 0, 'backend_spans_acknowledged': 0})
+            totals['sessions_acknowledged'] += sessions
+            totals['backend_spans_acknowledged'] += spans
+            data['delivery_totals'] = totals
+            conn.execute(TABLES['runs'].update().where(TABLES['runs'].c.id == run_id).values(data=data))
+            conn.commit()
+
+    def retain_live_history(self, run_id, receipts=10000, event_count=2000):
+        # Indexed, bounded tails; cumulative totals survive pruning. SQLite reuses freed pages.
+        with self.engine.begin() as conn:
+            conn.exec_driver_sql("""DELETE FROM receipts WHERE json_extract(data, '$.run_id') = ? AND created <
+                (SELECT created FROM receipts WHERE json_extract(data, '$.run_id') = ? ORDER BY created DESC LIMIT 1 OFFSET ?)""",
+                (run_id, run_id, receipts - 1))
+            conn.exec_driver_sql("""DELETE FROM run_events WHERE run_id = ? AND id <
+                (SELECT id FROM run_events WHERE run_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?)""",
+                (run_id, run_id, event_count - 1))
 
     def get(self, table, id):
         with self.engine.connect() as conn:
@@ -55,7 +107,8 @@ class Store:
 
     def list_for(self, table, key, value, limit=None, created_from=None):
         t = TABLES[table]
-        statement = select(t.c.data).where(t.c.data[key].as_string() == value).order_by(t.c.created.desc())
+        field = func.json_extract(t.c.data, literal_column("'$.run_id'")) if key == 'run_id' else t.c.data[key].as_string()
+        statement = select(t.c.data).where(field == value).order_by(t.c.created.desc())
         if created_from is not None:
             statement = statement.where(t.c.created >= created_from)
         if limit is not None:
@@ -122,7 +175,8 @@ class Store:
 
     def event(self, run_id, type, **data):
         from .audit import emit
-        emit(type, run_id=run_id, **data)
+        if type != 'progress':
+            emit(type, run_id=run_id, **data)
         body = {'type': type, **data}
         with self.engine.begin() as conn:
             result = conn.execute(events.insert().values(run_id=run_id, created=time.time(), data=body))
@@ -143,8 +197,11 @@ class Store:
 
     def authenticate(self, token):
         digest = hashlib.sha256(token.encode()).hexdigest()
-        for row in self.list('api_tokens'):
-            if not row['revoked'] and secrets.compare_digest(row['hash'], digest):
+        with self.engine.connect() as conn:
+            row = conn.execute(select(TABLES['api_tokens'].c.data).where(
+                func.json_extract(TABLES['api_tokens'].c.data, literal_column("'$.hash'")) == digest)).scalar_one_or_none()
+        if row and not row['revoked'] and secrets.compare_digest(row['hash'], digest):
+            if time.time() - (row.get('last_used') or 0) >= 60:
                 self.update('api_tokens', row['id'], last_used=time.time())
-                return 'mcp:' + row['name']
+            return 'mcp:' + row['name']
         return None

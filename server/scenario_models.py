@@ -651,7 +651,7 @@ class Traffic(BaseModel):
     rate_per_minute: confloat(le=600.0, gt=0.0) | None = None
     duration_minutes: confloat(ge=0.0, le=10080.0) | None = None
     daily_curve: DailyCurve | None = None
-    count: conint(ge=1, le=100000) | None = None
+    count: conint(ge=1, le=50000) | None = None
     window: Window | Window1 | None = None
     throttle_payloads_per_second: confloat(le=500.0, gt=0.0) | None = None
 

@@ -259,11 +259,15 @@ def run_spec(a, spec):
     run.open_manifest(directory, resume=bool(resume), dry=bool(a.dry_run))
     sender = Sender(cfg, a.dry_run, verbose=a.verbose)
     t0 = time.time()
-    if s["traffic"]["mode"] == "live":
-        n = run.run_live(sender, a.quiet)
-    else:
-        n, _ = run.run_batch(sender, a.quiet)
-    sender.close()
+    try:
+        if s["traffic"]["mode"] == "live":
+            n = run.run_live(sender, a.quiet)
+        else:
+            n, _ = run.run_batch(sender, a.quiet)
+    finally:
+        sender.close()
+        if run.journal:
+            run.journal.close()
     st = sender.stats
     print(f"\nDone in {time.time() - t0:.1f}s: {n} sessions, {st['embrace_spans']} Embrace span payloads, "
           f"{st['embrace_logs']} log payloads, {st['otlp_traces']} backend trace exports, {st['errors']} errors"

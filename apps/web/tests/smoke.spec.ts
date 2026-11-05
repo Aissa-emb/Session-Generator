@@ -1302,3 +1302,23 @@ test('release adoption and experiment editors survive reload and reach payload e
  expect(data.report.modeling.releases[0].observed).toEqual([{version:'10.28.0',visits:data.report.modeling.releases[0].visits,percent:100}]);
  expect(data.report.modeling.experiments[0].variants.reduce((n:number,v:any)=>n+v.exposed_visits,0)).toBeGreaterThan(0);
 });
+
+test('continuous runs show achieved rate and an actionable capacity notice', async ({page}) => {
+  await page.route('**/api/runs/capacity-run', r => r.fulfill({json: {
+    id:'capacity-run', spec_id:'capacity-spec', spec_version:1, mode:'live', status:'running',
+    desired_status:'running', started:Date.now()/1000-90, heartbeat:Date.now()/1000, dry_run:true,
+    counters:{sessions:210,payloads:1000,accepted:1000,rejected:0,errors:0}, delivery:{}, receipts:[],
+    report:{}, verifications:[], achieved_rate_per_minute:140, capacity_limited:true, capacity_reason:'sender_saturation'
+  }}));
+  await page.route('**/api/specs/capacity-spec*', r => r.fulfill({json:{id:'capacity-spec',version:1,spec:{
+    name:'Vantra traffic', targets:[], destinations:{mode:'sessions_only'},
+    traffic:{mode:'live',rate_per_minute:600,duration_minutes:120}
+  }}}));
+  await page.addInitScript(() => localStorage.setItem('sg_run_id', JSON.stringify('capacity-run')));
+  await page.goto('/');
+  const schedule=page.getByRole('region',{name:'Sending schedule'});
+  await expect(schedule).toContainText('600 sessions/min requested');
+  await expect(schedule).toContainText('140 sessions/min achieved');
+  await expect(schedule.getByRole('status')).toContainText('Generating about 140 of the requested 600 sessions per minute.');
+  await expect(schedule.getByRole('status')).toContainText('check the destination connection');
+});

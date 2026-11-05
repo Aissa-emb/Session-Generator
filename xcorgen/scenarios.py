@@ -108,19 +108,25 @@ class Runtime:
     """State shared by requests, never stored in Redis connection resources."""
     cache: dict = field(default_factory=dict)
     operations: dict = field(default_factory=dict)
+    CACHE_LIMIT = 20_000
+
+    def _cache_set(self, key, expiry):
+        self.cache[key] = expiry
+        # Expiry alone cannot bound a burst of distinct keys, and lookup-only
+        # misses must obey the same bound as fills. Evict oldest insertions.
+        while len(self.cache) > self.CACHE_LIMIT:
+            self.cache.pop(next(iter(self.cache)))
 
     def lookup(self, key, now, ttl=60_000, initial_hit=.55):
         entry = self.cache.get(key)
         if entry is None:
             # A deployment starts with a populated cache from preceding traffic.
             entry = now + ttl * .5 if fraction(key, "cache-prime") < initial_hit else now - 1
-            self.cache[key] = entry
+            self._cache_set(key, entry)
         return entry > now
 
     def fill(self, key, now, ttl=60_000):
-        self.cache[key] = now + ttl
-        if len(self.cache) > 20_000:
-            self.cache = {k: v for k, v in self.cache.items() if v > now}
+        self._cache_set(key, now + ttl)
 
 
 class Plan:

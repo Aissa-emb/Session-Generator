@@ -5,6 +5,9 @@ import http.client
 import os
 import re
 import stat
+import ssl
+import threading
+from collections import OrderedDict
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -98,8 +101,71 @@ class ResponseBytes(bytes):
         return value
 
 
-def post(url, body, headers, *, timeout=30, max_response_bytes=1024 * 1024):
+class ConnectionPool:
+    """Sender-owned keep-alive connections; one per thread/host, no automatic replay.
+
+    urllib remains the proxy-aware path when a configured proxy applies. Connections
+    are closed after the sender has joined its threads, including failed requests.
+    """
+    def __init__(self):
+        self.local = threading.local()
+        self.lock = threading.Lock()
+        self.connections = set()
+        self.context = ssl.create_default_context()
+
+    def close(self):
+        with self.lock:
+            for connection in self.connections:
+                connection.close()
+            self.connections.clear()
+
+    def post(self, url, body, headers, timeout, limit):
+        parts = urllib.parse.urlsplit(url)
+        cache = getattr(self.local, "connections", None)
+        if cache is None:
+            cache = self.local.connections = OrderedDict()
+        key = (parts.scheme, parts.hostname, parts.port, timeout)
+        connection = cache.pop(key, None)
+        if connection is None:
+            cls = http.client.HTTPSConnection if parts.scheme == "https" else http.client.HTTPConnection
+            connection = cls(parts.hostname, parts.port, timeout=timeout,
+                             **({"context": self.context} if parts.scheme == "https" else {}))
+            with self.lock:
+                self.connections.add(connection)
+        cache[key] = connection
+        if len(cache) > 4:
+            _, old = cache.popitem(last=False)
+            old.close()
+            with self.lock:
+                self.connections.discard(old)
+        try:
+            connection.request("POST", parts.path or "/", body=body, headers=headers)
+            response = connection.getresponse()
+            # Never follow redirects or copy their Location/remote body into an exception.
+            if 300 <= response.status < 400:
+                raise TransportError("HTTP redirect refused; configure the final HTTPS endpoint.", status=response.status)
+            if response.status >= 400:
+                raise TransportError(f"HTTP {response.status} from telemetry endpoint", status=response.status)
+            result = response.read(limit + 1)
+            if len(result) > limit:
+                raise TransportError("HTTP response exceeds the configured size limit.")
+            return ResponseBytes(result, response.status)
+        except (TransportError, OSError, ValueError, http.client.HTTPException) as error:
+            cache.pop(key, None)
+            connection.close()
+            with self.lock:
+                self.connections.discard(connection)
+            if isinstance(error, TransportError):
+                raise
+            raise TransportError("Telemetry request failed; check TLS, network connectivity and endpoint settings.") from None
+
+
+def post(url, body, headers, *, timeout=30, max_response_bytes=1024 * 1024, connection_pool=None):
     validate_endpoint(url, headers)
+    parts = urllib.parse.urlsplit(url)
+    if connection_pool is not None and (parts.scheme == "http" or not urllib.request.getproxies().get(parts.scheme)
+                                         or urllib.request.proxy_bypass(parts.hostname)):
+        return connection_pool.post(url, body, headers, timeout, max_response_bytes)
     handlers = [_NoRedirect()]
     if urllib.parse.urlsplit(url).scheme == "http":
         handlers.append(urllib.request.ProxyHandler({}))

@@ -17,6 +17,9 @@ def annotate(deliveries, record):
 
 
 def summarize(store, run):
+    if 'delivery_totals' in run:
+        return dict(run['delivery_totals'], sessions_stored=None, backend_spans_stored=None,
+                    storage_status='not_verified', basis='local_output' if run['dry_run'] else 'destination_acknowledgement')
     # Aggregate the full indexed history in SQLite, not the 500-row UI window
     # or a Python copy of every receipt in a long-running stream.
     with store.engine.connect() as conn:

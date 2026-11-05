@@ -242,11 +242,16 @@ def percentile(values, q):
 
 
 class Emitted:
-    def __init__(self, spec):
+    def __init__(self, spec, streaming=False):
         from .planner import Planner
         self.spec = normalized(spec)
         self.planner = Planner(self.spec)
+        self.streaming = streaming
         self.observations = []
+        self.last_observation = None
+        self._totals = {"sessions": 0, "sdk_sessions": 0, "verification_sessions": 0, "sessions_with_traces": 0}
+        self._fault_totals = {}
+        self._sample_limit = 128
 
     def add(self, target, session, deliveries):
         envelopes = [d["payload"] for d in deliveries if d.get("fmt") == "envelope"]
@@ -272,9 +277,68 @@ class Emitted:
         # The spec's rate applies at the session's planned time (it differs only for sessions moved back
         # so they had finished by send time).
         obs["planned_start_ms"] = getattr(session, "planned_start_ms", obs.get("start_ms"))
-        self.observations.append(obs)
+        self.last_observation = obs
+        if self.streaming:
+            # Exact cumulative fault counters; detail/percentile views explicitly cover only the
+            # most recent 128 visits. Never retain the full payload-derived history of a stream.
+            if obs.get("verification_case"):
+                self._totals["verification_sessions"] += 1
+            else:
+                self._totals["sessions"] += 1
+                self._totals["sdk_sessions"] += len(obs.get("sdk_sessions", [])) if obs["platform"] == "ios" else 1
+                self._totals["sessions_with_traces"] += bool(obs["traces"])
+            self.observations.append(obs)
+            # Calculate this observation's fault contribution using the same eligibility and
+            # dependent-fault evaluation as bounded reports, before rounding requested counts.
+            results = {}
+            for f in self.planner.faults:
+                totals = self._fault_totals.setdefault(f.id, [0, 0.0, 0, False])
+                ok = not obs.get("verification_case") and eligible(f, obs, self.planner.by_id, results)
+                hit = affected(f, obs) if ok else False
+                results[f.id] = {obs["session_id"]: hit} if ok else {}
+                if ok:
+                    totals[0] += 1
+                    totals[1] += f.requested_at(obs.get("planned_start_ms") or obs["start_ms"])
+                    totals[2] += hit
+                    ev = (f.meta.get("evidence") or {}) if f.variant else {}
+                    totals[3] |= "slow_ms" in ev.get("client", {}) and (
+                        "backend" not in ev or any(not n["spans"] and n["status"] is not None and n["status"] < 400
+                            for n in obs["net"] if n["endpoint"] == f.meta.get("endpoints", {}).get(obs.get("lob"))))
+            if len(self.observations) > self._sample_limit:
+                del self.observations[0]
+        else:
+            self.observations.append(obs)
 
     def summary(self):
+        report = self._summary()
+        if not self.streaming:
+            return report
+        report.update(self._totals)
+        report["detail_scope"] = "most recent 128 sessions; fault and session counts are cumulative"
+        report["detail_sessions"] = len(self.observations)
+        for f, row in zip(self.planner.faults, report["faults"]):
+            n, requested, count, latency = self._fault_totals.get(f.id, (0, 0, 0, False))
+            row.update(eligible=n, requested_sessions=round(requested, 2), emitted_sessions=count,
+                       requested_pct=round(100 * requested / n, 2) if n else None,
+                       emitted_pct=round(100 * count / n, 2) if n else None)
+            if n:
+                row["delta_pp"] = round(row["emitted_pct"] - row["requested_pct"], 2)
+                if f.type in WEB_VITAL_FAULTS:
+                    row.update(evidence="web vitals", natural_overlap=True, within_tolerance=None, verification_note=WEB_VITALS_NOTE)
+                elif latency or f.type in ("long_task", "third_party_blocking"):
+                    row.update(evidence="client latency", within_tolerance=abs(row["delta_pp"]) <= 2)
+                elif f.quota == "exact" or (f.quota == "auto" and self.spec["traffic"]["mode"] != "live"):
+                    row["within_tolerance"] = abs(count - requested) <= 1.5
+                else:
+                    sigma = math.sqrt(max(requested * (1 - requested / n), 1e-9))
+                    row["within_tolerance"] = abs(count - requested) <= max(3 * sigma, .02 * n)
+            if f.filters.get("connections"):
+                row.update(within_tolerance=None, requested_pct=None, emitted_pct=None, delta_pp=None)
+            if f.type == "slow_root_span":
+                row["percentile_scope"] = report["detail_scope"]
+        return report
+
+    def _summary(self):
         """Per fault: requested and emitted share of eligible sessions, from payloads only."""
         population = [o for o in self.observations if not o.get("verification_case")]
         results, rows = {}, []
