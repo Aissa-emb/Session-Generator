@@ -74,6 +74,30 @@ async function preview(page: Page) {
   await page.getByRole("button", { name: "Local test", exact: false }).click();
 }
 
+test("workflow transitions preserve choices and sheets honor reduced motion", async ({page}) => {
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await connect(page);
+  const stage = page.locator('.workflow-stage');
+  expect(await stage.evaluate(el=>getComputedStyle(el).animationName)).toBe('stage-enter');
+  await page.getByRole('button',{name:'Back',exact:true}).click();
+  await expect(page.getByLabel('Android app ID',{exact:true})).toHaveValue('5nrc2');
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await advanced(page);
+  await expect(page.locator('.sheet[data-state="open"]')).toBeVisible();
+  await page.getByRole('tab',{name:'Visitors',exact:true}).click();
+  expect(await page.getByRole('tabpanel').evaluate(el=>getComputedStyle(el).animationName)).toBe('content-enter');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog',{name:'Advanced settings'})).toHaveCount(0);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.getByRole('button',{name:'Back',exact:true}).click();
+  expect(await stage.evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await advanced(page);
+  expect(await page.locator('.sheet').evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog',{name:'Advanced settings'})).toHaveCount(0);
+});
+
 test("error profiles default to production errors, migrate stored drafts once, and imports keep exact mixes", async ({page}) => {
   await connect(page, ["web"]);
   const oldDraft = await page.evaluate(() => {

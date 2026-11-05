@@ -83,7 +83,7 @@ export default function PreviewStep({
     setDetail(row);
   };
   return (
-    <>
+    <div className="preview-result">
       <div className="preview-stats">
         <div>
           <strong>{number(data.sample_count)}</strong>
@@ -458,6 +458,6 @@ export default function PreviewStep({
           </>
         )}
       </Modal>
-    </>
+    </div>
   );
 }
