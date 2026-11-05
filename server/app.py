@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from xcorgen import presets, spec as specs
 from xcorgen.security import SecurityError, TransportError
 from .service import Service
-from . import readiness, secrets, verification, copilot, preparation, delivery_summary
+from . import readiness, secrets, verification, copilot, preparation, delivery_summary, destinations
 from .mcp import build_server, caller
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -369,7 +369,27 @@ def create_app(service=None, enable_integrations=None):
         configured = secrets.status(svc.store)
         if not experimental:
             configured.pop('anthropic', None)
-        return {'secrets': configured, 'defaults': defaults.get('value', {}), 'models': ['claude-sonnet-5-5', 'claude-opus-5-5'] if experimental else []}
+        return {'secrets': configured, 'secret_suffixes': {k: v for k, v in secrets.masks(svc.store).items() if k in configured}, 'defaults': defaults.get('value', {}), 'models': ['claude-sonnet-5-5', 'claude-opus-5-5'] if experimental else []}
+
+    @app.get('/api/destinations')
+    def saved_destinations():
+        return destinations.listing(svc.store)
+
+    @app.post('/api/destinations', status_code=201)
+    def save_destination(value: dict = Body()):
+        return destinations.save(svc, value)
+
+    @app.put('/api/destinations/{id}')
+    def update_destination(id: str, value: dict = Body()):
+        return destinations.save(svc, value, id)
+
+    @app.post('/api/destinations/{id}/select')
+    def select_destination(id: str):
+        return destinations.select(svc, id)
+
+    @app.delete('/api/destinations/{id}')
+    def remove_destination(id: str):
+        return destinations.remove(svc, id)
 
     @app.put('/api/settings/defaults')
     def defaults(value: dict = Body()):

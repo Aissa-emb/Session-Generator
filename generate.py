@@ -202,6 +202,8 @@ def run_spec(a, spec):
     from xcorgen import secrets, spec as specs
     from xcorgen.linter import lint_payloads
     from xcorgen.spec_runner import SpecRun
+    if not a.dry_run and 'saved_credentials' in spec:
+        sys.exit('Saved destination credentials belong to the Studio server. Run this scenario there, or remove saved_credentials and configure CLI token references explicitly.')
     seed = a.seed if a.seed is not None else spec.get("seed")
     if seed is not None:
         _random.seed(seed)

@@ -1014,7 +1014,7 @@ test("web apps accept a Symbol Upload token that is saved server-side and enable
     page.getByLabel("Symbol Upload token", { exact: true }),
   ).toHaveValue("");
   await expect(
-    page.getByText(/^Saved\. Source maps upload before each live run\./),
+    page.getByText(/^Saved ••••.*Source maps upload before each live run\./),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: /Settings → API/ })).toHaveCount(0);
   await expect(

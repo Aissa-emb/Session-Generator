@@ -30,6 +30,9 @@ export type Draft = {
   apps: AppTarget[];
   destination: "end_to_end" | "sessions_only";
   tenant: string;
+  destinationId?: string;
+  destinationName?: string;
+  savedCredentials?: { chronosphere: string | null; symbol_upload: string | null };
   story: "standard" | "regression" | "causal";
   causalScenario: string;
   causalVariant: "affected" | "control" | "recovered" | "scheduled";
@@ -399,6 +402,7 @@ export function scheduleError(d: Draft) {
 }
 export function scenario(caps: Json, d: Draft, symbolication = false, now = Date.now()): Json {
   const s = structuredClone(caps.default_spec);
+  if (d.savedCredentials) s.saved_credentials = structuredClone(d.savedCredentials);
   s.name = profileName(d.profile) + " · " + flowNames[d.flow];
   s.targets = d.apps.map((a) => ({
     ...structuredClone(

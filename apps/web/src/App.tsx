@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightIcon,
@@ -34,6 +34,7 @@ import PreviewStep from "./PreviewStep";
 import CustomizeScenario, { storyName } from "./CustomizeScenario";
 import { shareText } from "./AdvancedSettings";
 import RunView from "./RunView";
+import SavedDestinations from "./SavedDestinations";
 import cortexLogo from "./assets/cortex-xcor-dark.svg";
 import toolWordmark from "./assets/session-generator-wordmark.svg";
 
@@ -79,6 +80,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [token, setToken] = useState("");
   const [symbolToken, setSymbolToken] = useState("");
+  const [destinationNotice, setDestinationNotice] = useState("");
+  const restoreDestination = useRef(!read("sg_workflow_v1") && !read("sg_run_id") && !read("sg_launch_attempt"));
   const [access, setAccess] = useState("");
   const [dry, setDry] = useState(() => !!read("sg_launch_attempt")?.dry);
   const [now, setNow] = useState(Date.now() / 1000);
@@ -98,6 +101,17 @@ export default function App() {
     queryFn: () => api("/settings"),
     retry: false,
   });
+  const destinations = useQuery({
+    queryKey: ["destinations"], queryFn: () => api("/destinations"), retry: false,
+  });
+  const destinationRows: Json[] = destinations.data?.destinations || [];
+  const selectedDestination = destinationRows.find(row => row.id === draft.destinationId);
+  useEffect(() => {
+    if (!destinations.data || !restoreDestination.current) return;
+    restoreDestination.current = false;
+    const row = destinations.data.destinations.find((r: Json) => r.id === destinations.data.selected_id);
+    if (row) applyDestination(row);
+  }, [destinations.data]);
   const job = useQuery({
     queryKey: ["run", runId],
     queryFn: () => api("/runs/" + runId, undefined, undefined, 8000),
@@ -117,16 +131,23 @@ export default function App() {
     retry: false,
   });
   const online = status.isSuccess && !status.isError;
-  const authError = [status.error, caps.error, settings.error, job.error].find(
+  const authError = [status.error, caps.error, settings.error, destinations.error, job.error].find(
     (e) => e instanceof ApiError && e.status === 401,
   );
   const waiting = !!read("sg_launch_attempt") && !runId;
   useEffect(() => {
     save("sg_workflow_v1", draft);
   }, [draft]);
+  const recoveredSpec = useRef("");
   useEffect(() => {
+    const key = specId + ":" + (run?.spec_version || "");
+    if (recoveredSpec.current === key || !destinations.data) return;
     const spec = savedSpec.data?.spec;
     if (!spec?.targets) return;
+    recoveredSpec.current = key;
+    const matched = destinationRows.find(row => spec.saved_credentials &&
+      row.credentials.chronosphere.id === spec.saved_credentials.chronosphere &&
+      row.credentials.symbol_upload.id === spec.saved_credentials.symbol_upload && row.tenant === (spec.chronosphere?.tenant || ""));
     // A recovered run may use a corrected saved destination. Carry that
     // destination into the next draft instead of restoring stale browser IDs.
     setDraft((d) => ({
@@ -139,8 +160,11 @@ export default function App() {
       })),
       destination: spec.destinations.mode,
       tenant: spec.chronosphere?.tenant || "",
+      savedCredentials: spec.saved_credentials,
+      destinationId: matched?.id,
+      destinationName: matched?.name,
     }));
-  }, [savedSpec.data]);
+  }, [savedSpec.data, destinations.data]);
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [step]);
@@ -152,6 +176,7 @@ export default function App() {
     setDraft((d) => ({ ...d, ...patch }));
     setPreview(null);
     setError("");
+    setDestinationNotice("");
   };
   const changeApp = (platform: Platform, patch: Partial<AppTarget>) =>
     update({
@@ -167,7 +192,7 @@ export default function App() {
       update({
         apps: [
           ...draft.apps,
-          {
+          selectedDestination?.apps.find((a: AppTarget) => a.platform === platform) || {
             platform,
             appId: "",
             name: platform === "web" ? "Vantra Web" : "Vantra",
@@ -184,12 +209,78 @@ export default function App() {
     setError(
       e instanceof Error ? e.message : "The request could not be completed.",
     );
+  const applyDestination = (row: Json) => {
+    update({ apps: row.apps, tenant: row.tenant, destination: row.destination,
+      destinationId: row.id, destinationName: row.name,
+      savedCredentials: { chronosphere: row.credentials.chronosphere.id, symbol_upload: row.credentials.symbol_upload.id } });
+    setToken(""); setSymbolToken("");
+  };
+  const newDestination = () => {
+    update({ apps: [{platform: "android", appId: "", name: "Vantra", region: "us"}], tenant: "",
+      destinationId: undefined, destinationName: "", savedCredentials: {chronosphere: null, symbol_upload: null} });
+    setToken(""); setSymbolToken("");
+  };
+  const selectDestination = async (id: string) => {
+    if (!id) { newDestination(); return; }
+    setBusy("Loading destination"); setError("");
+    try { applyDestination(await api(`/destinations/${id}/select`, {})); }
+    catch (e) { fail(e); }
+    finally { setBusy(""); }
+  };
+  const saveDestination = async () => {
+    const issue = connectionError(draft);
+    if (issue) { setError(issue); return false; }
+    if (draft.destinationId && !selectedDestination) {
+      setError("This saved destination is unavailable. Reconnect or create a new destination."); return false;
+    }
+    setBusy("Saving destination"); setError(""); setDestinationNotice("");
+    try {
+      const row = await api(draft.destinationId ? `/destinations/${draft.destinationId}` : "/destinations", {
+        name: draft.destinationName?.trim() || (draft.apps.map(a => a.name).join(" + ") + (draft.tenant ? " · " + tenantName(draft.tenant) : "")).slice(0,80),
+        apps: draft.apps, tenant: tenantName(draft.tenant), destination: draft.destination,
+        expected_version: selectedDestination?.version,
+        use_legacy: !draft.savedCredentials,
+        source_credentials: draft.savedCredentials,
+        credentials: { ...(token.trim() ? {chronosphere: token.trim()} : {}), ...(symbolToken.trim() ? {symbol_upload: symbolToken.trim()} : {}) },
+      }, draft.destinationId ? "PUT" : "POST");
+      applyDestination(row);
+      await destinations.refetch();
+      setDestinationNotice("Saved on this computer. Available after refresh and restart.");
+      return true;
+    } catch (e) { fail(e); return false; }
+    finally { setBusy(""); }
+  };
+  const removeDestination = async () => {
+    setBusy("Removing destination"); setError("");
+    try {
+      await api(`/destinations/${draft.destinationId}`, undefined, "DELETE");
+      newDestination(); await destinations.refetch();
+      setDestinationNotice("Destination and saved keys removed.");
+    } catch (e) { fail(e); }
+    finally { setBusy(""); }
+  };
+  const credential = (kind: "chronosphere" | "symbol_upload") => {
+    if (draft.savedCredentials) {
+      const saved = selectedDestination?.credentials[kind];
+      return {configured: !!draft.savedCredentials[kind], last_four: saved?.id === draft.savedCredentials[kind] ? saved?.last_four : null};
+    }
+    return {configured: !!settings.data?.secrets[kind], last_four: settings.data?.secret_suffixes?.[kind]};
+  };
+  const masked = (kind: "chronosphere" | "symbol_upload") => credential(kind).configured ? "Saved ••••" + (credential(kind).last_four || "") : "";
   const next = async () => {
     setError("");
     if (step === 0) {
       const issue = connectionError(draft);
       if (issue) {
         setError(issue);
+        return;
+      }
+      if (draft.destinationId && !token.trim() && !symbolToken.trim()) {
+        setStep(1);
+        return;
+      }
+      if (draft.destinationId || draft.destinationName?.trim() || draft.savedCredentials) {
+        if (await saveDestination()) setStep(1);
         return;
       }
       const pending: [string, string, (v: string) => void][] = [
@@ -232,7 +323,7 @@ export default function App() {
       setPreview(
         await api(
           "/preview",
-          scenario(caps.data, draft, !!settings.data?.secrets.symbol_upload),
+          scenario(caps.data, draft, !!credential("symbol_upload").configured),
         ),
       );
     } catch (e) {
@@ -254,7 +345,7 @@ export default function App() {
           spec: scenario(
             caps.data,
             draft,
-            !!settings.data?.secrets.symbol_upload,
+            !!credential("symbol_upload").configured,
           ),
           dry,
         };
@@ -327,8 +418,8 @@ export default function App() {
   const selected = signalKeys.filter(
     (k) => draft.signals[k] && available(k, draft),
   );
-  const configured = settings.data?.secrets.chronosphere;
-  const symbolsConfigured = settings.data?.secrets.symbol_upload;
+  const configured = credential("chronosphere").configured;
+  const symbolsConfigured = credential("symbol_upload").configured;
   const pending = read("sg_launch_attempt");
   const liveBlocked =
     !dry && draft.destination === "end_to_end" && !configured && !pending;
@@ -459,7 +550,12 @@ export default function App() {
             </div>
           )}
           {step === 0 && (
-            <>
+            <fieldset className="destination-editor" disabled={!!busy}>
+              <SavedDestinations rows={destinationRows} id={draft.destinationId} name={draft.destinationName || ""}
+                busy={!!busy || !online || destinations.isPending || destinations.isError} notice={destinationNotice}
+                onName={name => update({destinationName: name})} onSelect={selectDestination}
+                onNew={newDestination} onSave={saveDestination} onRemove={removeDestination} />
+              {destinations.isError && <p className="error-notice" role="alert">Saved destinations could not be loaded. Reconnect to try again.</p>}
               <Panel title="Applications" action={<Badge>Production</Badge>}>
                 <div className="platform-picker">
                   {(["android", "ios", "web"] as Platform[]).map((p) => (
@@ -525,7 +621,7 @@ export default function App() {
                           hint={
                             <>
                               {symbolsConfigured ? (
-                                "Saved. Source maps upload before each live run. "
+                                masked("symbol_upload") + ". Source maps upload before each live run. "
                               ) : (
                                 <>
                                   In XCOR RUM, open{" "}
@@ -618,7 +714,7 @@ export default function App() {
                       label="Chronosphere API token"
                       hint={
                         configured
-                          ? "Saved. Enter a token to replace it."
+                          ? masked("chronosphere") + ". Enter a token to replace it."
                           : "Required for live traces"
                       }
                     >
@@ -642,7 +738,7 @@ export default function App() {
                   </div>
                 )}
               </Panel>
-            </>
+            </fieldset>
           )}
           {step === 1 && (
             <div className="customize-layout">

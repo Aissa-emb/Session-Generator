@@ -20,6 +20,14 @@ from pydantic import (
 )
 
 
+class SavedCredentials(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    chronosphere: constr(pattern=r'^[a-f0-9]{32}$') | None
+    symbol_upload: constr(pattern=r'^[a-f0-9]{32}$') | None
+
+
 class Quantity(Enum):
     reading_ms = 'reading_ms'
     typing_ms = 'typing_ms'
@@ -1060,6 +1068,10 @@ class Target(BaseModel):
 class ScenarioSpec(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
+    )
+    saved_credentials: SavedCredentials | None = Field(
+        None,
+        description='Opaque local saved-destination credential IDs. Values stay in the server vault; null disables global fallback.',
     )
     modeling: Modeling | None = None
     spec_version: Literal['2.0'] = Field(

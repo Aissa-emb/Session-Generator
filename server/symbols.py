@@ -56,7 +56,7 @@ def upload(svc, spec_id, confirm=False, author="user", transport=None):
             "Review the source-map plan and provide confirm: true before upload."
         )
     spec = svc.store.get("scenario_specs", spec_id)["spec"]
-    token = secrets.get(svc.store, "symbol_upload")
+    token = secrets.for_spec(svc.store, spec, "symbol_upload")
     if not token:
         raise ValueError("Configure the Embrace Symbol Upload token on the server.")
     receipts = []

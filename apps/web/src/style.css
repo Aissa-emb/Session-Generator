@@ -2339,3 +2339,13 @@ fieldset.chip-group.compact .chip span { min-height: 30px; padding: 4px 12px; fo
 .adoption line { stroke: var(--border); }
 .adoption path { fill: none; stroke: var(--mint); stroke-width: 2; }
 .adoption figcaption { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.destination-editor { border: 0; padding: 0; margin: 0; min-width: 0; }
+.saved-destination-help { color: var(--secondary); font-size: .875rem; margin: 0 0 16px; }
+.saved-destination-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+.saved-destination-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.saved-destination-notice { color: var(--mint); font-size: .875rem; margin: 14px 0 0; }
+.saved-destination-remove { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 12px; }
+.saved-destination-remove p { font-size: .875rem; color: var(--secondary); margin: 0 0 12px; }
+.saved-destination-remove .button { margin-right: 8px; }
+@media (max-width: 620px) { .saved-destination-fields { grid-template-columns: minmax(0, 1fr); } }
