@@ -15,6 +15,8 @@ This is an outbound telemetry generator, not a banking, shopping, or travel serv
 
 HTTPS certificate verification remains enabled. Remote HTTP endpoints, URL credentials, query strings, fragments, header injection, and redirects are refused. Plain HTTP is permitted only for a local loopback collector without credential or identifying headers. Proxy configuration and the OS trust store remain trusted deployment settings.
 
+Senders own bounded per-thread HTTPS connection caches and close them after their worker threads drain. Connection reuse never automatically retries a failed POST. The proxy-aware path preserves the existing urllib transport. Server jobs always use retry-free strict receipt mode; the legacy non-strict CLI retry policy is unchanged.
+
 Export responses are capped at 1 MiB and trace query responses at 32 MiB. Malformed protobuf responses are rejected with bounded varint parsing. HTTP error bodies and OTLP error messages are not written to logs. The sender bounds outstanding network tasks and retries transient failures, including HTTP 429, a limited number of times; persistent failures still require operator action. Generated telemetry may contain fictional user identifiers; state files use private atomic writes. Run as an ordinary dedicated OS user, not root.
 
 ## Checks
@@ -45,6 +47,8 @@ Run journals and manifests are owner-only, reject symbolic links, and contain no
 The server defaults to loopback, checks Host and Origin to prevent DNS rebinding/CSRF, bounds request bodies to 1 MiB and requires hashed bearer tokens for remote API and MCP access. Set allowed public hostnames explicitly and terminate TLS before exposing a hosted deployment. Token plaintext is returned once at creation; hashes and secret values are excluded from listing endpoints. Validation errors omit submitted input values. Secrets use Keychain APIs or private mounted files, never shell arguments. Job subprocess arguments contain only a run ID; scenario data reaches the preview worker over stdin. Provider response bodies and unexpected exceptions are suppressed. Read-only Embrace MCP calls are allow-listed and schema-validated.
 
 API jobs use exclusive OS locks and SQLite transactions; stale workers are marked for recovery rather than automatically duplicated. Local ingest tests create a temporary certificate and trust it explicitly, without disabling certificate verification.
+
+Live receipt writes batch every 200 ms and flush on orderly exit. Abrupt termination can lose that final interval plus queued persistence backlog; live jobs never replay unfinished exports. Bounded-run intent/receipt journals remain FULL synchronous and authoritative for resume. Active live receipt/event/manifests and launcher logs have rolling retention, with cumulative acknowledgements preserved and historical verification scope labeled. Historical run records and bounded journals are retained for recovery. Batch staging uses private compressed JSON in disposable SQLite files, with disk budgets; no pickle or executable serialization is used. See `docs/v2/PRODUCTION-HARDENING.md` for exact resource bounds.
 
 The built UI serves bundled scripts/fonts only. Access tokens entered for remote API access live in session storage and are never included in scenario specs. API calls use same-origin authentication and server validation; UI checks are advisory. Playwright uses a separate local database and dry-run worker. Browser dependencies are locked; npm audit and generated-contract drift checks run in CI.
 

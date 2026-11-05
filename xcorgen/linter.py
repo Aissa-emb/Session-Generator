@@ -8,6 +8,7 @@ naming, exception language versus the service runtime, durations, HTTP
 versus span status, device and OS combinations, and PII-looking values.
 A lint error blocks a run.
 """
+import functools
 import json
 import re
 
@@ -122,6 +123,64 @@ def _identifier(path):
     return bool(NUMERIC_FIELDS.search(field))
 
 
+# Live streams lint every session, so the per-string checks below are cached. They are exactly the checks
+# above: _identifier only looks at the end of a path (at most a 12-character suffix is stripped, then a
+# match of at most 12 characters is anchored at the end), so the last 24 characters decide it.
+IDENTIFIER_TAIL = 24
+_CACHED_TEXT = 256  # longer strings (stack traces, bundle maps) are checked without caching
+
+
+@functools.lru_cache(maxsize=4096)
+def _identifier_tail(tail):
+    return _identifier(tail)
+
+
+@functools.lru_cache(maxsize=1 << 16)
+def _forbidden_short(text):
+    return frozenset(forbidden_in(text))
+
+
+def _forbidden(text):
+    return _forbidden_short(text) if len(text) <= _CACHED_TEXT else frozenset(forbidden_in(text))
+
+
+def _pii_uncached(text):
+    """(email, phone or social security number, card number) found in one string."""
+    return (bool(EMAIL.search(text)), bool(SSN.search(text) or PHONE.search(text)),
+            any(_luhn(m.group()) for m in CARD.finditer(text)))
+
+
+_pii_short = functools.lru_cache(maxsize=1 << 16)(_pii_uncached)
+
+
+def _pii(text):
+    return _pii_short(text) if len(text) <= _CACHED_TEXT else _pii_uncached(text)
+
+
+def _walk(node, path, visit):
+    """Visit the same (path, string) pairs, in the same order, as _strings, without nested generators."""
+    if isinstance(node, dict):
+        key = node.get("key")
+        if isinstance(key, str) and "value" in node:
+            visit(path + ".<key>", key)
+            _walk(node["value"], f"{path}.{key}", visit)
+            return
+        for k, v in node.items():
+            if isinstance(k, str):
+                visit(path + ".<key>", k)
+            _walk(v, f"{path}.{k}", visit)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            _walk(v, f"{path}[{i}]", visit)
+    elif isinstance(node, str):
+        visit(path, node)
+
+
+@functools.lru_cache(maxsize=1)
+def _android_devices():
+    return frozenset((d[1], v) for d in ANDROID_DEVICES for v in d[2])
+
+
 def _vals(attributes):
     out = {}
     for a in attributes or []:
@@ -141,22 +200,24 @@ def lint_payloads(deliveries, max_issues=50):
         seen.add(key)
         issues.append(_issue(severity, path, message, code))
 
-    devices = {(d[1], v) for d in ANDROID_DEVICES for v in d[2]}
+    def visit(path, text):
+        bad = frozenset() if permitted_provenance(path, text) else _forbidden(text)
+        if bad:
+            add("error", path, f"Emitted value \"{text[:80]}\" contains {', '.join(sorted(bad))}.", "forbidden_word")
+        if _identifier_tail(path[-IDENTIFIER_TAIL:]):
+            return
+        email, phone, card = _pii(text)
+        if email:
+            add("error", path, "Emitted value contains an email address.", "pii")
+        if phone:
+            add("error", path, "Emitted value looks like a phone or social security number.", "pii")
+        if card:
+            add("error", path, "Emitted value contains a card number.", "pii")
+
+    devices = _android_devices()
     for d in deliveries:
         payload = d["payload"]
-        for path, text in _strings(payload, f"$.{d['target']}.{d['kind']}"):
-            bad = set() if permitted_provenance(path, text) else forbidden_in(text)
-            if bad:
-                add("error", path, f"Emitted value \"{text[:80]}\" contains {', '.join(sorted(bad))}.", "forbidden_word")
-            if _identifier(path):
-                continue
-            if EMAIL.search(text):
-                add("error", path, "Emitted value contains an email address.", "pii")
-            if SSN.search(text) or PHONE.search(text):
-                add("error", path, "Emitted value looks like a phone or social security number.", "pii")
-            for m in CARD.finditer(text):
-                if _luhn(m.group()):
-                    add("error", path, "Emitted value contains a card number.", "pii")
+        _walk(payload, f"$.{d['target']}.{d['kind']}", visit)
         if d.get("fmt") == "envelope":
             r = payload["resource"]
             if r.get('sdk_platform')=='ios':

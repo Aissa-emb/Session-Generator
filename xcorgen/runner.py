@@ -138,7 +138,11 @@ class Sender:
 
     def __init__(self, cfg, dry_run_dir=None, workers=8, verbose=False):
         self.cfg, self.dry, self.verbose = cfg, dry_run_dir, verbose
+        from .security import ConnectionPool
+        self.transport = ConnectionPool()
         self.pool = ThreadPoolExecutor(max_workers=workers)
+        self.inflight = 0
+        self.task_error = None
         self.pending_slots = threading.BoundedSemaphore(workers * 4)
         self.lock = threading.Lock()
         self.stats = {"embrace_spans": 0, "embrace_logs": 0, "otlp_traces": 0, "otlp_logs": 0, "otlp_metrics": 0, "errors": 0}
@@ -161,14 +165,23 @@ class Sender:
             numbers = [int(f.split("-", 1)[0]) for f in os.listdir(dry_run_dir) if re.match(r"^\d+-", f)]
             self.counter = itertools.count(max(numbers, default=0) + 1)
 
-    def submit(self, d):
-        self.pending_slots.acquire()
+    def submit(self, d, *, block=True):
+        if not self.pending_slots.acquire(blocking=block):
+            return None
+        with self.lock:
+            self.inflight += 1
+        def completed(future):
+            with self.lock:
+                if future is not None and not future.cancelled() and future.exception() is not None:
+                    self.task_error = future.exception()
+                self.inflight -= 1
+            self.pending_slots.release()
         try:
             future = self.pool.submit(self._send, d)
         except BaseException:
-            self.pending_slots.release()
+            completed(None)
             raise
-        future.add_done_callback(lambda _: self.pending_slots.release())
+        future.add_done_callback(completed)
         return future
 
     def _send(self, d):
@@ -214,13 +227,14 @@ class Sender:
                 self.last_errors = (self.last_errors + [f"{key}: {detail}"])[-5:]
             if self.verbose:
                 print(f"  ! {key} failed: {detail}", file=sys.stderr)
+        receipt["time_ms"] = time.time() * 1000
         return receipt
 
     def _post(self, url, body, headers):
         compressed = gzip.compress(body)
         for attempt in range(3):
             try:
-                return post(url, compressed, dict(headers, **{"Content-Encoding": "gzip"}))
+                return post(url, compressed, dict(headers, **{"Content-Encoding": "gzip"}), connection_pool=self.transport)
             except TransportError as e:
                 if self.strict_receipts or (e.status is not None and e.status != 429 and e.status < 500) or attempt == 2:
                     raise
@@ -253,6 +267,7 @@ class Sender:
 
     def close(self):
         self.pool.shutdown(wait=True)
+        self.transport.close()
 
 
 class Generator:

@@ -27,6 +27,8 @@ The UI has one four-step workflow:
 
 Continuous traffic uses randomized intervals around the chosen average. Keep the server running and the Mac awake. Pausing stops new sessions and drains in-flight sessions; the scheduled end time stays fixed. At the duration limit, new sessions stop and pending payloads finish. Stopping flushes pending deliveries. API acceptance is not proof of dashboard visibility.
 
+The running view shows the achieved rate beside the requested rate and explains when this computer or destination cannot keep up. Batches allow up to 50,000 sessions. One local server admits four active jobs and two simultaneous previews. Continuous runs retain recent delivery details while keeping cumulative acknowledgement counts; detailed report breakdowns cover the most recent 128 sessions. [Production limits and measurements](docs/v2/PRODUCTION-HARDENING.md) documents memory, history retention and the local 600/min load check.
+
 ```sh
 python3 tools/studio.py status
 python3 tools/studio.py stop  # Stop active/paused runs in the UI first.

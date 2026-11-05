@@ -49,6 +49,10 @@ def create_app(service=None, enable_integrations=None):
         transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts, allowed_origins=['http://localhost:*', 'http://127.0.0.1:*'] + ['https://' + h for h in allowed_hosts if '*' not in h])) if experimental else None
     @asynccontextmanager
     async def lifespan(app):
+        rotation = None
+        if os.environ.get('SG_STUDIO_LOG'):
+            from .retention import start_log_rotation
+            rotation = start_log_rotation(os.environ['SG_STUDIO_LOG'])
         # Surviving worker processes own their journals. Never launch a duplicate on restart.
         for run in svc.store.list('runs'):
             if run['status'] in ('queued', 'running') and time.time() - run.get('heartbeat', run['created']) > 90:
@@ -83,6 +87,10 @@ def create_app(service=None, enable_integrations=None):
                     while any(p.poll() is None for p in svc.processes.values()) and time.monotonic()<deadline:
                         await asyncio.sleep(.2)
                 emit('server_stopped')
+                if rotation:
+                    rotation[0].set()
+                    rotation[1].join(timeout=1)
+                svc.store.close()
     app = FastAPI(title='Session Generator', version='2.0', lifespan=lifespan)
     app.state.service = svc
     if mcp_app:
@@ -115,10 +123,14 @@ def create_app(service=None, enable_integrations=None):
             if length and (not length.isdigit() or int(length) > 1024 * 1024):
                 return JSONResponse({'detail': 'Request exceeds the 1 MiB limit.'}, 413)
             body = bytearray()
-            async for chunk in request.stream():
-                body.extend(chunk)
-                if len(body) > 1024 * 1024:
-                    return JSONResponse({'detail': 'Request exceeds the 1 MiB limit.'}, 413)
+            try:
+                async with asyncio.timeout(15):
+                    async for chunk in request.stream():
+                        body.extend(chunk)
+                        if len(body) > 1024 * 1024:
+                            return JSONResponse({'detail': 'Request exceeds the 1 MiB limit.'}, 413)
+            except TimeoutError:
+                return JSONResponse({'detail': 'Request body took longer than 15 seconds.'}, 408)
             request._body = bytes(body)
         context_token = caller.set(request.state.actor)
         try:

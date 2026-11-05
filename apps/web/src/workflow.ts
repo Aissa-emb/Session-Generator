@@ -362,9 +362,9 @@ export function available(signal: Signal, d: Draft) {
 export function scheduleError(d: Draft) {
   if (
     d.mode === "burst" &&
-    (!Number.isInteger(d.count) || d.count < 1 || d.count > 100000)
+    (!Number.isInteger(d.count) || d.count < 1 || d.count > 50000)
   )
-    return "Choose a whole number of sessions between 1 and 100,000.";
+    return "Choose a whole number of sessions between 1 and 50,000.";
   if (
     d.mode === "live" &&
     (!Number.isFinite(d.rate) || d.rate <= 0 || d.rate > 600)

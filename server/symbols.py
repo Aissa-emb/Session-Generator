@@ -1,5 +1,7 @@
 """Review, explicitly upload and record the complete release asset set."""
 
+import time
+
 from xcorgen import web_symbols
 from xcorgen.security import TransportError
 from . import secrets
@@ -58,6 +60,7 @@ def upload(svc, spec_id, confirm=False, author="user", transport=None):
     if not token:
         raise ValueError("Configure the Embrace Symbol Upload token on the server.")
     receipts = []
+    deadline = time.monotonic() + 90
     for t, a in selected(spec):
         key = "symbol:" + t["embrace_app_id"] + ":" + a["bundle_id"]
         try:
@@ -67,6 +70,8 @@ def upload(svc, spec_id, confirm=False, author="user", transport=None):
         if prior.get("http_status") == 200:
             receipts.append(prior)
             continue
+        if time.monotonic() >= deadline:
+            raise ValueError('Source-map upload exceeded 90 seconds. Retry to continue with the remaining maps; acknowledged maps are retained.')
         try:
             receipt = web_symbols.upload(
                 a,

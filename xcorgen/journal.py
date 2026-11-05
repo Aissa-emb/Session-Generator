@@ -36,6 +36,8 @@ class RunJournal:
           CREATE TABLE IF NOT EXISTS sessions (idx INTEGER PRIMARY KEY, record TEXT NOT NULL, delivered INTEGER DEFAULT 0);
           CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, session_idx INTEGER NOT NULL,
             hash TEXT NOT NULL, status TEXT NOT NULL, receipt TEXT);
+          CREATE INDEX IF NOT EXISTS deliveries_session ON deliveries(session_idx, status);
+          CREATE INDEX IF NOT EXISTS sessions_pending ON sessions(delivered, idx);
         """)
 
     def get(self, key):
@@ -82,9 +84,14 @@ class RunJournal:
             self.db.execute("UPDATE deliveries SET status=?, receipt=? WHERE id=?",
                             (receipt["status"], json.dumps(receipt), ident))
 
-    def completed(self):
-        rows = self.db.execute("""SELECT idx,record FROM sessions s WHERE delivered=0 AND NOT EXISTS
-          (SELECT 1 FROM deliveries d WHERE d.session_idx=s.idx AND status NOT IN ('accepted','expired'))""").fetchall()
+    def completed(self, index=None):
+        sql = """SELECT idx,record FROM sessions s WHERE delivered=0 AND NOT EXISTS
+          (SELECT 1 FROM deliveries d WHERE d.session_idx=s.idx AND status NOT IN ('accepted','expired'))"""
+        params = ()
+        if index is not None:
+            sql += ' AND s.idx=?'
+            params = (index,)
+        rows = self.db.execute(sql, params).fetchall()
         return [(i, json.loads(record)) for i, record in rows]
 
     def acknowledge_session(self, index):

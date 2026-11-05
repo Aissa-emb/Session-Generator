@@ -223,6 +223,8 @@ class PersonaPool:
         if os.path.exists(self.path):
             with open(self.path) as f:
                 self.personas = json.load(f)
+            if len(self.personas) > self.size:
+                self.personas = sorted(self.personas, key=lambda p: p.get("last_seen", 0))[-self.size:]
 
     def pick(self, make_user, now=None):
         """Return a persona: mostly returning visitors once the pool has filled up.

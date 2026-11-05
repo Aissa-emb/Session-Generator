@@ -23,7 +23,7 @@ from .journal import RunJournal, digest, tuples
 from .android_session import shift_envelope
 from .emitted import Emitted
 from .planner import Planner
-from .runner import DIURNAL, ROOT, Generator, append_manifest, describe
+from .runner import DIURNAL, ROOT, Generator, Sender, append_manifest, describe
 from .scenarios import Runtime
 from .spec import errors, normalized, traffic_window, validate
 from .util import hex_id
@@ -117,7 +117,7 @@ class SpecRun:
             self.generators[target["id"]] = (target, gen)
         mix = pop["platform_mix"]
         self.target_weights = [(tid, mix.get(tid, 0)) for tid in self.generators]
-        self.emitted = Emitted(self.spec)
+        self.emitted = Emitted(self.spec, streaming=self.spec["traffic"]["mode"] == "live" or self.spec["traffic"].get("count", 0) > 2000)
         from .backend_metrics import REDMetrics
         self.metrics = REDMetrics()
         self.manifest = None
@@ -185,9 +185,13 @@ class SpecRun:
             payload = self.metrics.collect(deliveries, self.run_id)
             if payload["resourceMetrics"]:
                 due = max((d['due'] for d in deliveries), default=s.end_ms)
-                deliveries.append(dict(target="otlp", kind="metrics", payload=payload, due=due,
+                metric_delivery = dict(target="otlp", kind="metrics", payload=payload, due=due,
                     app_id=s.app_id, device_id=s.persona['device_id'],
-                    _metrics_policy=self.spec['destinations'].get('metrics_policy','aggregated')))
+                    _metrics_policy=self.spec['destinations'].get('metrics_policy','aggregated'))
+                from .linter import lint_payloads
+                if errors(lint_payloads([metric_delivery])):
+                    raise ValueError("Realism lint failed for backend metrics; this session was not sent.")
+                deliveries.append(metric_delivery)
         self.emitted.add(target, s, deliveries)
         if self.manifest:
             trace_ids = expected_trace_ids(s, deliveries)
@@ -197,7 +201,7 @@ class SpecRun:
                 "planned_start_ms": getattr(s, "planned_start_ms", s.start_ms),
                 "line_of_business": s.properties.get("business_unit"), "faults": fault_ids,
                 "verification_case": s.verification_case, "traces": bool(s.traces), "trace_ids": trace_ids,
-                "sdk_sessions": self.emitted.observations[-1].get("sdk_sessions", []),
+                "sdk_sessions": self.emitted.last_observation.get("sdk_sessions", []),
                 "part_ids": sorted({_part_id(d) for d in deliveries
                                     if d.get("fmt") == "envelope" and d["kind"] == "spans"} - {None})
                             + [p.id for p in getattr(s, "parts", [])]}
@@ -228,38 +232,44 @@ class SpecRun:
             return self.manifest
         self.journal = RunJournal(directory)
         meta = self.journal.get("plan")
-        if resume:
-            if not meta:
-                raise ValueError("No resumable plan exists in this run directory.")
-            if meta["spec_version"] != self.spec["spec_version"] or meta["spec_hash"] != digest(self.spec):
-                raise ValueError("Spec or spec version differs from the original run; resume refused.")
-            if meta["dry"] != dry:
-                raise ValueError("A dry run cannot resume as a live run, or the reverse.")
-            self.journal.assert_resumable()
-            self.run_id, self.now_ms = meta["run_id"], meta["now_ms"]
-            random.setstate(tuples(meta["global_rng"]))
-            self.rng.setstate(tuples(meta["rng"]))
-            for tid, (_, gen) in self.generators.items():
-                for key, pool in gen.pools.items():
-                    pool.personas = copy.deepcopy(meta["pools"][tid][key])
-            self.resuming = True
-        else:
-            if meta:
-                raise ValueError("This directory already contains a run; use --resume or choose a new directory.")
-            meta = {"run_id": self.run_id, "now_ms": self.now_ms, "spec_version": self.spec["spec_version"],
-                    "spec_hash": digest(self.spec), "dry": dry, "rng": self.rng.getstate(),
-                    "global_rng": random.getstate(), "pools": {tid: {key: pool.personas for key, pool in gen.pools.items()}
-                    for tid, (_, gen) in self.generators.items()}}
-            self.journal.put("plan", meta)
-            append_manifest(self.manifest, {"provenance": "generated", "run_id": self.run_id,
-                            "spec": self.spec, "issues": self.issues, "created_ms": self.now_ms})
+        try:
+            if resume:
+                if not meta:
+                    raise ValueError("No resumable plan exists in this run directory.")
+                if meta["spec_version"] != self.spec["spec_version"] or meta["spec_hash"] != digest(self.spec):
+                    raise ValueError("Spec or spec version differs from the original run; resume refused.")
+                if meta["dry"] != dry:
+                    raise ValueError("A dry run cannot resume as a live run, or the reverse.")
+                self.journal.assert_resumable()
+                self.run_id, self.now_ms = meta["run_id"], meta["now_ms"]
+                random.setstate(tuples(meta["global_rng"]))
+                self.rng.setstate(tuples(meta["rng"]))
+                for tid, (_, gen) in self.generators.items():
+                    for key, pool in gen.pools.items():
+                        pool.personas = copy.deepcopy(meta["pools"][tid][key])
+                self.resuming = True
+            else:
+                if meta:
+                    raise ValueError("This directory already contains a run; use --resume or choose a new directory.")
+                meta = {"run_id": self.run_id, "now_ms": self.now_ms, "spec_version": self.spec["spec_version"],
+                        "spec_hash": digest(self.spec), "dry": dry, "rng": self.rng.getstate(),
+                        "global_rng": random.getstate(), "pools": {tid: {key: pool.personas for key, pool in gen.pools.items()}
+                        for tid, (_, gen) in self.generators.items()}}
+                self.journal.put("plan", meta)
+                append_manifest(self.manifest, {"provenance": "generated", "run_id": self.run_id,
+                                "spec": self.spec, "issues": self.issues, "created_ms": self.now_ms})
+        except BaseException:
+            self.journal.close()
+            raise
         return self.manifest
 
-    def _acknowledge(self):
+    def _acknowledge(self, session_index=None):
         # A crash between append and acknowledgement must not duplicate the session receipt.
-        with open(self.manifest) as stream:
-            recorded = {r["index"] for line in stream if (r := json.loads(line)).get("stage") in ("sent","expired","partially_expired")}
-        for index, record in self.journal.completed():
+        if not hasattr(self, '_acknowledged'):
+            with open(self.manifest) as stream:
+                self._acknowledged = {r["index"] for line in stream if (r := json.loads(line)).get("stage") in ("sent", "expired", "partially_expired")}
+        recorded = self._acknowledged
+        for index, record in self.journal.completed(session_index):
             if index not in recorded:
                 receipts=[json.loads(row[0]) for row in self.journal.db.execute('SELECT receipt FROM deliveries WHERE session_idx=?',(index,)) if row[0]]
                 expired=[r for r in receipts if r['status']=='expired']
@@ -268,6 +278,7 @@ class SpecRun:
                 stage='expired' if app and all(r['status']=='expired' for r in app) else 'partially_expired' if any(r['status']=='expired' for r in app) else 'sent'
                 append_manifest(self.manifest, dict(record, stage=stage, trace_ids=sorted(trace_ids), traces=bool(trace_ids), expired_payloads=len(expired), sent_ms=time.time()*1000))
             self.journal.acknowledge_session(index)
+            recorded.add(index)
 
     def _deliver(self, sender, delivery):
         if not self.journal:
@@ -291,7 +302,7 @@ class SpecRun:
                            "trace_ids":sorted({sp['traceId'] for rs in delivery['payload'].get('resourceSpans',[]) for ss in rs['scopeSpans'] for sp in ss['spans']})}
                 self.journal.receipt(ident, receipt)
                 append_manifest(self.manifest + ".receipts", dict(receipt, delivery_id=ident))
-                self._acknowledge()
+                self._acknowledge(int(ident.split(":")[0]))
                 return
             if delivery["target"] == "embrace" and age > limits.TRACE_ELIGIBLE_MS:
                 payload = copy.deepcopy(delivery["payload"])
@@ -305,7 +316,7 @@ class SpecRun:
         receipt = sender.submit(delivery).result()
         self.journal.receipt(ident, receipt)
         append_manifest(self.manifest + ".receipts", dict(receipt, delivery_id=ident))
-        self._acknowledge()
+        self._acknowledge(int(ident.split(":")[0]))
 
     def save(self):
         for _, gen in self.generators.values():
@@ -330,117 +341,137 @@ class SpecRun:
         return skeletons, allocations, report
 
     def run_batch(self, sender, quiet=False, pace=None):
-        """Burst or backfill: plan every session, generate them in order, then send."""
+        """Plan exact quotas, preflight all payloads on disk, then send backend first."""
+        from .payload_spool import PayloadSpool
+        from .linter import lint_payloads
         skeletons, allocations, report = self.plan_batch()
-        sessions, all_deliveries = [], []
         n_cases = sum(len(g.verification_queue) for _, g in self.generators.values())
         window = traffic_window(self.spec, self.now_ms)
-        for t in planned_starts(self.spec, n_cases, window[0], window[1], self.rng) if n_cases else []:
-            out = self._verification(t)
-            if out:
-                sessions.append(out)
-                all_deliveries.extend(out[3])
-        for skel, fault_ids in zip(skeletons, allocations):
-            out = self.session(skel["start_ms"], skel, fault_ids)
-            sessions.append(out)
-            all_deliveries.extend(out[3])
-        kept = []
-        for target, s, journey, deliveries, fault_ids in sessions:
-            # Sessions keep their planned time; one that would still be running at send time moves back just
-            # far enough to have finished, so planned incident phases and trace eligibility stay accurate.
-            s.planned_start_ms = s.start_ms
-            delta_ms = min(0, self.now_ms - 15000 - max((d["due"] for d in deliveries), default=self.now_ms))
-            for d in deliveries:
-                (shift_envelope if d.get("fmt") == "envelope" else shift)(d["payload"], int(delta_ms * 1_000_000))
-                d["due"] += delta_ms
-            s.start_ms += delta_ms
-            s.end_ms += delta_ms
-            if hasattr(s, "causal_evidence"):
-                s.causal_evidence["base_ms"] += delta_ms
-                for request in s.causal_evidence["frontend_requests"]:
-                    request["start"] += delta_ms
-                    request["end"] += delta_ms
-            if s.traces and not limits.trace_eligible(s.start_ms, self.now_ms):
-                deliveries = strip_traces(s, deliveries)
-            self.record(target, s, fault_ids, deliveries)
-            kept.extend(deliveries)
-            if not quiet:
-                print(describe(s, journey, (self.spec.get("chronosphere") or {}).get("tenant") if s.traces else None))
-        from .linter import lint_payloads
-        blocking = errors(lint_payloads(kept))
-        if blocking:
-            raise ValueError("Realism lint failed; no payloads were sent: " + "; ".join(x["message"] for x in blocking[:5]))
-        self.save()
-        if self.journal:
-            completed = {row[0] for row in self.journal.db.execute("SELECT id FROM deliveries WHERE status IN ('accepted','expired')")}
-            kept = [d for d in kept if d["_delivery_id"] not in completed]
-            self._acknowledge()
-        kept.sort(key=lambda d: d["due"])
-        backend = [d for d in kept if d["target"] != "embrace"]
-        rate = pace or self.spec["traffic"].get("throttle_payloads_per_second") or limits.DEFAULT_BACKFILL_PAYLOADS_PER_SECOND
-        for i, d in enumerate(backend):
-            if sender.stats["errors"] >= 20:
-                break
-            if rate and i and not getattr(sender, "dry", True):
-                time.sleep(1 / rate)
-            self._deliver(sender, d)
-        sender.pool.shutdown(wait=True)
-        sender.pool = ThreadPoolExecutor(max_workers=8)
-        for i, d in enumerate(x for x in kept if x["target"] == "embrace"):
-            if rate and i and not getattr(sender, "dry", True):
-                time.sleep(1 / rate)
-            self._deliver(sender, d)
-            if rate and sender.stats["errors"] >= 20:
-                print("Stopping: repeated delivery failures.", file=sys.stderr)
-                break
-        return len(sessions), report
+        case_starts = planned_starts(self.spec, n_cases, window[0], window[1], self.rng) if n_cases else []
+        def generated():
+            for t in case_starts:
+                out = self._verification(t)
+                if out:
+                    yield out
+            for skel, fault_ids in zip(skeletons, allocations):
+                yield self.session(skel["start_ms"], skel, fault_ids)
+        count = 0
+        with PayloadSpool() as spool:
+            for target, s, journey, deliveries, fault_ids in generated():
+                if hasattr(self, 'check_control'):
+                    self.check_control()
+                # Sessions keep their planned time; one that would still be running at send time moves back just
+                # far enough to have finished, so planned incident phases and trace eligibility stay accurate.
+                s.planned_start_ms = s.start_ms
+                delta_ms = min(0, self.now_ms - 15000 - max((d["due"] for d in deliveries), default=self.now_ms))
+                for d in deliveries:
+                    (shift_envelope if d.get("fmt") == "envelope" else shift)(d["payload"], int(delta_ms * 1_000_000))
+                    d["due"] += delta_ms
+                s.start_ms += delta_ms
+                s.end_ms += delta_ms
+                if hasattr(s, "causal_evidence"):
+                    s.causal_evidence["base_ms"] += delta_ms
+                    for request in s.causal_evidence["frontend_requests"]:
+                        request["start"] += delta_ms
+                        request["end"] += delta_ms
+                if s.traces and not limits.trace_eligible(s.start_ms, self.now_ms):
+                    deliveries = strip_traces(s, deliveries)
+
+                blocking = errors(lint_payloads(deliveries))
+                if blocking:
+                    raise ValueError("Realism lint failed; no payloads were sent: " + "; ".join(x["message"] for x in blocking[:5]))
+                self.record(target, s, fault_ids, deliveries)
+                for d in deliveries:
+                    spool.add(d)
+                count += 1
+                if not quiet:
+                    print(describe(s, journey, (self.spec.get("chronosphere") or {}).get("tenant") if s.traces else None))
+            self.save()
+            if self.journal:
+                self._acknowledge()
+            rate = pace or self.spec["traffic"].get("throttle_payloads_per_second") or limits.DEFAULT_BACKFILL_PAYLOADS_PER_SECOND
+            backend_drained = False
+            for i, d in enumerate(spool):
+                if sender.stats["errors"] >= 20:
+                    break
+                if d['target'] == 'embrace' and not backend_drained:
+                    sender.pool.shutdown(wait=True)
+                    sender.pool = ThreadPoolExecutor(max_workers=8)
+                    backend_drained = True
+                if rate and i and not getattr(sender, "dry", True):
+                    time.sleep(1 / rate)
+                self._deliver(sender, d)
+        return count, report
 
     # --- live streams -------------------------------------------------------------------------------------------
 
     def run_live(self, sender, quiet=False, status_every_s=600, clock=time.time, sleep=time.sleep):
+        from .linter import lint_payloads
         t = self.spec["traffic"]
         heap, seq = [], itertools.count()
         duration = t.get("duration_minutes", 0)
         stop_at = clock() + duration * 60 if duration else None
         next_start, started, last_save, last_status = clock(), 0, clock(), clock()
         tenant = (self.spec.get("chronosphere") or {}).get("tenant")
+        queued_bytes, missed = 0, 0
         try:
             while True:
                 now = clock()
-                if (stop_at is None or now < stop_at) and now >= next_start:
+                count = 0
+                while (stop_at is None or clock() < stop_at) and clock() >= next_start and count < 32:
+                    now = clock()
+                    rate = t["rate_per_minute"] * curve_factor(self.spec, next_start)
+                    if now - next_start > 30:
+                        missed += max(1, round((now - next_start) * rate / 60))
+                        next_start = now
+                    if queued_bytes >= 256 * 1024**2:
+                        break
+                    next_start += self.rng.expovariate(max(1e-6, rate) / 60.0)
+                    count += 1
                     self.now_ms = now * 1000
                     out = self._verification(now * 1000) or self.session(now * 1000)
                     target, s, journey, deliveries, fault_ids = out
+                    blocking = errors(lint_payloads(deliveries))
+                    if blocking:
+                        raise ValueError("Realism lint failed; this session was not sent.")
+                    size = sum(len(json.dumps(d, separators=(',', ':'))) for d in deliveries)
+                    if queued_bytes + size > 256 * 1024**2:
+                        missed += 1
+                        continue
                     self.record(target, s, fault_ids, deliveries)
                     started += 1
+                    queued_bytes += size
                     for d in deliveries:
-                        heapq.heappush(heap, (d["due"], next(seq), d))
+                        heapq.heappush(heap, (d["due"], next(seq), d, size / max(1, len(deliveries))))
                     if not quiet:
                         print(describe(s, journey, tenant if s.traces else None), flush=True)
-                    rate = t["rate_per_minute"] * curve_factor(self.spec, now)
-                    next_start = now + self.rng.expovariate(max(1e-6, rate) / 60.0)
                 while heap and heap[0][0] <= clock() * 1000:
-                    sender.submit(heapq.heappop(heap)[2])
-                if now - last_save > 60:
+                    # Collectors used by previews/tests need not implement backpressure.
+                    future = sender.submit(heap[0][2], block=False) if isinstance(sender, Sender) else sender.submit(heap[0][2])
+                    if future is None and hasattr(sender, 'pending_slots'):
+                        break
+                    queued_bytes -= heapq.heappop(heap)[3]
+                if now - last_save > 5:
                     self.save()
                     last_save = now
                 if now - last_status > status_every_s:
                     st = sender.stats
                     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] sessions {started}, Embrace payloads "
                           f"{st['embrace_spans'] + st['embrace_logs']}, backend exports {st['otlp_traces']}, "
-                          f"errors {st['errors']}, queued {len(heap)}", flush=True)
+                          f"errors {st['errors']}, queued {len(heap)}, missed arrivals (estimated) {missed}", flush=True)
                     last_status = now
                 if stop_at is not None and now >= stop_at and not heap:
                     break
                 wake = [next_start] if (stop_at is None or now < stop_at) else []
                 if heap:
                     wake.append(heap[0][0] / 1000)
-                sleep(max(0.05, min(1.0, min(wake) - clock())) if wake else 0.2)
+                sleep(max(.01, min(.2, min(wake) - clock())) if wake else .2)
         except KeyboardInterrupt:
             print(f"\nStopping: flushing {len(heap)} pending payloads now.", file=sys.stderr)
             while heap:
                 sender.submit(heapq.heappop(heap)[2])
-        self.save()
+        finally:
+            self.save()
         return started
 
 

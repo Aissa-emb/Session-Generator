@@ -147,16 +147,19 @@ def manifest_sessions(path):
                 records[(row.get('run_id'), row['index'])] = dict(row, stage='planned')
         finally:
             db.close()
-    if path.exists():
-        for line in path.read_text().splitlines(keepends=True):
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                if not line.endswith('\n'):
-                    break  # A worker may be midway through appending its last record.
-                raise
-            if all(key in row for key in ('target', 'session_id', 'index')):
-                records[(row.get('run_id'), row['index'])] = row
+    for source in (path.with_name(path.name + '.1'), path):
+        if not source.exists():
+            continue
+        with source.open() as stream:
+            for line in stream:
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    if not line.endswith('\n'):
+                        break  # A worker may be midway through appending its last record.
+                    raise
+                if all(key in row for key in ('target', 'session_id', 'index')):
+                    records[(row.get('run_id'), row['index'])] = row
     return list(records.values())
 
 
@@ -175,7 +178,7 @@ async def verify(store, run):
         from xcorgen.secrets import resolve
         token = resolve(spec['chronosphere']['token_ref'])
     import asyncio
-    result = {'run_id': run['id'], 'checked_at': time.time(), 'settling_sessions': len(sessions) - len(mature),
+    result = {'run_id': run['id'], 'history_scope': run.get('history_scope', 'complete run'), 'checked_at': time.time(), 'settling_sessions': len(sessions) - len(mature),
               'chronosphere': await asyncio.to_thread(traces, spec, mature, token) if any(s.get('traces') for s in mature) else {'state': 'sessions_only'},
               'backfill_notes': limits.BACKFILL_NOTES, 'trace_caveat': limits.TRACE_CAVEAT}
     calls = []
@@ -204,7 +207,7 @@ def compare_observations(store, run, observations):
     if observations.get('session_unit') != 'user_sessions' or not observations.get('source'):
         raise ValueError('Identify the evidence source and use user_sessions, not session parts.')
     path = Path(run['manifest_path'])
-    sessions = [r for line in path.read_text().splitlines() if (r := json.loads(line)).get('stage') == 'sent']
+    sessions = [r for r in manifest_sessions(path) if r.get('stage') == 'sent']
     from collections import Counter
     planned = Counter((s['target'], int(s['start_ms'] // 3600000)) for s in counted_sessions(sessions))
     hourly = []
@@ -228,6 +231,7 @@ def compare_observations(store, run, observations):
     return store.put('verifications', {'run_id': run['id'], 'checked_at': time.time(), 'source': str(observations['source'])[:2000],
         'embrace': {'state': 'compared', 'hourly_counts': hourly, 'vitals': vital_rows,
                     'exception_groups': observations.get('exception_groups', []),
-                    'coverage_complete': set(planned) <= {(r['target'], int(r['hour_start_ms'] // 3600000)) for r in hourly}},
+                    'history_scope': run.get('history_scope', 'complete run'),
+                    'coverage_complete': not run.get('history_truncated') and set(planned) <= {(r['target'], int(r['hour_start_ms'] // 3600000)) for r in hourly}},
         'backfill_notes': limits.BACKFILL_NOTES,
         'note': 'Use rolling ranges and a cohort containing these known sessions. Other traffic in the app can affect unfiltered comparisons.'})

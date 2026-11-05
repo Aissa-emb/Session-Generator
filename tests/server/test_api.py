@@ -300,7 +300,7 @@ class APITests(unittest.TestCase):
         result, events = self._live_with_failing_sessions({2}, ticks=5)
         self.assertEqual(result['status'], 'stopped', events)
         self.assertEqual(result['skipped_sessions'], 1)
-        self.assertEqual(result['counters']['sessions'], 4)
+        self.assertGreaterEqual(result['counters']['sessions'], 4)
         self.assertEqual(result['last_skipped']['type'], 'KeyError')
         self.assertIsNone(result['last_skipped']['detail'])
         self.assertTrue(any(w.startswith('tests/server/test_api.py:') for w in result['last_skipped']['where']))

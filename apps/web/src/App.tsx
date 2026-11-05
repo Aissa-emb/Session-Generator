@@ -676,7 +676,7 @@ export default function App() {
                       <input
                         type="number"
                         min="1"
-                        max="100000"
+                        max="50000"
                         value={draft.count}
                         onChange={(e) =>
                           update({ count: Number(e.target.value) })
