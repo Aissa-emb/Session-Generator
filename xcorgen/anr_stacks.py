@@ -32,18 +32,20 @@ FAMILIES = {
     "migration": ("cache_migration", "cache_query", "preferences_commit", "cached_feed_parse"),
     "layout": ("list_bind_formatting", "image_decode_in_layout", "sponsored_webview_init", "boarding_pass_render"),
 }
+# Story names such as token_store_contention and boarding_pass_render are not credentials; bandit B105
+# matches "token" and "pass" in dictionary keys, so those lines carry nosec B105.
 # Stories that only make sense for one line of business.
-STORY_LOB = {"sponsored_webview_init": "ecommerce", "boarding_pass_render": "travel"}
+STORY_LOB = {"sponsored_webview_init": "ecommerce", "boarding_pass_render": "travel"}  # nosec B105
 STORY_WEIGHTS = {
-    "ecommerce": {"result_store_wait": 3, "token_store_contention": 2, "remote_config_cache_read": 2, "run_blocking_snapshot": 1,
+    "ecommerce": {"result_store_wait": 3, "token_store_contention": 2, "remote_config_cache_read": 2, "run_blocking_snapshot": 1,  # nosec B105
                   "cache_migration": 2, "cache_query": 1, "preferences_commit": 3, "cached_feed_parse": 3,
                   "list_bind_formatting": 2, "image_decode_in_layout": 3, "sponsored_webview_init": 3},
-    "banking": {"result_store_wait": 2, "token_store_contention": 3, "remote_config_cache_read": 2, "run_blocking_snapshot": 2,
+    "banking": {"result_store_wait": 2, "token_store_contention": 3, "remote_config_cache_read": 2, "run_blocking_snapshot": 2,  # nosec B105
                 "cache_migration": 3, "cache_query": 2, "preferences_commit": 2, "cached_feed_parse": 2,
                 "list_bind_formatting": 4, "image_decode_in_layout": 1},
-    "travel": {"result_store_wait": 2, "token_store_contention": 2, "remote_config_cache_read": 2, "run_blocking_snapshot": 2,
+    "travel": {"result_store_wait": 2, "token_store_contention": 2, "remote_config_cache_read": 2, "run_blocking_snapshot": 2,  # nosec B105
                "cache_migration": 2, "cache_query": 2, "preferences_commit": 1, "cached_feed_parse": 3,
-               "list_bind_formatting": 1, "image_decode_in_layout": 2, "boarding_pass_render": 3},
+               "list_bind_formatting": 1, "image_decode_in_layout": 2, "boarding_pass_render": 3},  # nosec B105
 }
 # Per line of business: the cached data each screen reads, its store and the list it renders.
 DOMAIN = {
