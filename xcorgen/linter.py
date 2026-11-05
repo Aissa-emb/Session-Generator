@@ -123,6 +123,23 @@ def _identifier(path):
     return bool(NUMERIC_FIELDS.search(field))
 
 
+_SDK_ARRAY_ID = re.compile(r"\.attributes\[\d+\]\.emb\.soft_navigation\.(span_ids|log_ids)"
+                           r"\.arrayValue\.values\[\d+\]\.stringValue$")
+_HEX_ID = re.compile(r"[0-9a-fA-F]+")
+
+
+def _sdk_array_identifier(path, text):
+    # Web SDK SoftNavigationPerformanceInstrumentation correlates 16-hex span IDs
+    # and 32-hex log.record.uid values. A numeric span ID can pass a card checksum.
+    # Only these exact OTLP attributes/shapes are IDs; arbitrary arrays, malformed
+    # values and the adjacent *_id_types arrays still receive all PII checks.
+    if len(text) not in (16, 32) or not path.endswith('.stringValue'):
+        return False
+    match = _SDK_ARRAY_ID.search(path)
+    return bool(match and len(text) == (16 if match[1] == 'span_ids' else 32)
+                and _HEX_ID.fullmatch(text))
+
+
 # Live streams lint every session, so the per-string checks below are cached. They are exactly the checks
 # above: _identifier only looks at the end of a path (at most a 12-character suffix is stripped, then a
 # match of at most 12 characters is anchored at the end), so the last 24 characters decide it.
@@ -204,7 +221,7 @@ def lint_payloads(deliveries, max_issues=50):
         bad = frozenset() if permitted_provenance(path, text) else _forbidden(text)
         if bad:
             add("error", path, f"Emitted value \"{text[:80]}\" contains {', '.join(sorted(bad))}.", "forbidden_word")
-        if _identifier_tail(path[-IDENTIFIER_TAIL:]):
+        if _identifier_tail(path[-IDENTIFIER_TAIL:]) or _sdk_array_identifier(path, text):
             return
         email, phone, card = _pii(text)
         if email:

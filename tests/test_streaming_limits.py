@@ -5,6 +5,7 @@ import tempfile
 import time
 import unittest
 from xcorgen import linter, spec
+from xcorgen.otlp import attrs
 from xcorgen.emitted import Emitted
 from xcorgen.personas import PersonaPool
 from xcorgen.runner import load_config
@@ -12,6 +13,43 @@ from xcorgen.spec_runner import SpecRun
 
 
 class StreamingLimitsTests(unittest.TestCase):
+    @staticmethod
+    def correlated_logs(attributes):
+        return [{'target': 'otlp', 'kind': 'logs', 'payload': {'resourceLogs': [
+            {'scopeLogs': [{'logRecords': [{'attributes': attrs(attributes)}]}]}]}}]
+
+    def test_sdk_correlation_ids_do_not_skip_sessions_as_card_numbers(self):
+        # A valid 16-hex span ID can also pass the credit-card checksum. The
+        # sustained release load test encountered this in soft-navigation arrays.
+        span_id = '4111111111111111'
+        self.assertTrue(linter._pii(span_id)[2])
+        batch = self.correlated_logs({
+            'emb.soft_navigation.span_ids': [span_id, 'ABCDEF0123456789'],
+            'emb.soft_navigation.log_ids': ['ABCDEF0123456789' * 2]})
+        self.assertEqual(linter.lint_payloads(batch), [])
+        path = '$.attributes[120].emb.soft_navigation.span_ids.arrayValue.values[12000].stringValue'
+        self.assertTrue(linter._sdk_array_identifier(path, span_id))
+
+    def test_sdk_id_array_exception_preserves_privacy_and_realism_checks(self):
+        for key, value in [
+            ('message', ['4111111111111111']),
+            ('customer_ids', ['4111111111111111']),
+            ('custom.emb.soft_navigation.span_ids', ['4111111111111111']),
+            ('emb.soft_navigation.span_id_types', ['4111111111111111']),
+            ('emb.soft_navigation.log_id_types', ['4111111111111111']),
+            ('emb.soft_navigation.span_ids', '4111111111111111'),
+            ('emb.soft_navigation.span_ids', ['4111 1111 1111 1111']),
+            ('emb.soft_navigation.span_ids', ['378282246310005']),
+            ('emb.soft_navigation.log_ids', ['4111111111111111']),
+            ('emb.soft_navigation.span_ids', ['ops@vantra.com']),
+            ('emb.soft_navigation.log_ids', ['555-867-5309']),
+            ('emb.soft_navigation.span_ids', ['078-05-1120'])]:
+            with self.subTest(key=key, value=value):
+                self.assertTrue(any(i['code'] == 'pii' for i in
+                                    linter.lint_payloads(self.correlated_logs({key: value}))))
+        issues = linter.lint_payloads(self.correlated_logs({'emb.soft_navigation.span_ids': ['demo checkout']}))
+        self.assertTrue(any(i['code'] == 'forbidden_word' for i in issues))
+
     def test_runtime_cache_bounds_lookup_only_misses_and_unexpired_fills(self):
         from xcorgen.scenarios import Runtime
         runtime = Runtime()

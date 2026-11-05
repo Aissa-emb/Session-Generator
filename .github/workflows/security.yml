@@ -62,10 +62,16 @@ jobs:
       - name: Server dependencies and generated contract
         run: |
           python3 -m venv .venv
+          .venv/bin/python -m pip install pip==26.3
           .venv/bin/python -m pip install -r server/requirements.txt
           .venv/bin/python tools/generate_models.py --check
           .venv/bin/python -m pip install opentelemetry-proto==1.38.0
           .venv/bin/python tools/check_protobuf.py out/red
+      - name: Python dependency audit
+        run: |
+          python3 -m venv "$RUNNER_TEMP/audit-venv"
+          "$RUNNER_TEMP/audit-venv/bin/python" -m pip install pip==26.3 pip-audit==2.10.1
+          "$RUNNER_TEMP/audit-venv/bin/pip-audit" --strict --path "$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
       - name: API, job and receiver integration tests
         run: .venv/bin/python -m unittest discover -s tests/server -v
       - name: UI contract, build and dependency audit
@@ -86,10 +92,12 @@ jobs:
       - name: Non-root isolated container acceptance
         run: |
           docker build -t session-generator:ci .
-          docker run -d --name session-generator-check --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m --tmpfs /var/lib/session-generator:rw,uid=10001,gid=10001,mode=700,size=512m --cap-drop ALL --security-opt no-new-privileges session-generator:ci
-          trap 'docker rm -f session-generator-check' EXIT
+          docker run -d --name session-generator-check --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m --tmpfs /var/lib/session-generator:rw,uid=10001,gid=10001,mode=700,size=1g --cap-drop ALL --security-opt no-new-privileges session-generator:ci
+          trap 'docker logs session-generator-check; docker rm -f session-generator-check' EXIT
+          ready=false
           for attempt in {1..30}; do
-            if docker exec session-generator-check python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then break; fi
+            if docker exec session-generator-check python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then ready=true; break; fi
             sleep 1
           done
+          test "$ready" = true
           docker exec session-generator-check python -m tools.container_smoke
