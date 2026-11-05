@@ -106,7 +106,7 @@ def for_spec(store, spec, name):
         try:
             row = store.get('settings', 'credential:' + id)
         except KeyError:
-            raise SecurityError('The saved destination credential was removed. Select and save a destination again.') from None
+            raise SecurityError('This saved key was removed. Select another key in its field and save again.') from None
         if row['kind'] != name:
             raise SecurityError('The saved credential has the wrong type.')
         return read(row['ref'])

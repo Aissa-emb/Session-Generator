@@ -1,6 +1,14 @@
 import { test, expect, Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+// Most smoke cases exercise a fresh form; persistence is covered in destinations.spec.ts.
+test.beforeEach(async ({page}) => {
+  await page.route("**/api/destinations", async route => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const response = await route.fetch();
+    return route.fulfill({response, json:{...(await response.json()), selected_id:null}});
+  });
+});
 async function capture(page: Page, name: string) {
   if (!process.env.QA_SCREENSHOTS_DIR) return;
   await mkdir(process.env.QA_SCREENSHOTS_DIR, { recursive: true });
@@ -961,21 +969,20 @@ test("continuous duration must be finite and app token is never part of the save
 test("web apps accept a Symbol Upload token that is saved server-side and enables source maps", async ({
   page,
 }) => {
-  let configured = false;
   const saved: string[] = [];
   await page.route("**/api/settings", (r) =>
     r.fulfill({
       json: {
-        secrets: { chronosphere: false, symbol_upload: configured },
+        secrets: { chronosphere: false, symbol_upload: false },
         defaults: {},
       },
     }),
   );
-  await page.route("**/api/settings/secrets/symbol_upload", (r) => {
-    expect(r.request().method()).toBe("PUT");
-    saved.push(r.request().postDataJSON().value);
-    configured = true;
-    return r.fulfill({ json: { name: "symbol_upload", configured: true } });
+  page.on("request", r => {
+    if (r.url().includes("/api/destinations") && ["POST", "PUT"].includes(r.method())) {
+      const value = r.postDataJSON()?.credentials?.symbol_upload;
+      if (value) saved.push(value);
+    }
   });
   await page.goto("/");
   await expect(
@@ -1022,7 +1029,7 @@ test("web apps accept a Symbol Upload token that is saved server-side and enable
   ).toBeVisible();
 });
 
-test("configured source maps upload automatically before live start and failures never start a run", async ({
+test("saved source maps upload automatically before live start and failures never start a run", async ({
   page,
 }) => {
   let failUpload = true;
@@ -1030,7 +1037,7 @@ test("configured source maps upload automatically before live start and failures
   await page.route("**/api/settings", (r) =>
     r.fulfill({
       json: {
-        secrets: { chronosphere: false, symbol_upload: true },
+        secrets: { chronosphere: false, symbol_upload: false },
         defaults: {},
       },
     }),
@@ -1068,6 +1075,7 @@ test("configured source maps upload automatically before live start and failures
   await expect(
     page.getByLabel("Embrace Symbol Upload token", { exact: true }),
   ).toHaveCount(0);
+  await page.getByLabel("Symbol Upload token", {exact:true}).fill("local-saved-symbol-0987");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await preview(page);
   await page

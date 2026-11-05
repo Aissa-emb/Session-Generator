@@ -98,6 +98,44 @@ class SavedDestinationsTests(unittest.TestCase):
         self.assertEqual(set(Path(self.tmp.name + '/vault').glob('*')), files)
         self.assertEqual(self.client.get('/api/destinations').json()['destinations'][0], a)
 
+    def test_field_selection_copies_keys_without_changing_past_runs_or_borrowing_defaults(self):
+        a = self.create()
+        b = self.create(dict(self.body, name='Other', tenant='tenant-two', credentials={'chronosphere': 'other-private-9876'}))
+        old = self.bound_spec(a)
+        sources = {'chronosphere': b['credentials']['chronosphere']['id'], 'symbol_upload': None}
+        update = dict(self.body, credentials={}, source_credentials=sources, use_legacy=True, expected_version=1)
+        with patch('server.secrets.get', return_value='wrong-global-key') as legacy:
+            response = self.client.put('/api/destinations/' + a['id'], json=update)
+            self.assertEqual(response.status_code, 200, response.text)
+            legacy.assert_not_called()
+        changed = response.json()
+        self.assertNotEqual(changed['credentials']['chronosphere']['id'], sources['chronosphere'])
+        self.assertIsNone(changed['credentials']['symbol_upload']['id'])
+        self.assertEqual(secrets.for_spec(self.store, old, 'chronosphere'), 'local-private-chron-1234')
+        self.assertEqual(self.client.delete('/api/destinations/' + b['id']).status_code, 200)
+        self.assertEqual(secrets.for_spec(self.store, self.bound_spec(changed), 'chronosphere'), 'other-private-9876')
+        # Saving unchanged references does not keep creating vault records.
+        sources = {k: v['id'] for k, v in changed['credentials'].items()}
+        with patch('server.secrets.write') as write:
+            response = self.client.put('/api/destinations/' + a['id'], json=dict(update, expected_version=2, source_credentials=sources))
+            self.assertEqual(response.status_code, 200, response.text)
+            write.assert_not_called()
+
+    def test_partial_field_selection_can_preserve_an_unmodified_legacy_key(self):
+        secrets.save(self.store, 'symbol_upload', 'legacy-symbol-1234')
+        row = self.create(dict(self.body, credentials={}, use_legacy=True, source_credentials={'chronosphere': None}))
+        self.assertIsNone(secrets.for_spec(self.store, self.bound_spec(row), 'chronosphere'))
+        self.assertEqual(secrets.for_spec(self.store, self.bound_spec(row), 'symbol_upload'), 'legacy-symbol-1234')
+
+    def test_fresh_form_does_not_silently_reuse_an_existing_combinations_keys(self):
+        row = self.create()
+        response = self.client.put('/api/destinations/' + row['id'], json=dict(self.body,
+            credentials={}, use_legacy=True, expected_version=1))
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNone(response.json()['credentials']['symbol_upload']['id'])
+        self.assertIsNone(response.json()['credentials']['chronosphere']['id'])
+        self.assertEqual(secrets.for_spec(self.store, self.bound_spec(row), 'symbol_upload'), 'local-private-symbol-5678')
+
     def test_removal_blocks_active_runs_then_deletes_all_rotations(self):
         row = self.create()
         s = self.bound_spec(row)
