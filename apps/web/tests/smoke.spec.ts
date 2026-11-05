@@ -285,7 +285,9 @@ test("runs longer than a day send steady shares instead of timed patterns", asyn
 
 test("bad release and flaky network batches stay inside the five-minute window", async ({page}) => {
   await connect(page, ["android", "web"]);
-  for (const [profile, faults] of [["Bad release", 4], ["Flaky network", 2]] as const) {
+  // Bad release ramps crashes, exceptions (Android and web), freezes, INP and CLS;
+  // Flaky network repeats network failures (Android and web) and web TTFB.
+  for (const [profile, faults] of [["Bad release", 6], ["Flaky network", 3]] as const) {
     await pick(page, profile);
     const before = Date.now();
     const response = page.waitForResponse(r=>r.url().endsWith("/api/preview") && r.request().method()==="POST");
@@ -308,9 +310,9 @@ test("bad release and flaky network batches stay inside the five-minute window",
     await expect(page.getByText("Passed", {exact:true})).toBeVisible({timeout:45000});
     await page.getByRole("button", {name:"Back",exact:true}).click();
   }
-  await expect(page.getByText("Also: Constrained network", {exact:false})).toBeVisible();
+  await expect(page.getByText("Also: Slow network", {exact:false})).toBeVisible();
   await pick(page, "Healthy");
-  await expect(page.getByText("Also: Constrained network", {exact:false})).toHaveCount(0);
+  await expect(page.getByText("Also: Slow network", {exact:false})).toHaveCount(0);
 });
 
 test("varied visitor model reaches preview with native lifecycle controls", async ({page}, testInfo) => {
