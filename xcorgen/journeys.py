@@ -1,4 +1,5 @@
 """Business-state-driven journeys shared by Android and web capture adapters."""
+from .business_spans import Phases
 from .client_faults import blockage, fault, followup
 from .milestones import mark
 from .util import lat
@@ -23,11 +24,17 @@ def traced_attempt(s, key, params):
         return result
     started = s.t
     with s.flow(name) as task:
+        phases = Phases(s, key, task)
+        phases.before()
         result = s.api(key, **params)
         slow = getattr(s.plan, "slow_root_span", None)
-        if slow and slow["span"] == name:
-            # Client-side work (parsing, mapping, rendering) holds the operation open.
-            s.t = max(s.t, started + lat(slow["p50_ms"], slow["p95_ms"], s.rng))
+        target = started + lat(slow["p50_ms"], slow["p95_ms"], s.rng) if slow and slow["span"] == name else None
+        if phases.plan:
+            # Client-side work (parsing, mapping, rendering) holds a slow operation open in its heaviest step.
+            extra = max(0.0, target - result.end - 40) if target and result.ok else 0.0
+            phases.after(result, extra)
+        if target:
+            s.t = max(s.t, target)
         task["failed"] = not result.ok
         task["attributes"] = {"app.operation": key, "http.response.status_code": result.status,
                               "app.fallback.used": any(result.data.get(k) for k in ("fallback", "snapshot", "cached", "partial"))}

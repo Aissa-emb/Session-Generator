@@ -95,29 +95,27 @@ def followup(s):
 def blockage(s):
     mark(s, "main_thread_work_started")
     spec = getattr(s.plan, "blockage_details", None) or {}
-    cause = spec.get("cause") or s.plan.settings.get("blockage_cause") or s.rng.choice(("migration", "worker_lock", "layout"))
+    family = spec.get("cause") or s.plan.settings.get("blockage_cause") or s.rng.choice(("migration", "worker_lock", "layout"))
     duration = s.rng.uniform(spec.get("min_ms", 6000), spec.get("max_ms", 12000))
     start = s.t
-    package = s.app["package"] if hasattr(s, "app") else s.profile.android["package"]
-    frames = {
-        "migration": ["android.database.sqlite.SQLiteConnection.nativeExecute(Native Method)",
-                      f"{package}.{s.profile.key}.LocalCache.migrate(LocalCache.kt:71)"],
-        "worker_lock": ["java.lang.Object.wait(Native Method)",
-                        f"{package}.{s.profile.key}.ResultStore.awaitRefresh(ResultStore.kt:94)"],
-        "layout": [f"{package}.{s.profile.key}.ResultAdapter.bindItems(ResultAdapter.kt:138)",
-                   "android.view.ViewRootImpl.performTraversals(ViewRootImpl.java:4019)"]}[cause]
-    if hasattr(s,"native_blockage"):
-        s.native_blockage(duration)
+    story = cause = family
+    if hasattr(s, "native_blockage"):
+        story = s.native_blockage(duration, family) or family
     elif hasattr(s, "_crash"):
         from .android_session import kv, nanos
-        events = [{"name": "perf.thread_blockage_sample", "time_unix_nano": nanos(start + offset),
-                   "attributes": kv({"emb.type": "perf.thread_blockage_sample", "sample_code": 0,
-                       "sample_overhead": 1_000_000, "jvm.thread.state": "WAITING" if cause == "worker_lock" else "RUNNABLE",
-                       "thread_priority": 5, "frame_count": len(frames), "exception.stacktrace": "\n".join(frames)})}
-                  for offset in range(500, int(duration), 500)]
-        s._span("emb-thread-blockage", start, start + duration,
-                {"emb.type": "perf.thread_blockage", "interval_code": 0,
-                 "last_known_time_unix_nano": nanos(start + duration)}, events=events)
+        from . import anr_stacks
+        story = anr_stacks.choose_story(family, s.profile.key, s.rng)
+        cause = family if family in anr_stacks.FAMILIES else anr_stacks.family_of(story)
+        screen = anr_stacks.Screen(s.profile.key, (s.screen or {}).get("name"), s.persona["device_id"])
+        frames = anr_stacks.Frames(s.persona.get("os_code", "35"), s.persona.get("manufacturer"), s.app["package"])
+        # The SDK clock reports whole milliseconds; the interval ends when the queued heartbeat is handled.
+        begin, end = int(start), int(start + duration) + s.rng.randint(1, 12)
+        samples = anr_stacks.blockage_samples(s.rng, story, screen, frames, begin, end)
+        events = [{"name": "perf.thread_blockage_sample", "time_unix_nano": nanos(t), "attributes": kv(a)}
+                  for t, a in samples]
+        s._span("emb-thread-blockage", begin, end, {"emb.type": "perf.thread_blockage", "interval_code": 0},
+                events=events)
+        duration = end - start
     elif hasattr(s, "long_task"):
         s.long_task(duration)
     else:
@@ -126,5 +124,5 @@ def blockage(s):
             s.t += duration
         s.t = start
     s.t = start + duration
-    s.blockage_evidence = {"cause": cause, "start": start, "end": s.t, "os_confirmed": False}
+    s.blockage_evidence = {"cause": cause, "story": story, "start": start, "end": s.t, "os_confirmed": False}
     mark(s, "main_thread_responsive")

@@ -253,9 +253,15 @@ class AndroidSession:
         self.part_number += 1
         cold = index == 1 and (self.forced_cold_start if hasattr(self, 'forced_cold_start') else
             self.rng.random() < 0.78 or bool(getattr(getattr(self, "plan", None), "slow_startup", None)))
+        previous = self.part
         self.part = Part(index, self.part_number, self.t, start_type, cold, self.rng)
         if index == 1:
             self._startup(cold)
+        else:
+            self._foreground_return(self.t - (previous.end or self.t))
+
+    def _foreground_return(self, background_ms):
+        self._ui_load(background_ms)
 
     def _end_part(self, end_type="state", final=None):
         part = self.part
@@ -345,58 +351,143 @@ class AndroidSession:
 
     # --- startup -----------------------------------------------------------------------
 
-    def _startup(self, cold):
-        rng, mid = self.rng, self.persona["model"]
-        slow = 1.0 if any(x in mid for x in ("SM-S9", "Pixel 9", "Pixel 10", "SM-F9", "CPH")) else 1.6
+    def _cpu_slowdown(self):
         if self.persona.get("population_model"):
-            slow = self.persona["cpu_factor"]
-        t0 = self.t
-        tid, root = hex_id(16, self.rng), hex_id(8, self.rng)
-        act = self.app["activity"]
-        root_attrs = {"emb.type": "perf", "emb.startup_activity": act}
-        if int(self.persona["os_version"]) >= 15:
-            root_attrs["emb.startup_launch_reason"] = "launcher"
+            return self.persona["cpu_factor"]
+        mid = self.persona["model"]
+        return 1.0 if any(x in mid for x in ("SM-S9", "Pixel 9", "Pixel 10", "SM-F9", "CPH")) else 1.6
+
+    def _local_activity_name(self):
+        """Activity.getLocalClassName(): the class name without the application package prefix."""
+        act, pkg = self.app["activity"], self.app["package"]
+        return act[len(pkg) + 1:] if act.startswith(pkg + ".") else act
+
+    def _launch_reason(self, cold):
+        """ProcessInfoImpl (API 35+): the ApplicationStartInfo reason that created this process."""
+        if int(self.persona.get("os_code") or 0) < 35:
+            return None
+        if not cold:
+            # A warm start reuses a process the system created earlier without UI.
+            return weighted([("job", 45), ("push", 30), ("broadcast", 15), ("service", 10)], self.rng)
+        entry = self.properties.get("entry_point")
+        if entry == "push_notification":
+            return "push"
+        if entry in ("deep_link", "widget"):
+            return "start_activity"
+        return weighted([("launcher", 88), ("launcher_recents", 12)], self.rng)
+
+    def _sdk_init_attributes(self, sdk_ms):
+        """embrace-init attributes in 9.3.1: section durations, init resource usage, init environment."""
+        rng, ms = self.rng, max(12, int(sdk_ms))
+        modules = int(ms * rng.uniform(.38, .5))
+        sections = {"modules-init": modules, "persisted-config-load": max(1, int(modules * rng.uniform(.06, .14))),
+                    "prefs-first-read": max(1, int(modules * rng.uniform(.08, .22))),
+                    "span-service-init": max(1, int(modules * rng.uniform(.05, .12))),
+                    "otel-tracer-init": max(1, int(modules * rng.uniform(.04, .1))),
+                    "essential-service-init": max(1, int(modules * rng.uniform(.08, .18))),
+                    "delivery-init": max(1, int(modules * rng.uniform(.04, .1))),
+                    "payload-source-init": max(1, int(modules * rng.uniform(.03, .08))),
+                    "post-init": int(ms * rng.uniform(.04, .1)), "load-instrumentation": int(ms * rng.uniform(.14, .24)),
+                    "post-services-setup": int(ms * rng.uniform(.08, .16))}
+        a = {f"{k}-duration-ms": v for k, v in sections.items()}
+        a.update({"init-cpu-pct": rng.randint(52, 96), "init-run-delay-pct": rng.randint(2, 31),
+                  "init-disk-read-kb": rng.randint(36, 940), "init-gc-count": rng.choice((0, 0, 0, 1, 1, 2))})
+        if rng.random() < .05:
+            a["thermal-status"] = rng.choice(("light", "light", "moderate"))
+        a["thermal-headroom-pct"] = "-2" if rng.random() < .35 else rng.randint(18, 62)
+        days_installed = self.persona.setdefault("install_age_days", rng.randint(3, 900))
+        days_updated = min(days_installed, self.persona.get("version_starts", 1) * rng.uniform(.2, 1.4))
+        a.update({"seconds-since-install": int(days_installed * 86400 + rng.randint(0, 86399)),
+                  "seconds-since-update": int(days_updated * 86400 + rng.randint(0, 3599)),
+                  "mem-available-pct": rng.randint(18, 61)})
+        if a["mem-available-pct"] < 22 and rng.random() < .4:
+            a["low-memory"] = "true"
+        recent = self.persona.get("version_starts", 1) <= 2
+        a.update({"seconds-since-boot": rng.randint(1800, 1_900_000), "prefs-file-bytes": rng.randint(1800, 46000),
+                  "art-compiler-filter": "verify" if recent and rng.random() < .55 else "speed-profile"})
+        a["app-image-at-init"] = a["art-compiler-filter"] == "speed-profile" and rng.random() < .9
+        return a
+
+    def _startup(self, cold):
+        """AppStartupTraceEmitter (9.3.1). Cold: process-init [process start, Application.onCreate end] with
+        embrace-init inside it, activity-init-delay [onCreate end, first activity], activity-init, activity-render
+        (API 29-30 and 33+; activity-first-draw on 31-32). Warm traces start at the first activity and carry only
+        activity-init and activity-render. Times come from the SDK clock in whole milliseconds."""
+        rng, slow = self.rng, self._cpu_slowdown()
+        t0 = int(self.t)
+        tid, root = hex_id(16, rng), hex_id(8, rng)
+        api = int(self.persona.get("os_code") or 35)
+        render_name = "emb-activity-first-draw" if api in (31, 32) else "emb-activity-render"
+        create = lat(90, 260, rng) * slow
+        render = lat(120, 420, rng) * slow
         if cold:
-            proc = lat(70, 220, rng) * slow
-            init = lat(55, 140, rng) * slow
-            gap = lat(40, 160, rng) * slow
-            create = lat(90, 260, rng) * slow
-            render = lat(120, 420, rng) * slow
+            fork = lat(45, 160, rng) * slow       # zygote specialization, bindApplication, content providers
+            pre_sdk = lat(3, 22, rng) * slow      # Application.onCreate work before Embrace.start
+            sdk = lat(28, 70, rng) * slow         # Embrace.start
+            post_sdk = lat(30, 150, rng) * slow   # dependency graph, remote config, work scheduling
+            delay = lat(8, 60, rng) * slow
             regression = getattr(getattr(self, "plan", None), "slow_startup", None)
             if regression:
                 # The regressed phase absorbs the extra time: application init (process start and
                 # Application.onCreate), SDK init, or first render of the launch activity.
                 total = rng.uniform(regression.get("min_ms", 4200), regression.get("max_ms", 7500))
-                extra = max(0.0, total - (proc + init + gap + create + render))
+                extra = max(0.0, total - (fork + pre_sdk + sdk + post_sdk + delay + create + render))
                 phase = regression.get("phase", "application_init")
                 if phase == "sdk_init":
-                    init += extra
+                    sdk += extra
                 elif phase == "first_render":
                     render += extra * .7
                     create += extra * .3
                 else:
-                    proc += extra
-            t1, t2, t3, t4 = t0 + proc, t0 + proc + init, t0 + proc + init + gap, t0 + proc + init + gap + create
-            end = t4 + render
-            self._span("emb-process-init", t0, t1, {"emb.type": "perf"}, trace_id=tid, parent=root)
-            self._span("emb-embrace-init", t1, t2, {"emb.type": "perf",
-                                                   "emb.app.version_startup_counter": self.persona["version_starts"]},
-                       trace_id=tid, parent=root)
-            self._span("emb-activity-init-delay", t2, t3, {"emb.type": "perf"}, trace_id=tid, parent=root)
-            self._span("emb-activity-init", t3, t4, {"emb.type": "perf"}, trace_id=tid, parent=root)
-            self._span("emb-activity-render", t4, end, {"emb.type": "perf"}, trace_id=tid, parent=root)
-            self._span("emb-app-startup-cold", t0, end, root_attrs, trace_id=tid, span_id=root)
+                    post_sdk += extra
+            sdk_start = round(t0 + fork + pre_sdk)
+            sdk_end = round(sdk_start + sdk)
+            app_end = round(sdk_end + post_sdk)
+            act_start = round(app_end + delay)
         else:
-            gap = lat(30, 120, rng) * slow
-            init = lat(60, 200, rng) * slow
-            end = t0 + gap + init + lat(80, 260, rng) * slow
-            self._span("emb-activity-init-delay", t0, t0 + gap, {"emb.type": "perf"}, trace_id=tid, parent=root)
-            self._span("emb-activity-init", t0 + gap, t0 + gap + init, {"emb.type": "perf"}, trace_id=tid, parent=root)
-            self._span("emb-activity-render", t0 + gap + init, end, {"emb.type": "perf"}, trace_id=tid, parent=root)
-            self._span("emb-app-startup-warm", t0, end, root_attrs, trace_id=tid, span_id=root)
+            act_start = t0
+        act_end = round(act_start + create)
+        end = round(act_end + render)
+        root_attrs = {"emb.type": "perf", "emb.startup_activity": self._local_activity_name(),
+                      "emb.startup_launch_reason": self._launch_reason(cold)}
+        name = "emb-app-startup-cold" if cold else "emb-app-startup-warm"
+        self._span(name, t0, end, root_attrs, trace_id=tid, span_id=root)
+        if cold:
+            self._span("emb-process-init", t0, app_end, {"emb.type": "perf"}, trace_id=tid, parent=root)
+            init_attrs = {"emb.type": "perf", "emb.app.version_startup_counter": self.persona["version_starts"]}
+            init_attrs.update(self._sdk_init_attributes(sdk_end - sdk_start))
+            self._span("emb-embrace-init", sdk_start, sdk_end, init_attrs, trace_id=tid, parent=root)
+            self._span("emb-activity-init-delay", app_end, act_start, {"emb.type": "perf"}, trace_id=tid, parent=root)
+        self._span("emb-activity-init", act_start, act_end, {"emb.type": "perf"}, trace_id=tid, parent=root)
+        self._span(render_name, act_end, end, {"emb.type": "perf"}, trace_id=tid, parent=root)
         self.startup_ms = int(end - t0)
-        self.sdk_startup = int(lat(28, 70, rng) * slow)
+        self.sdk_startup = int(sdk_end - sdk_start) if cold else int(lat(28, 70, rng) * slow)
         self.t = end + rng.uniform(30, 200)
+
+    def _ui_load(self, after_background_ms):
+        """UiLoadTraceEmitter (9.3.1, trackRender off): returning to the app restarts the existing activity (hot);
+        an activity the system destroyed in the background is recreated (cold). The trace ends at
+        onActivityPostResumed; lifecycle stages are children."""
+        rng, slow = self.rng, self._cpu_slowdown()
+        budget = slow > 1.3
+        recreated = after_background_ms > 20000 and rng.random() < (.3 if budget else .14)
+        act = self._local_activity_name()
+        tid, root = hex_id(16, rng), hex_id(8, rng)
+        t = int(self.t)
+        stages = []
+        if recreated:
+            stages.append(("create", t, round(t + lat(60, 210, rng) * slow)))
+            t = stages[-1][2] + rng.randint(0, 2)
+        stages.append(("start", t, round(t + lat(4, 36, rng) * slow)))
+        t = stages[-1][2] + rng.randint(0, 2)
+        stages.append(("resume", t, round(t + lat(3, 28, rng) * slow)))
+        end = stages[-1][2]
+        kind = "cold" if recreated else "hot"
+        for stage, start, stop in stages:
+            self._span(f"emb-{act}-{stage}", start, stop, {"emb.type": "perf"}, trace_id=tid, parent=root)
+        self._span(f"emb-{act}-{kind}-time-to-initial-display", stages[0][1], end, {"emb.type": "perf.ui_load"},
+                   trace_id=tid, span_id=root)
+        self.t = end + rng.uniform(4, 30)
 
     # --- screens -----------------------------------------------------------------------
 
@@ -545,7 +636,7 @@ class AndroidSession:
     @contextmanager
     def flow(self, name, **attrs):
         """Custom span (Embrace.startSpan) around a user-facing operation."""
-        holder = {"failed": False}
+        holder = {"failed": False, "trace_id": hex_id(16, self.rng), "span_id": hex_id(8, self.rng)}
         start = self.t
         yield holder
         self._use("start_span")
@@ -554,7 +645,18 @@ class AndroidSession:
         if holder["failed"]:
             a["emb.error_code"] = "failure"
         a["emb.type"] = "perf"
-        self._span(name, start, self.t, a, status="Error" if holder["failed"] else "Unset")
+        self._span(name, start, self.t, a, status="Error" if holder["failed"] else "Unset",
+                   trace_id=holder["trace_id"], span_id=holder["span_id"])
+
+    def child_span(self, parent, name, start, end, failed=False, attrs=None):
+        """Embrace.startSpan(name, parent): app-defined work inside a business span, in the parent's trace."""
+        self._use("start_span")
+        a = dict(attrs or {})
+        if failed:
+            a["emb.error_code"] = "failure"
+        a["emb.type"] = "perf"
+        self._span(name, start, end, a, status="Error" if failed else "Unset",
+                   trace_id=parent["trace_id"], parent=parent["span_id"])
 
     # --- network --------------------------------------------------------------------------------
 

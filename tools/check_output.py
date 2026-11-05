@@ -153,6 +153,171 @@ def check_envelope(doc, problem, client_spans, devices):
                 problem(f"crash log keys not in the SDK golden file: {sorted(extra)}")
 
 
+MS = 1_000_000
+JAVA_FRAME = re.compile(r"^[\w$.<>-]+\((Native Method|Unknown Source(:\d+)?|[\w$.@:+-]+(:\d+)?)\)$")
+THREAD_STATES = {"NEW", "RUNNABLE", "BLOCKED", "WAITING", "TIMED_WAITING", "TERMINATED"}
+ANDROID_BLOCKAGE_KEYS = {"emb.type", "interval_code", "last_known_time_unix_nano", *SPAN_COMMON, "user.id"}
+ANDROID_SAMPLE_KEYS = {"emb.type", "sample_overhead", "sample_code"}
+ANDROID_THREAD_KEYS = {"jvm.thread.state", "thread_priority", "frame_count", "exception.stacktrace"}
+LAUNCH_REASONS = {"alarm", "backup", "boot_complete", "broadcast", "content_provider", "job", "launcher",
+                  "launcher_recents", "other", "push", "service", "start_activity"}
+UI_LOAD = re.compile(r"^emb-(.+)-(cold|hot)-time-to-initial-display$")
+IOS_STARTUP_CHILDREN = {"emb-app-pre-main-init", "emb-app-first-frame-rendered", "emb-app-startup-app-init",
+                        "emb-sdk-setup", "emb-sdk-start"}
+IOS_VIEW_CHILDREN = ["emb-view-did-load", "emb-view-will-appear", "emb-view-is-appearing", "emb-view-did-appear"]
+IOS_FRAME_KEYS = {"a", "m", "o", "p", "s", "so", "u"}
+
+
+def _attrs(s):
+    return {x["key"]: x["value"] for x in s["attributes"]}
+
+
+def _root(s):
+    return s.get("parent_span_id") in (None, "", "0000000000000000")
+
+
+def check_android_blockage(s, a, problem):
+    """ThreadBlockageOtelMapper / ThreadBlockageSampler (9.3.1) shapes and sampling rules."""
+    if s["name"] != "emb-thread-blockage" or not _root(s):
+        problem("thread blockage span must be the root span emb-thread-blockage")
+    if set(a) - ANDROID_BLOCKAGE_KEYS or a.get("interval_code") not in ("0", "1"):
+        problem(f"thread blockage span keys: {sorted(set(a) - ANDROID_BLOCKAGE_KEYS)}")
+    start, end = s["start_time_unix_nano"], s["end_time_unix_nano"]
+    if (end - start) % MS:
+        problem("thread blockage interval must be whole milliseconds")
+    previous, last_t, stacks = None, None, 0
+    for n, e in enumerate(s["events"]):
+        ea = _attrs(e)
+        if e["name"] != "perf.thread_blockage_sample" or ea.get("emb.type") != "perf.thread_blockage_sample":
+            problem("thread blockage sample event name/type")
+        keys = set(ea)
+        thread = keys & ANDROID_THREAD_KEYS
+        if keys - ANDROID_SAMPLE_KEYS - ANDROID_THREAD_KEYS or not ANDROID_SAMPLE_KEYS <= keys or thread not in (set(), ANDROID_THREAD_KEYS):
+            problem("thread blockage sample keys")
+        if (e["time_unix_nano"] - start) % MS or int(ea.get("sample_overhead", "0")) % MS:
+            problem("thread blockage sample times and overhead are whole milliseconds")
+        if not start + 1000 * MS < e["time_unix_nano"] <= end:
+            problem("thread blockage samples start after the 1 s threshold and stay inside the interval")
+        if last_t is not None and e["time_unix_nano"] - last_t < 50 * MS:
+            problem("thread blockage samples closer than half the 100 ms interval")
+        last_t = e["time_unix_nano"]
+        code = ea.get("sample_code")
+        if code != ("1" if n >= 80 else "0"):
+            problem("sample_code is 0 for the first 80 samples and 1 after the stack limit")
+        if not thread:
+            continue
+        if code != "0":
+            problem("samples past the stack limit carry no thread data")
+        lines = ea["exception.stacktrace"].split("\n")
+        if ea["jvm.thread.state"] not in THREAD_STATES or ea["thread_priority"] != "5":
+            problem("main thread sample state/priority")
+        if len(lines) > 200 or int(ea["frame_count"]) < len(lines) or not all(JAVA_FRAME.match(x) for x in lines):
+            problem("sample stack lines must be StackTraceElement strings within the 200-frame limit")
+        if not lines[-1].startswith(("com.android.internal.os.ZygoteInit.main(", "android.app.ActivityThread.main(")):
+            problem("main thread stack must end at the process entry point")
+        current = (ea["jvm.thread.state"], ea["exception.stacktrace"])
+        if current == previous:
+            problem("a stack equal to the previous sample is omitted by the SDK")
+        previous, stacks = current, stacks + 1
+    if s["events"] and not stacks:
+        problem("thread blockage interval without any sampled stack")
+
+
+def check_trace_tree(spans, problem, platform):
+    """Startup, UI load and custom child spans: parents in the same payload, children inside their parent."""
+    by_id = {s["span_id"]: s for s in spans}
+    children = defaultdict(list)
+    for s in spans:
+        if not _root(s):
+            parent = by_id.get(s["parent_span_id"])
+            if parent is None:
+                if _attrs(s).get("emb.type", "").startswith(("perf", "sys.startup")):
+                    problem(f"child span without its parent in the payload: {s['name']}")
+                continue
+            if parent["trace_id"] != s["trace_id"]:
+                problem("child span in a different trace than its parent")
+            if not parent["start_time_unix_nano"] <= s["start_time_unix_nano"] <= s["end_time_unix_nano"] <= parent["end_time_unix_nano"]:
+                problem(f"child span outside its parent: {parent['name']} > {s['name']}")
+            children[parent["span_id"]].append(s)
+    for s in spans:
+        a, kids = _attrs(s), children[s["span_id"]]
+        names = {k["name"] for k in kids}
+        if platform == "android" and s["name"] in ("emb-app-startup-cold", "emb-app-startup-warm"):
+            render = {"emb-activity-render", "emb-activity-first-draw"} & names
+            want = {"emb-activity-init"} | render
+            if s["name"].endswith("cold"):
+                want |= {"emb-process-init", "emb-embrace-init", "emb-activity-init-delay"}
+            if a.get("emb.type") != "perf" or names != want or len(render) != 1 or not a.get("emb.startup_activity"):
+                problem(f"{s['name']} children/attributes do not match AppStartupTraceEmitter")
+            if a.get("emb.startup_launch_reason") not in (None, *LAUNCH_REASONS):
+                problem("emb.startup_launch_reason value")
+            k = {x["name"]: x for x in kids}
+            last = k.get("emb-activity-render") or k.get("emb-activity-first-draw")
+            if last and last["end_time_unix_nano"] != s["end_time_unix_nano"]:
+                problem("startup trace ends with the first frame")
+            if "emb-process-init" in k:
+                p, init, delay = k["emb-process-init"], k.get("emb-embrace-init"), k.get("emb-activity-init-delay")
+                if p["start_time_unix_nano"] != s["start_time_unix_nano"] or (delay and delay["start_time_unix_nano"] != p["end_time_unix_nano"]):
+                    problem("process-init starts the trace and activity-init-delay follows Application.onCreate")
+                if init and not p["start_time_unix_nano"] <= init["start_time_unix_nano"] <= init["end_time_unix_nano"] <= p["end_time_unix_nano"]:
+                    problem("embrace-init runs inside Application.onCreate")
+        m = UI_LOAD.match(s["name"]) if platform == "android" else None
+        if m:
+            act, kind = m.groups()
+            want = {f"emb-{act}-start", f"emb-{act}-resume"} | ({f"emb-{act}-create"} if kind == "cold" else set())
+            if a.get("emb.type") != "perf.ui_load" or names != want or not _root(s):
+                problem("UI load trace children/type do not match UiLoadTraceEmitter")
+        if platform == "ios" and s["name"] in ("emb-app-startup-cold", "emb-app-startup-warm"):
+            pre = a.get("isPrewarmed")
+            want = IOS_STARTUP_CHILDREN - ({"emb-app-pre-main-init"} if pre == "true" else set())
+            if a.get("emb.type") != "sys.startup" or pre not in ("true", "false") or names != want:
+                problem("iOS startup trace children/attributes do not match StartupInstrumentation")
+            if any(_attrs(x).get("isPrewarmed") != pre or _attrs(x).get("emb.type") != "sys.startup" for x in kids):
+                problem("iOS startup children carry the root's isPrewarmed and sys.startup")
+        if platform == "ios" and s["name"].endswith("-time-to-first-render"):
+            ordered = [k["name"] for k in sorted(kids, key=lambda x: x["start_time_unix_nano"])]
+            if a.get("emb.type") != "perf.ui_load" or ordered != IOS_VIEW_CHILDREN or not a.get("view.name"):
+                problem("iOS view load trace does not match UIViewControllerHandler")
+        if platform == "ios" and s["name"] in ("emb-view-did-load",) and _root(s):
+            problem("emb-view-did-load is a child of the time-to-first-render span")
+
+
+def check_ios_blockage(s, a, problem):
+    """HangCaptureService (6.21.0): one span, at most one sample with base64 JSON frames."""
+    import base64
+    if set(a) - {"emb.type", "last_known_time_unix_nano", "interval_code", "thread_priority", "session.id", "user.id"}:
+        problem("iOS hang span keys")
+    if a.get("interval_code") != "0" or a.get("thread_priority") != "0" or int(a.get("last_known_time_unix_nano", 0)) != s["start_time_unix_nano"]:
+        problem("iOS hang span attributes")
+    if len(s["events"]) > 1:
+        problem("iOS hang spans carry at most one sample")
+    for e in s["events"]:
+        ea = _attrs(e)
+        if e["name"] != "thread_blockage_sample" or set(ea) != {"emb.type", "sample_overhead", "frame_count", "emb.stacktrace.ios"}:
+            problem("iOS hang sample name/keys")
+            continue
+        frames = json.loads(base64.b64decode(ea["emb.stacktrace.ios"]))
+        if int(ea["frame_count"]) != len(frames) or e["time_unix_nano"] != s["start_time_unix_nano"]:
+            problem("iOS hang sample frame count/time")
+        for f in frames:
+            if set(f) != IOS_FRAME_KEYS or not re.fullmatch(r"0x[0-9a-f]{16}", f["a"]) or f["so"] > f["o"] or f["m"] != f["p"]:
+                problem("iOS hang frame shape")
+                break
+
+
+def check_native_traces(doc, problem):
+    p = doc["payload"]
+    if p.get("type") != "spans":
+        return
+    platform = "ios" if p.get("resource", {}).get("sdk_platform") == "ios" else "android"
+    spans = p["data"].get("spans", [])
+    for s in spans:
+        a = _attrs(s)
+        if a.get("emb.type") == "perf.thread_blockage":
+            (check_ios_blockage if platform == "ios" else check_android_blockage)(s, a, problem)
+    check_trace_tree(spans, problem, platform)
+
+
 def vtype(v):
     return next(iter(v)) if v else "empty"
 
@@ -219,6 +384,7 @@ def main(d):
                 check_ios(doc,problem,browser_spans,devices)
             else:
                 check_envelope(doc, problem, browser_spans, devices)
+            check_native_traces(doc, problem)
             continue
         if doc["target"] == "embrace":
             # V2 uses the current SDK lifecycle; V1's historical adapter remains checked by its capture.
