@@ -6,10 +6,11 @@ COPY apps/web/ ./
 RUN npm run build
 
 FROM python:3.12-slim-bookworm AS runtime
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SG_DATA_DIR=/var/lib/session-generator SG_SECRET_DIR=/var/lib/session-generator/secrets SG_REQUIRE_AUTH=1
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SG_DATA_DIR=/var/lib/session-generator SG_SECRET_DIR=/var/lib/session-generator/secrets SG_REQUIRE_AUTH=1 TMPDIR=/var/lib/session-generator
 WORKDIR /app
 COPY server/requirements.txt server/requirements.txt
-RUN pip install --no-cache-dir -r server/requirements.txt \
+RUN python -m pip install --no-cache-dir pip==26.3 \
+    && python -m pip install --no-cache-dir -r server/requirements.txt \
     && groupadd --gid 10001 generator \
     && useradd --uid 10001 --gid 10001 --no-create-home generator \
     && mkdir -p /var/lib/session-generator/secrets \

@@ -10,6 +10,7 @@ Use Python 3.12+ and Node.js 22+ for the control server and UI. The core CLI rem
 
 ```sh
 python3 -m venv .venv
+.venv/bin/python -m pip install pip==26.3
 .venv/bin/python -m pip install -r server/requirements.txt
 npm --prefix apps/web ci
 npm --prefix apps/web run build
@@ -311,6 +312,7 @@ An interrupted POST or lost acknowledgement can leave acceptance uncertain. Resu
 
 ```sh
 python3 -m venv .venv
+.venv/bin/python -m pip install pip==26.3
 .venv/bin/python -m pip install -r server/requirements.txt
 python3 tools/studio.py start
 ```

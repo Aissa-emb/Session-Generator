@@ -12,6 +12,8 @@ docker compose exec generator python -m server.admin create-token --name 'Worksp
 
 The last command displays a token once. Open `http://localhost:8000` and enter that token in the connection screen. Store it securely; the authenticated `DELETE /api/settings/tokens/{id}` endpoint can revoke it. It is hashed in the persistent database. The image runs as UID/GID 10001, the UI is built in its own Node stage, and no repository config file, environment file, private key or telemetry output is copied into the image. Compose exposes only host loopback, drops capabilities, uses a read-only root filesystem and retains data in `generator-state`.
 
+The image sets `TMPDIR` to the writable data volume. Batch payloads and previews use private temporary directories there, rather than the 256 MiB `/tmp` mount. Keep at least 512 MiB free before staging; each batch is limited to 4 GiB of compressed payloads, and concurrent jobs need additional space. A hard kill can leave private scratch directories for operator cleanup after confirming no worker uses them. The CI acceptance volume is 1 GiB for its small dry runs; production Compose uses a disk-backed volume.
+
 `docker compose logs -f generator` contains structured lifecycle/progress events with an explicit field allowlist. Request bodies, headers, credentials and remote exception bodies are excluded. `/health` checks database access; stream summaries report per-stream heartbeat health, UTC daily accepted/rejected record totals and delivery errors. Health alone does not prove Embrace visibility or trace retention.
 
 ## VM and credentials
