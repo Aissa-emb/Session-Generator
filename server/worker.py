@@ -65,10 +65,13 @@ def config(store, spec, dry):
     else:
         ch = spec.get('chronosphere') or {}
         cfg['chronosphere']['tenant'] = ch.get('tenant')
-        cfg['chronosphere']['api_token'] = secrets.get(store, 'chronosphere') or cfg['chronosphere'].get('api_token')
-        if ch.get('token_ref') and not cfg['chronosphere']['api_token']:
-            from xcorgen.secrets import resolve
-            cfg['chronosphere']['api_token'] = resolve(ch['token_ref'])
+        if 'saved_credentials' in spec:
+            cfg['chronosphere']['api_token'] = secrets.for_spec(store, spec, 'chronosphere')
+        else:
+            cfg['chronosphere']['api_token'] = secrets.get(store, 'chronosphere') or cfg['chronosphere'].get('api_token')
+            if ch.get('token_ref') and not cfg['chronosphere']['api_token']:
+                from xcorgen.secrets import resolve
+                cfg['chronosphere']['api_token'] = resolve(ch['token_ref'])
     return cfg
 
 

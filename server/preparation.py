@@ -131,7 +131,7 @@ def start(svc, id, confirm=False, dry_run=False, author='user'):
         svc.require_valid(stage['spec'])
     if not dry_run and record['mode']=='end_to_end':
         from . import secrets
-        if not secrets.get(svc.store,'chronosphere') and not record['stages'][-1]['spec'].get('chronosphere',{}).get('token_ref'):
+        if not secrets.for_spec(svc.store,record['stages'][-1]['spec'],'chronosphere'):
             raise ValueError('Configure the Cortex XCOR token before preparing end-to-end traffic.')
     record=svc.store.update('preparations',id,status='running',dry_run=dry_run,author=author,authorized=True,readiness=checked,checklist=checklist)
     if svc.launch_jobs:

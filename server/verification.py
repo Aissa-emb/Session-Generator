@@ -173,10 +173,7 @@ async def verify(store, run):
         if number not in versions:versions[number]=store.spec_version(run['spec_id'],number)['spec']
         row['_target']=next(t for t in versions[number]['targets'] if t['id']==row['target'])
     mature = [s for s in sessions if s['end_ms'] <= time.time() * 1000 - limits.FORWARDING_REFRESH_MS]
-    token = secrets.get(store, 'chronosphere')
-    if not token and (spec.get('chronosphere') or {}).get('token_ref'):
-        from xcorgen.secrets import resolve
-        token = resolve(spec['chronosphere']['token_ref'])
+    token = secrets.for_spec(store, spec, 'chronosphere')
     import asyncio
     result = {'run_id': run['id'], 'history_scope': run.get('history_scope', 'complete run'), 'checked_at': time.time(), 'settling_sessions': len(sessions) - len(mature),
               'chronosphere': await asyncio.to_thread(traces, spec, mature, token) if any(s.get('traces') for s in mature) else {'state': 'sessions_only'},

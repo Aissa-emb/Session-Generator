@@ -7,6 +7,15 @@
   "additionalProperties": false,
   "required": ["spec_version", "targets", "destinations", "traffic"],
   "properties": {
+    "saved_credentials": {
+      "description": "Opaque local saved-destination credential IDs. Values stay in the server vault; null disables global fallback.",
+      "type": "object", "additionalProperties": false,
+      "required": ["chronosphere", "symbol_upload"],
+      "properties": {
+        "chronosphere": {"type": ["string", "null"], "pattern": "^[a-f0-9]{32}$"},
+        "symbol_upload": {"type": ["string", "null"], "pattern": "^[a-f0-9]{32}$"}
+      }
+    },
     "modeling": {
       "type": "object",
       "additionalProperties": false,

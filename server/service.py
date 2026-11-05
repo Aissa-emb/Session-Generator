@@ -165,10 +165,9 @@ class Service:
         if specs.errors(preview['linter']):
             raise ValueError('Realism lint blocks this run.')
         if not dry_run and spec['destinations']['mode'] == 'end_to_end':
-            from xcorgen.secrets import resolve
             from xcorgen.security import validate_headers
             try:
-                token = secrets.get(self.store, 'chronosphere') or resolve((spec.get('chronosphere') or {}).get('token_ref'))
+                token = secrets.for_spec(self.store, spec, 'chronosphere')
                 if token:
                     validate_headers({'API-Token': token})
             except SecurityError:
