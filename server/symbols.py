@@ -7,6 +7,14 @@ from xcorgen.security import TransportError
 from . import secrets
 
 
+class SymbolUploadRejected(ValueError):
+    """A safe app/status diagnosis; never contains the token or provider body."""
+    def __init__(self, app_id, status):
+        self.app_id, self.status = app_id, status
+        super().__init__(f'XCOR RUM rejected the Symbol Upload token for app {app_id} (HTTP {status}). '
+                         'Use a Symbol Upload token from Settings → API in the organization that owns this app.')
+
+
 def selected(spec):
     return [
         (t, a)
@@ -81,10 +89,7 @@ def upload(svc, spec_id, confirm=False, author="user", transport=None):
             )
         except TransportError as error:
             if error.status in (401, 403):
-                raise ValueError(
-                    f"XCOR RUM rejected the Symbol Upload token for app {t['embrace_app_id']} (HTTP {error.status}). "
-                    "Use a Symbol Upload token from Settings → API in the organization that owns this app."
-                ) from None
+                raise SymbolUploadRejected(t['embrace_app_id'], error.status) from None
             raise
         receipt["http_status"] = (
             200 if 200 <= receipt["http_status"] < 300 else receipt["http_status"]

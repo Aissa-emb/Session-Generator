@@ -4,6 +4,30 @@ This project creates realistic Android, iOS and web sessions for shopping, banki
 
 The generator sends session data directly to XCOR RUM using your app ID and the same data format as the Embrace SDK. It also creates backend spans describing the work behind each request and sends them to Chronosphere's OpenTelemetry ingestion endpoint. The generator gives both sides the same trace ID, and Network Spans Forwarding sends the network span to Chronosphere so they join into one trace. You can then open that trace from the request in the XCOR RUM session timeline when forwarding and retention are configured.
 
+## Run continuously on a cloud host
+
+Use one Linux host with Docker Compose and persistent storage on any cloud or company infrastructure. The cloud runner starts automatically, generates **web, native Android and native iOS** sessions for the app IDs you supply, and keeps the existing UI available. You do not need a scenario file or a browser session.
+
+On the provisioned host, build a versioned image from this checkout, then run the guided setup:
+
+```sh
+docker build -t "session-generator:$(git rev-parse --short=12 HEAD)" .
+sudo python3 deploy/cloud/setup.py
+sudo deploy/cloud/runner.sh check
+sudo deploy/cloud/runner.sh start
+sudo deploy/cloud/runner.sh status
+```
+
+Setup asks for the image tag, your **web, Android and iOS app IDs**, and optional destination keys. Leave any app ID blank to exclude that platform. Enter keys into hidden prompts; they are saved in protected files, never in the command line. For sessions only, no API key is required. Add a Chronosphere tenant and token for linked backend traces, and optionally a Symbol Upload key to map web exceptions to original source lines. The symbol key does not upload native debug symbols.
+
+`check` generates a finite local sample with networking disabled. **`start` authorizes continuous synthetic traffic and source-map upload when its key is supplied.** The default is **10 total sessions/minute** shared equally across enabled platforms, with the UI's Production baseline errors and varied journeys. It runs until paused or stopped; arrival counts are randomized. `status` reports requested/achieved rate and delivery evidence.
+
+Use `sudo deploy/cloud/runner.sh pause`, `stop` or `resume` to control the owned stream. Operator pause/stop survives a container restart. Starting the ordinary UI server does not enable cloud traffic.
+
+See **[Cloud runner setup and operations](docs/cloud-runner.md)** for host responsibilities, private UI access, updates, secrets, monitoring and limitations. This path is provider-neutral; it does not require GCP-specific services.
+
+For a short shared review with an infrastructure owner, see **[Architecture and hosting overview](docs/architecture-and-hosting.md)**, including the runtime and trace-connection diagrams.
+
 ## Start Session Generator
 
 Use Python 3.12+ and Node.js 22+ for the control server and UI. The core CLI remains dependency-free.

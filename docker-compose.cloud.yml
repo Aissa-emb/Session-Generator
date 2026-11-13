@@ -1,0 +1,76 @@
+# Provider-neutral, single-host runner. Ordinary docker-compose.yml stays interactive.
+# Start through deploy/cloud/runner.sh; it performs an offline check first.
+x-runner-environment: &runner-environment
+  SG_DATA_DIR: /var/lib/session-generator
+  SG_SECRET_DIR: /var/lib/session-generator/secrets
+  SG_REQUIRE_AUTH: "1"
+  SG_ALLOWED_HOSTS: "localhost,127.0.0.1"
+  SG_WEB_APP_ID: ${SG_WEB_APP_ID:-}
+  SG_ANDROID_APP_ID: ${SG_ANDROID_APP_ID:-}
+  SG_IOS_APP_ID: ${SG_IOS_APP_ID:-}
+  SG_WEB_APP_NAME: ${SG_WEB_APP_NAME:-Vantra Web}
+  SG_ANDROID_APP_NAME: ${SG_ANDROID_APP_NAME:-Vantra}
+  SG_IOS_APP_NAME: ${SG_IOS_APP_NAME:-Vantra}
+  SG_WEB_INGEST_REGION: ${SG_WEB_INGEST_REGION:-us}
+  SG_ANDROID_INGEST_REGION: ${SG_ANDROID_INGEST_REGION:-us}
+  SG_IOS_INGEST_REGION: ${SG_IOS_INGEST_REGION:-us}
+  SG_CHRONOSPHERE_TENANT: ${SG_CHRONOSPHERE_TENANT:-}
+  SG_CHRONOSPHERE_TOKEN_FILE: ${SG_CHRONOSPHERE_TOKEN_FILE:-}
+  SG_SYMBOL_UPLOAD_TOKEN_FILE: ${SG_SYMBOL_UPLOAD_TOKEN_FILE:-}
+  SG_RATE_PER_MINUTE: ${SG_RATE_PER_MINUTE:-10}
+  SG_RUNNER_REGION: ${SG_RUNNER_REGION:-cloud}
+
+x-runner: &runner
+  image: ${SG_IMAGE:?Set SG_IMAGE to a versioned image tag or digest}
+  init: true
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+
+services:
+  generator:
+    <<: *runner
+    restart: unless-stopped
+    environment:
+      <<: *runner-environment
+      SG_CLOUD_RUNNER: "1"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - type: bind
+        source: ${SG_HOST_DATA_DIR:?Run deploy/cloud/setup.py first}
+        target: /var/lib/session-generator
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SG_HOST_SECRETS_DIR:?Run deploy/cloud/setup.py first}
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m,uid=10001,gid=10001,mode=0700
+    stop_grace_period: 90s
+
+  # Finite verification cannot reach ingest or modify the deployed runner's state.
+  check:
+    <<: *runner
+    profiles: [check]
+    network_mode: none
+    environment:
+      <<: *runner-environment
+      SG_CLOUD_RUNNER: "0"
+    command: [python, -m, server.cloud, check, --sessions, "12"]
+    volumes:
+      - type: bind
+        source: ${SG_HOST_SECRETS_DIR:?Run deploy/cloud/setup.py first}
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /var/lib/session-generator:rw,nosuid,size=1g,uid=10001,gid=10001,mode=0700
+      - /tmp:rw,noexec,nosuid,size=256m,uid=10001,gid=10001,mode=0700
+    healthcheck:
+      disable: true

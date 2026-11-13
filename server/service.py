@@ -56,6 +56,9 @@ class Service:
         return self.store.save_spec(self.require_valid(value), author)
 
     def patch_spec(self, id, patch, author='user', expected_version=None):
+        from .cloud import AUTHOR, owned
+        if author != AUTHOR and owned(self.store, spec_id=id):
+            raise ValueError('This scenario is managed by cloud settings. Copy it to edit independently, or update the runner configuration.')
         if not isinstance(patch, list) or len(patch) > 200:
             raise ValueError('JSON Patch must contain at most 200 operations.')
         current = self.store.get('scenario_specs', id)
@@ -130,7 +133,10 @@ class Service:
             raise ValueError('This computer already has four active runs. Pause or stop a run before starting another.')
 
     @serialized("run-launch")
-    def start_run(self, spec_id, mode=None, destination=None, confirm=False, dry_run=False, author='user', idempotency_key=None):
+    def start_run(self, spec_id, mode=None, destination=None, confirm=False, dry_run=False, author='user', idempotency_key=None, launch=True):
+        from .cloud import AUTHOR, owned
+        if author != AUTHOR and owned(self.store, spec_id=spec_id):
+            raise ValueError('Use the cloud runner controls to start its managed scenario, or copy the scenario for a separate run.')
         if confirm is not True:
             raise ValueError('Starting a run requires confirm: true after reviewing its scenario, destination and size.')
         if idempotency_key:
@@ -188,7 +194,7 @@ class Service:
                 self.store.update('targets', t['id'], last_destination=spec['destinations']['mode'])
             except KeyError:
                 pass
-        if self.launch_jobs:
+        if self.launch_jobs and launch:
             self.launch(id)
         return run
 
@@ -201,6 +207,12 @@ class Service:
             env=env)  # nosec B603: trusted worker and validated identifier
 
     def control(self, id, action, author='user'):
+        from .cloud import AUTHOR, owned, record, request_control
+        if author != AUTHOR and owned(self.store, run_id=id):
+            if record(self.store).get('run_id') != id:
+                raise ValueError('This is a historical cloud run. Control the current cloud runner instead.')
+            request_control(self, action)
+            return self.store.get('runs', id)
         if action == 'resume':
             return self._resume_control(id, author)
         return self._control(id, action, author)
@@ -246,6 +258,9 @@ class Service:
 
     @serialized('stream-create')
     def create_stream(self, spec_id, name, confirm=False, dry_run=False, author='user', idempotency_key=None):
+        from .cloud import AUTHOR, owned
+        if author != AUTHOR and owned(self.store, spec_id=spec_id):
+            raise ValueError('This scenario already belongs to the cloud runner. Copy it for an independent stream.')
         if idempotency_key:
             if not isinstance(idempotency_key,str) or len(idempotency_key)>100:
                 raise ValueError('Invalid idempotency key.')
@@ -265,6 +280,10 @@ class Service:
             'dry_run': dry_run, 'authorized': confirm is True, 'author': author, 'idempotency_key':idempotency_key})
 
     def control_stream(self, id, action, confirm=False, author='user'):
+        from .cloud import AUTHOR, owned, request_control
+        if author != AUTHOR and owned(self.store, stream_id=id):
+            request_control(self, action)
+            return self.store.get('streams', id)
         stream = self.store.get('streams', id)
         if action == 'resume':
             if not (stream['authorized'] or confirm is True):

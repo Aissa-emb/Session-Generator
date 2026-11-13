@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from xcorgen import presets, spec as specs
 from xcorgen.security import SecurityError, TransportError
 from .service import Service
-from . import readiness, secrets, verification, copilot, preparation, delivery_summary, destinations
+from . import readiness, secrets, verification, copilot, preparation, delivery_summary, destinations, cloud
 from .mcp import build_server, caller
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -55,6 +55,8 @@ def create_app(service=None, enable_integrations=None):
             rotation = start_log_rotation(os.environ['SG_STUDIO_LOG'])
         # Surviving worker processes own their journals. Never launch a duplicate on restart.
         for run in svc.store.list('runs'):
+            if run.get('author') == cloud.AUTHOR or run.get('cloud_owner'):
+                continue  # The cloud controller owns its recovery, including interrupted bootstrap.
             if run['status'] in ('queued', 'running') and time.time() - run.get('heartbeat', run['created']) > 90:
                 svc.store.update('runs', run['id'], status='failed', recovery_required=True)
                 svc.store.event(run['id'], 'recovery_required', message='Worker heartbeat expired; review receipts before resuming.')
@@ -64,11 +66,17 @@ def create_app(service=None, enable_integrations=None):
                     preparation.launch(svc, record['id'])
         if svc.launch_jobs:
             for stream in svc.store.list('streams'):
+                if stream.get('author') == cloud.AUTHOR:
+                    continue
                 if stream['status']=='running' and stream.get('authorized') and stream.get('run_id'):
                     run=svc.store.get('runs',stream['run_id'])
                     if run['status'] in ('running','queued','paused') or (run['status']=='failed' and run.get('recovery_required') and run.get('desired_status')=='running'):
                         svc.store.update('runs',run['id'],desired_status='running',recovery_required=False)
                         svc.launch(run['id'])
+        controller = cloud.CloudController(svc)
+        if svc.launch_jobs:
+            controller.start()
+        app.state.cloud_controller = controller
         from .audit import emit
         emit('server_started',runner_region=os.environ.get('SG_RUNNER_REGION','local'))
         async with AsyncExitStack() as stack:
@@ -77,14 +85,17 @@ def create_app(service=None, enable_integrations=None):
             try:
                 yield
             finally:
+                await asyncio.to_thread(controller.close)
                 if svc.launch_jobs:
                     for stream in svc.store.list('streams'):
+                        if stream.get('author') == cloud.AUTHOR:
+                            continue  # Shutdown is also exclusive to the owning controller.
                         if stream['status']=='running' and stream.get('run_id'):
                             run=svc.store.get('runs',stream['run_id'])
                             if run['status'] in ('running','queued'):
                                 svc.store.update('runs',run['id'],desired_status='paused')
                     deadline=time.monotonic()+65
-                    while any(p.poll() is None for p in svc.processes.values()) and time.monotonic()<deadline:
+                    while (any(p.poll() is None for p in svc.processes.values()) or controller.worker_busy()) and time.monotonic()<deadline:
                         await asyncio.sleep(.2)
                 emit('server_stopped')
                 if rotation:
@@ -169,6 +180,14 @@ def create_app(service=None, enable_integrations=None):
     @app.get('/api/capabilities')
     def capabilities():
         return svc.capabilities()
+
+    @app.get('/api/cloud/status')
+    def cloud_status():
+        return cloud.status(svc.store)
+
+    @app.post('/api/cloud/{action}')
+    def cloud_control(action: str):
+        return cloud.request_control(svc, action)
 
     @app.get('/api/targets')
     def targets():
@@ -441,6 +460,8 @@ def create_app(service=None, enable_integrations=None):
 
     @app.delete('/api/streams/{id}')
     def delete_stream(id: str, request: Request):
+        if cloud.owned(svc.store, stream_id=id):
+            raise ValueError('Use stop to disable the cloud stream; its ownership and history must be retained.')
         svc.control_stream(id, 'stop', author=request.state.actor)
         svc.store.delete('streams', id)
         return {'deleted': True}
