@@ -4,6 +4,7 @@ title = "Session Generator secret scanning"
 useDefault = true
 
 [[allowlists]]
+targetRules = ["generic-api-key"]
 description = "The literal emb.w3c_traceparent attribute name in these SDK fixtures is not a credential"
 condition = "AND"
 paths = ['''^reference/web-sdk-2\.31\.0-capture/(03|06|08)-spans\.json$''',
@@ -11,3 +12,11 @@ paths = ['''^reference/web-sdk-2\.31\.0-capture/(03|06|08)-spans\.json$''',
          '''^tests/test_send_time\.py$''']
 regexTarget = "secret"
 regexes = ['''^emb\.w3c_traceparent$''']
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "The disabled-cloud test's missing token-file path and invalid rate are literal fixtures, not credentials"
+condition = "AND"
+paths = ['''^tests/server/test_cloud_config\.py$''']
+regexTarget = "line"
+regexes = ['''^\s*env = inputs\(SG_CHRONOSPHERE_TOKEN_FILE='/missing/private-token', SG_RATE_PER_MINUTE='bad',$''']

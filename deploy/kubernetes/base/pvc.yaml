@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: session-generator-state
+spec:
+  # Requires a compatible CSI driver. Do not substitute RWX/NFS for SQLite WAL.
+  accessModes: [ReadWriteOncePod]
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 20Gi

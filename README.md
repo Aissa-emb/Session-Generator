@@ -26,6 +26,12 @@ Use `sudo deploy/cloud/runner.sh pause`, `stop` or `resume` to control the owned
 
 See **[Cloud runner setup and operations](docs/cloud-runner.md)** for host responsibilities, private UI access, updates, secrets, monitoring and limitations. This path is provider-neutral; it does not require GCP-specific services.
 
+### Kubernetes / company infrastructure
+
+Use the same image as **one continuously running pod with a persistent disk**. The [Kubernetes package](deploy/kubernetes/README.md) supplies a hardened Deployment, PVC and ConfigMap; optional components map existing tenant and web-symbol keys from Kubernetes Secrets. Enter the app IDs to enable and the total rate—no scenario JSON or UI setup is required. Keep secrets in the company's existing SOPS/KSOPS process, outside the image.
+
+The [deployment handoff for infrastructure owners](docs/kubernetes-handoff.md) covers the image/config contract, private UI access, direct HTTPS delivery, storage, probes, rotation and rollback. Start with one replica, a 20 GiB CSI-backed disk and 1 CPU/1 GiB requested (2 CPU/4 GiB limit); measure before increasing the rate. No public endpoint, Kafka cluster or browser runner is needed.
+
 For a short shared review with an infrastructure owner, see **[Architecture and hosting overview](docs/architecture-and-hosting.md)**, including the runtime and trace-connection diagrams.
 
 ## Start Session Generator

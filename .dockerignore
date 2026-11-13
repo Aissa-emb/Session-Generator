@@ -16,3 +16,9 @@ outputs
 *.pem
 *.key
 *.sqlite*
+**/*.pem
+**/*.key
+**/*.sqlite*
+**/secrets/
+**/*secret.enc.yaml
+**/*secret.enc.yml

@@ -83,8 +83,10 @@ def create_app(service=None, enable_integrations=None):
             if mcp_app:
                 await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
             try:
+                app.state.initialized = True
                 yield
             finally:
+                app.state.initialized = False
                 await asyncio.to_thread(controller.close)
                 if svc.launch_jobs:
                     for stream in svc.store.list('streams'):
@@ -104,6 +106,7 @@ def create_app(service=None, enable_integrations=None):
                 svc.store.close()
     app = FastAPI(title='Session Generator', version='2.0', lifespan=lifespan)
     app.state.service = svc
+    app.state.initialized = False
     if mcp_app:
         app.router.routes.extend(mcp_app.routes)
 
@@ -170,6 +173,31 @@ def create_app(service=None, enable_integrations=None):
     @app.exception_handler(TransportError)
     async def remote_error(request, error):
         return JSONResponse({'detail': 'The remote request could not be completed. Check credentials, endpoint settings and connectivity.'}, 502)
+
+    @app.get('/livez')
+    async def livez():
+        # A destination outage, SQLite issue or intentional operator stop must
+        # not create a restart loop or clear the worker's failure latch.
+        return {'status': 'alive'}
+
+    @app.get('/readyz')
+    def readyz():
+        # This is local serving readiness, not a claim that traffic is being
+        # delivered. Detailed generation health remains behind API auth.
+        if not app.state.initialized:
+            return JSONResponse({'status': 'not_ready'}, 503)
+        controller = getattr(app.state, 'cloud_controller', None)
+        if svc.launch_jobs and (not controller or controller.lease is None or
+                not controller.thread or not controller.thread.is_alive() or
+                controller.stop_event.is_set()):
+            return JSONResponse({'status': 'not_ready'}, 503)
+        try:
+            with svc.store.engine.connect() as connection:
+                connection.exec_driver_sql('SELECT 1 FROM settings LIMIT 1')
+        except Exception:
+            # Exception messages can contain private paths or credentials.
+            return JSONResponse({'status': 'not_ready'}, 503)
+        return {'status': 'ready'}
 
     @app.get('/api/status')
     @app.get('/health')

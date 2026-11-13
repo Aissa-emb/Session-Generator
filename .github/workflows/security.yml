@@ -74,6 +74,11 @@ jobs:
           "$RUNNER_TEMP/audit-venv/bin/pip-audit" --strict --path "$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
       - name: API, job and receiver integration tests
         run: .venv/bin/python -m unittest discover -s tests/server -v
+      - name: Render Kubernetes deployment contract
+        run: |
+          kubectl version --client
+          .venv/bin/python -c 'import yaml'
+          .venv/bin/python -m unittest discover -s tests -p test_kubernetes_deployment.py -v
       - name: UI contract, build and dependency audit
         run: |
           npm --prefix apps/web ci

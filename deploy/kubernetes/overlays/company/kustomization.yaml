@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Use the namespace created/authorized in the company configuration repository.
+namespace: session-generator
+resources:
+  - ../../base
+images:
+  - name: session-generator
+    newName: ghcr.io/aissa-emb/session-generator
+    # Replace with the immutable digest recorded in the release handoff.
+    newTag: REPLACE_WITH_RELEASE_TAG
+configMapGenerator:
+  - name: session-generator-config
+    behavior: merge
+    envs:
+      - config.env
+# For linked traces and/or resolved web sources, enable the relevant components
+# after setting their existing Secret names/keys. No real Secret belongs here.
+# components:
+#   - ../../components/chronosphere
+#   - ../../components/web-symbols
+# If needed, add a PVC patch selecting the approved CSI block StorageClass.
+# See ../../README.md before changing the access mode or volume permissions.

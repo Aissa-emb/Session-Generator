@@ -1,0 +1,213 @@
+name: Publish tested container
+
+# Release on request, never a scheduled telemetry job.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validation:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require passing security and payload checks for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..90}; do
+            result=$(gh api "repos/$REPOSITORY/actions/workflows/security.yml/runs?head_sha=$REVISION&branch=main&event=push&per_page=1")
+            status=$(jq -r '.workflow_runs[0].status // "missing"' <<< "$result")
+            conclusion=$(jq -r '.workflow_runs[0].conclusion // "pending"' <<< "$result")
+            if [[ "$status" == completed ]]; then
+              test "$conclusion" = success || { echo 'Required validation failed. No image will be published.'; exit 1; }
+              exit 0
+            fi
+            sleep 20
+          done
+          echo 'Required validation did not finish successfully. No image will be published.'
+          exit 1
+  image:
+    needs: validation
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build native image
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          docker buildx create --name release-builder --use
+          docker buildx build --load --build-arg VCS_REF="$REVISION" -t session-generator:acceptance .
+      - name: Offline container and cloud lifecycle checks
+        run: bash tools/image_smoke.sh session-generator:acceptance
+      - name: Prepare portable image archive
+        env:
+          REVISION: ${{ github.sha }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          mkdir release
+          docker tag session-generator:acceptance "session-generator:sha-$REVISION-$ARCH"
+          docker save "session-generator:sha-$REVISION-$ARCH" | gzip > "release/session-generator-linux-$ARCH.tar.gz"
+          (cd release && sha256sum *.tar.gz > "SHA256SUMS-$ARCH.txt")
+      - name: Scan final image for fixable high and critical vulnerabilities
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir scan
+          docker run --rm --cap-drop ALL --security-opt no-new-privileges \
+            --mount "type=bind,src=$PWD/release,dst=/audit,readonly" \
+            --mount "type=bind,src=$PWD/scan,dst=/output" \
+            aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+            image --input "/audit/session-generator-linux-$ARCH.tar.gz" \
+            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+            --format json --output "/output/image-scan-$ARCH.json"
+          cp scan/*.json release/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: session-generator-${{ matrix.arch }}
+          path: release/
+          retention-days: 14
+          compression-level: 0
+          overwrite: true
+      - name: Publish commit image with provenance and SBOM
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${REPOSITORY,,}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_USER" --password-stdin
+          trap 'docker logout ghcr.io' EXIT
+          docker buildx build --push --provenance=mode=max --sbom=true \
+            --build-arg VCS_REF="$REVISION" --tag "$image:sha-$REVISION-$ARCH" .
+          # Attestations change the outer index; the platform config must still
+          # match the exact image exercised and archived above.
+          # Docker's containerd store can report an index as .Id. Hash the
+          # archived platform config directly on both classic and OCI stores.
+          tested=$(python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import tarfile
+          with tarfile.open('release/session-generator-linux-' + os.environ['ARCH'] + '.tar.gz', 'r:gz') as archive:
+              manifests = json.load(archive.extractfile('manifest.json'))
+              if len(manifests) != 1:
+                  raise SystemExit('Expected exactly one tested platform image in the archive.')
+              config = archive.extractfile(manifests[0]['Config']).read()
+              platform = json.loads(config)
+              if platform.get('os') != 'linux' or platform.get('architecture') != os.environ['ARCH']:
+                  raise SystemExit('Archived image architecture does not match the native test runner.')
+              print('sha256:' + hashlib.sha256(config).hexdigest())
+          PY
+          )
+          platform_digest=$(docker buildx imagetools inspect "$image:sha-$REVISION-$ARCH" --raw \
+            | jq -er --arg arch "$ARCH" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest')
+          published=$(docker buildx imagetools inspect "$image@$platform_digest" --raw | jq -er '.config.digest')
+          test "$tested" = "$published"
+  manifest:
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      packages: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Publish multi-architecture reference
+        id: published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${REPOSITORY,,}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_USER" --password-stdin
+          trap 'docker logout ghcr.io' EXIT
+          docker buildx imagetools create -t "$image:sha-$REVISION" \
+            "$image:sha-$REVISION-amd64" "$image:sha-$REVISION-arm64"
+          descriptor=$(docker buildx imagetools inspect "$image:sha-$REVISION" --format '{{json .Manifest}}')
+          digest=$(jq -er '.digest' <<< "$descriptor")
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          jq -e '[.manifests[].platform | select(.os == "linux") | .architecture] | contains(["amd64", "arm64"])' <<< "$descriptor" >/dev/null
+          printf 'image=%s\ndigest=%s\n' "$image" "$digest" >> "$GITHUB_OUTPUT"
+          printf 'Image: %s@%s\nSource commit: %s\nPlatforms: linux/amd64, linux/arm64\n' \
+            "$image" "$digest" "$REVISION" | tee image-reference.txt >> "$GITHUB_STEP_SUMMARY"
+          docker buildx imagetools inspect "$image@$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish downloadable handoff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+          RELEASE_IMAGE: ${{ steps.published.outputs.image }}
+          RELEASE_DIGEST: ${{ steps.published.outputs.digest }}
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$REPOSITORY" --pattern 'session-generator-*' --dir release
+          mkdir -p handoff/deploy handoff/docs
+          cp -R deploy/kubernetes handoff/deploy/
+          cp docs/kubernetes-handoff.md handoff/docs/
+          cp image-reference.txt handoff/
+          # Pin the delivered overlay to the registry result, never a guessed
+          # digest or tag. Leave the reusable source template unchanged.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path('handoff/deploy/kubernetes/overlays/company/kustomization.yaml')
+          text = path.read_text()
+          old_image = '    newName: ghcr.io/aissa-emb/session-generator'
+          old_tag = '    newTag: REPLACE_WITH_RELEASE_TAG'
+          if text.count(old_image) != 1 or text.count(old_tag) != 1:
+              raise SystemExit('Release overlay template changed; refusing an unpinned handoff.')
+          text = text.replace(old_image, '    newName: ' + os.environ['RELEASE_IMAGE'])
+          text = text.replace(old_tag, '    digest: ' + os.environ['RELEASE_DIGEST'])
+          path.write_text(text)
+          PY
+          tar -czf kubernetes-handoff.tar.gz -C handoff deploy/kubernetes docs/kubernetes-handoff.md image-reference.txt
+          sha256sum kubernetes-handoff.tar.gz image-reference.txt > SHA256SUMS-handoff.txt
+          tag="container-${REVISION:0:12}"
+          printf 'Tested Linux AMD64 and ARM64 containers. Source commit: %s\n\n' "$REVISION" > release-notes.txt
+          cat image-reference.txt >> release-notes.txt
+          printf '\nArchives can be loaded with docker load and mirrored to the company registry. App IDs and credentials are supplied at deployment; none are embedded. See the included Kubernetes handoff.\n' >> release-notes.txt
+          if ! gh release view "$tag" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$REPOSITORY" --target "$REVISION" --draft \
+              --title 'Session Generator container handoff' --notes-file release-notes.txt
+          fi
+          gh release upload "$tag" --repo "$REPOSITORY" --clobber \
+            release/*/* kubernetes-handoff.tar.gz image-reference.txt SHA256SUMS-handoff.txt
+          gh release edit "$tag" --repo "$REPOSITORY" --draft=false --notes-file release-notes.txt

@@ -119,18 +119,24 @@ def _tenant(value):
     value = value.strip().lower()
     if not value:
         return None
-    if value.startswith(('https://', 'http://')) or '.chronosphere.io' in value:
+    error = 'SG_CHRONOSPHERE_TENANT must be a tenant name or its HTTPS Chronosphere address (optional :443).'
+    if any(c.isspace() for c in value) or '?' in value or '#' in value:
+        raise CloudConfigurationError(error)
+    if '://' in value or '.chronosphere.io' in value:
         try:
             url = urlsplit(value if '://' in value else 'https://' + value)
             host = url.hostname or ''
-            if (url.username or url.password or url.port or url.query or url.fragment or
+            # Shared tenant Secrets use host:443 for other clients. Normalize
+            # that address here without changing the shared Secret's value.
+            if (url.scheme != 'https' or url.username is not None or url.password is not None or
+                    url.netloc not in (host, host + ':443') or
                     url.path not in ('', '/') or not host.endswith('.chronosphere.io')):
                 raise ValueError()
             value = host.removesuffix('.chronosphere.io')
         except ValueError:
-            raise CloudConfigurationError('SG_CHRONOSPHERE_TENANT must be a tenant name or its Chronosphere URL.') from None
+            raise CloudConfigurationError(error) from None
     if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', value):
-        raise CloudConfigurationError('SG_CHRONOSPHERE_TENANT must be a tenant name or its Chronosphere URL.')
+        raise CloudConfigurationError(error)
     return value
 
 

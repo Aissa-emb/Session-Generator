@@ -127,6 +127,40 @@ class CloudConfigurationTests(unittest.TestCase):
         self.assertEqual(config.fingerprint, changed.fingerprint, 'Public fingerprints must not hash secrets')
         self.assertNotEqual(config.fingerprint, load_config(inputs(('web',))).fingerprint)
 
+    def test_shared_tenant_addresses_normalize_without_changing_the_scenario(self):
+        canonical = load_config(inputs(SG_CHRONOSPHERE_TENANT='acme',
+                                       SG_CHRONOSPHERE_TOKEN='fixture-credential'))
+        for address in ('acme', 'ACME', 'acme.chronosphere.io', 'acme.chronosphere.io/',
+                        'acme.chronosphere.io:443', 'acme.chronosphere.io:443/',
+                        'https://ACME.chronosphere.io', 'https://acme.chronosphere.io/',
+                        'https://acme.chronosphere.io:443', 'https://acme.chronosphere.io:443/'):
+            with self.subTest(address=address):
+                config = load_config(inputs(SG_CHRONOSPHERE_TENANT=address,
+                                            SG_CHRONOSPHERE_TOKEN='fixture-credential'))
+                self.assertEqual(config.spec, canonical.spec)
+                self.assertEqual(config.fingerprint, canonical.fingerprint)
+                self.assertEqual(config.summary['tenant'], 'acme')
+
+    def test_tenant_addresses_reject_ambiguous_or_insecure_inputs(self):
+        for address in ('http://acme.chronosphere.io', 'http://acme.chronosphere.io:443',
+                        'ftp://acme.chronosphere.io', 'acme.chronosphere.io:80',
+                        'https://acme.chronosphere.io:4317', 'acme.chronosphere.io:',
+                        'https://secret-value@acme.chronosphere.io',
+                        'https://:secret-value@acme.chronosphere.io',
+                        'https://@acme.chronosphere.io', 'acme.chronosphere.io/secret-value',
+                        'acme.chronosphere.io?token=secret-value', 'acme.chronosphere.io?',
+                        'acme.chronosphere.io#secret-value', 'acme.chronosphere.io#',
+                        'acme.chronosphere.io.evil.invalid', 'acme.evil.invalid',
+                        'https://sub.acme.chronosphere.io', 'https://[bad-host',
+                        'acme.chrono\nsphere.io', 'acme.chrono\tsphere.io', 'acme:443'):
+            with self.subTest(address=address):
+                with self.assertRaisesRegex(CloudConfigurationError, 'SG_CHRONOSPHERE_TENANT') as error:
+                    load_config(inputs(SG_CHRONOSPHERE_TENANT=address,
+                                       SG_CHRONOSPHERE_TOKEN='fixture-credential'))
+                self.assertNotIn(address, str(error.exception))
+                self.assertNotIn('secret-value', str(error.exception))
+                self.assertNotIn('fixture-credential', str(error.exception))
+
     def test_legacy_transport_inputs_cannot_override_cloud_destinations(self):
         for key in LEGACY_TRANSPORT_VARIABLES:
             with self.subTest(key=key), self.assertRaisesRegex(CloudConfigurationError, key) as error:

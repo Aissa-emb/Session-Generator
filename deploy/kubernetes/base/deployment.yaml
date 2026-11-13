@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: session-generator
+  labels:
+    app.kubernetes.io/name: session-generator
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: session-generator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: session-generator
+      annotations:
+        # Bump through GitOps when a same-name Secret changes.
+        session-generator/configuration-revision: "1"
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: generator
+          # The company overlay replaces this with the release image digest.
+          image: session-generator:unconfigured
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: SG_DATA_DIR
+              value: /var/lib/session-generator
+            - name: SG_SECRET_DIR
+              value: /var/lib/session-generator/secrets
+            - name: TMPDIR
+              value: /var/lib/session-generator
+            - name: SG_REQUIRE_AUTH
+              value: "1"
+            - name: SG_CLOUD_RUNNER
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_CLOUD_RUNNER}
+            - name: SG_WEB_APP_ID
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_WEB_APP_ID}
+            - name: SG_ANDROID_APP_ID
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_ANDROID_APP_ID}
+            - name: SG_IOS_APP_ID
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_IOS_APP_ID}
+            - name: SG_WEB_APP_NAME
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_WEB_APP_NAME}
+            - name: SG_ANDROID_APP_NAME
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_ANDROID_APP_NAME}
+            - name: SG_IOS_APP_NAME
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_IOS_APP_NAME}
+            - name: SG_WEB_INGEST_REGION
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_WEB_INGEST_REGION}
+            - name: SG_ANDROID_INGEST_REGION
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_ANDROID_INGEST_REGION}
+            - name: SG_IOS_INGEST_REGION
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_IOS_INGEST_REGION}
+            - name: SG_RATE_PER_MINUTE
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_RATE_PER_MINUTE}
+            - name: SG_RUNNER_REGION
+              valueFrom:
+                configMapKeyRef: {name: session-generator-config, key: SG_RUNNER_REGION}
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+              httpHeaders: [{name: Host, value: localhost}]
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+              httpHeaders: [{name: Host, value: localhost}]
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+              httpHeaders: [{name: Host, value: localhost}]
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "2", memory: 4Gi}
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/session-generator
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: session-generator-state
+        - name: temporary
+          emptyDir:
+            sizeLimit: 256Mi
