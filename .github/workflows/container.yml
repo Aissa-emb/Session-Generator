@@ -83,6 +83,7 @@ jobs:
         run: |
           mkdir scan
           docker run --rm --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" --env TRIVY_CACHE_DIR=/tmp/trivy-cache \
             --mount "type=bind,src=$PWD/release,dst=/audit,readonly" \
             --mount "type=bind,src=$PWD/scan,dst=/output" \
             aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
